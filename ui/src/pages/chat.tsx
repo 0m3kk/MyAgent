@@ -2,10 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowRight,
   Bot,
-  Check,
   Cpu,
-  FileText,
-  GitBranch,
   MessageSquareText,
   MoreHorizontal,
   Plus,
@@ -14,28 +11,19 @@ import {
   Square,
   Trash2,
   User,
-  WandSparkles,
   Workflow,
-  Zap,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { api } from '../api'
 import { navigate } from '../router'
 import { useApp } from '../store'
 import { useEventStream, usePolling, useAutoScroll } from '../hooks'
-import type { Approval, Conversation, EventEnvelope, Message, Part } from '../types'
-import { formatRelative, safeJSON } from '../format'
+import type { Approval, Conversation, EventEnvelope, Message } from '../types'
+import { formatRelative } from '../format'
 import { ApprovalCard } from '../components/approval'
 import { Markdown, MessageMeta, StreamCursor, ToolCard, TypingIndicator, type ToolView } from '../components/chat-bits'
-import { Badge, Button, EmptyState, IconButton, PageHeader, Spinner, TextArea } from '../components/ui'
+import { Badge, Button, EmptyState, IconButton, Spinner, TextArea } from '../components/ui'
 import { useToast } from '../components/toast'
-
-const SUGGESTIONS = [
-  { icon: <FileText size={18} />, title: 'Summarize my workspace', prompt: 'Summarize the files in my workspace and save a digest after I approve it.' },
-  { icon: <GitBranch size={18} />, title: 'Build a weekly report workflow', prompt: 'Create a workflow that reads the documents in my workspace, writes a weekly report, and asks me before saving it.' },
-  { icon: <WandSparkles size={18} />, title: 'Make a new tool', prompt: 'Create a tool that counts word frequency in a piece of text, test it, and ask me to approve it.' },
-  { icon: <Zap size={18} />, title: 'Inspect a failed run', prompt: 'Read my most recent failed run and explain the root cause with a concrete fix.' },
-]
 
 function approvalsFor(list: Approval[], conversationId: string) {
   return list.filter((a) => a.conversation_id === conversationId && a.status === 'pending')
@@ -155,19 +143,6 @@ export function ChatHome() {
           <span>·</span>
           <span>Secrets never enter the prompt</span>
         </div>
-      </div>
-
-      <div className="suggestion-grid">
-        {SUGGESTIONS.map((s) => (
-          <button key={s.title} className="suggestion-card" onClick={() => { void start(s.prompt) }} disabled={!!starting}>
-            <span className="suggestion-icon">{starting === s.prompt ? <Spinner size={18} /> : s.icon}</span>
-            <span>
-              <strong>{s.title}</strong>
-              <em>{s.prompt}</em>
-            </span>
-            <ArrowRight size={15} className="suggestion-arrow" />
-          </button>
-        ))}
       </div>
 
       <div className="home-columns">
