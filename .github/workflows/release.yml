@@ -20,12 +20,12 @@ jobs:
     runs-on: macos-14
     steps:
       - name: Check out
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Install Go and Node
-        uses: jdx/mise-action@v2
+        uses: jdx/mise-action@v5
 
       - name: Build release
         env:
@@ -33,7 +33,7 @@ jobs:
         run: mise run release
 
       - name: Upload workflow artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: MyAgent-macOS
           path: dist/release/*
@@ -41,7 +41,7 @@ jobs:
 
       - name: Publish GitHub release
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: dist/release/*
           fail_on_unmatched_files: true
