@@ -129,6 +129,7 @@ type Tool struct {
 	Name             string `json:"name"`
 	Kind             string `json:"kind"`
 	CurrentVersionID string `json:"current_version_id,omitempty"`
+	DraftVersionID   string `json:"draft_version_id,omitempty"`
 	CreatedAt        int64  `json:"created_at"`
 }
 

@@ -68,7 +68,76 @@ func (s *Store) Tx(ctx context.Context, fn func(*sql.Tx) error) error {
 }
 
 func (s *Store) migrate(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, schemaSQL)
+	if _, err := s.db.ExecContext(ctx, schemaSQL); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "tools", "draft_version_id", "TEXT"); err != nil {
+		return err
+	}
+	if err := s.linkLegacyToolDrafts(ctx); err != nil {
+		return err
+	}
+	return s.deprecateOrphanToolDrafts(ctx)
+}
+
+func (s *Store) linkLegacyToolDrafts(ctx context.Context) error {
+	_, err := s.db.ExecContext(
+		ctx,
+		`UPDATE tools SET draft_version_id = (
+		   SELECT tv.id FROM tool_versions tv
+		   WHERE tv.tool_id = tools.id AND tv.status IN ('draft','tested')
+		   ORDER BY tv.version DESC LIMIT 1
+		 )
+		 WHERE draft_version_id IS NULL
+		   AND EXISTS (
+		     SELECT 1 FROM tool_versions tv
+		     WHERE tv.tool_id = tools.id AND tv.status IN ('draft','tested')
+		   )
+		   AND (
+		     current_version_id IS NULL OR current_version_id = '' OR
+		     (SELECT version FROM tool_versions WHERE id = tools.current_version_id) <
+		     (SELECT MAX(version) FROM tool_versions
+		      WHERE tool_id = tools.id AND status IN ('draft','tested'))
+		   )`,
+	)
+	return err
+}
+
+func (s *Store) deprecateOrphanToolDrafts(ctx context.Context) error {
+	_, err := s.db.ExecContext(
+		ctx,
+		`UPDATE tool_versions SET status='deprecated'
+		 WHERE status IN ('draft','tested')
+		   AND id NOT IN (
+		     SELECT draft_version_id FROM tools
+		     WHERE draft_version_id IS NOT NULL AND draft_version_id <> ''
+		   )`,
+	)
+	return err
+}
+
+func (s *Store) ensureColumn(ctx context.Context, table, column, decl string) error {
+	rows, err := s.db.QueryContext(ctx, "PRAGMA table_info("+table+")")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notNull, pk int
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &typ, &notNull, &dflt, &pk); err != nil {
+			return err
+		}
+		if name == column {
+			return nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, "ALTER TABLE "+table+" ADD COLUMN "+column+" "+decl)
 	return err
 }
 

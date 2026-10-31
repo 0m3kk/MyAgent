@@ -301,6 +301,7 @@ export interface Tool {
   name: string
   kind: string
   current_version_id?: string
+  draft_version_id?: string
   created_at: number
   version?: ToolVersion
   versions?: ToolVersion[]

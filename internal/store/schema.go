@@ -75,6 +75,7 @@ CREATE TABLE IF NOT EXISTS tools (
   name TEXT NOT NULL,
   kind TEXT NOT NULL,
   current_version_id TEXT,
+  draft_version_id TEXT,
   created_at INTEGER NOT NULL,
   UNIQUE (workspace_id, name)
 ) STRICT;

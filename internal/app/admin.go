@@ -139,7 +139,19 @@ func (a *App) ToolDetail(ctx context.Context, id string) (ToolDetail, error) {
 		return ToolDetail{}, err
 	}
 	tw.Versions = versions
-	if t.CurrentVersionID != "" {
+	chosen := t.CurrentVersionID
+	if t.DraftVersionID != "" {
+		chosen = t.DraftVersionID
+	}
+	if chosen != "" {
+		for i := range versions {
+			if versions[i].ID == chosen {
+				v := versions[i]
+				tw.Version = &v
+			}
+		}
+	}
+	if tw.Version == nil && t.CurrentVersionID != "" {
 		for i := range versions {
 			if versions[i].ID == t.CurrentVersionID {
 				v := versions[i]

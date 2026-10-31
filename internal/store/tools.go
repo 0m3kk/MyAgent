@@ -13,9 +13,9 @@ func (s *Store) GetOrCreateTool(
 	workspaceID, name, kind string,
 ) (model.Tool, error) {
 	var t model.Tool
-	err := s.db.QueryRowContext(ctx, `SELECT id,workspace_id,name,kind,COALESCE(current_version_id,''),created_at FROM tools WHERE workspace_id=? AND name=?`,
+	err := s.db.QueryRowContext(ctx, `SELECT id,workspace_id,name,kind,COALESCE(current_version_id,''),COALESCE(draft_version_id,''),created_at FROM tools WHERE workspace_id=? AND name=?`,
 		workspaceID, name).
-		Scan(&t.ID, &t.WorkspaceID, &t.Name, &t.Kind, &t.CurrentVersionID, &t.CreatedAt)
+		Scan(&t.ID, &t.WorkspaceID, &t.Name, &t.Kind, &t.CurrentVersionID, &t.DraftVersionID, &t.CreatedAt)
 	if err == nil {
 		return t, nil
 	}
@@ -76,13 +76,23 @@ func (s *Store) AddToolVersion(
 		nullInt(v.ApprovedAt),
 		v.CreatedAt,
 	)
-	if err == nil && (v.Status == model.ToolActive || v.Status == model.ToolApproved) {
-		_, err = tx.ExecContext(
-			ctx,
-			`UPDATE tools SET current_version_id = ? WHERE id = ?`,
-			v.ID,
-			v.ToolID,
-		)
+	if err == nil {
+		switch v.Status {
+		case model.ToolDraft, model.ToolTested:
+			_, err = tx.ExecContext(
+				ctx,
+				`UPDATE tools SET draft_version_id = ? WHERE id = ?`,
+				v.ID,
+				v.ToolID,
+			)
+		case model.ToolActive, model.ToolApproved:
+			_, err = tx.ExecContext(
+				ctx,
+				`UPDATE tools SET current_version_id = ?, draft_version_id = NULL WHERE id = ?`,
+				v.ID,
+				v.ToolID,
+			)
+		}
 	}
 	if err != nil {
 		_ = tx.Rollback()
@@ -124,7 +134,13 @@ func (s *Store) ToolVersions(ctx context.Context, toolID string) ([]model.ToolVe
 	rows, err := s.db.QueryContext(
 		ctx,
 		`SELECT id,tool_id,version,manifest,COALESCE(code_path,''),content_hash,status,created_by,COALESCE(parent_id,''),COALESCE(approved_at,0),created_at
-		FROM tool_versions WHERE tool_id = ? ORDER BY version DESC`,
+		FROM tool_versions
+		WHERE tool_id = ?
+		  AND (status <> 'deprecated' OR id = (
+		    SELECT current_version_id FROM tools WHERE id = ?
+		  ))
+		ORDER BY version DESC`,
+		toolID,
 		toolID,
 	)
 	if err != nil {
@@ -190,10 +206,40 @@ func (s *Store) UpdateToolVersionManifest(ctx context.Context, id, manifest, has
 	return err
 }
 
+func (s *Store) UpdateToolDraft(
+	ctx context.Context,
+	id, manifest, hash string,
+) (model.ToolVersion, error) {
+	res, err := s.db.ExecContext(
+		ctx,
+		`UPDATE tool_versions
+		 SET manifest = ?, content_hash = ?, status = 'draft', approved_at = NULL
+		 WHERE id = ? AND status IN ('draft','tested')`,
+		manifest,
+		hash,
+		id,
+	)
+	if err != nil {
+		return model.ToolVersion{}, err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return model.ToolVersion{}, err
+	}
+	if affected == 0 {
+		return model.ToolVersion{}, ErrNotFound
+	}
+	return s.GetToolVersion(ctx, id)
+}
+
 func (s *Store) SetToolCurrentVersion(ctx context.Context, toolID, versionID string) error {
 	_, err := s.db.ExecContext(
 		ctx,
-		`UPDATE tools SET current_version_id = ? WHERE id = ?`,
+		`UPDATE tools
+		 SET current_version_id = ?,
+		     draft_version_id = CASE WHEN draft_version_id = ? THEN NULL ELSE draft_version_id END
+		 WHERE id = ?`,
+		versionID,
 		versionID,
 		toolID,
 	)
@@ -202,15 +248,15 @@ func (s *Store) SetToolCurrentVersion(ctx context.Context, toolID, versionID str
 
 func (s *Store) GetToolByID(ctx context.Context, id string) (model.Tool, error) {
 	var t model.Tool
-	err := s.db.QueryRowContext(ctx, `SELECT id,workspace_id,name,kind,COALESCE(current_version_id,''),created_at FROM tools WHERE id = ?`, id).
-		Scan(&t.ID, &t.WorkspaceID, &t.Name, &t.Kind, &t.CurrentVersionID, &t.CreatedAt)
+	err := s.db.QueryRowContext(ctx, `SELECT id,workspace_id,name,kind,COALESCE(current_version_id,''),COALESCE(draft_version_id,''),created_at FROM tools WHERE id = ?`, id).
+		Scan(&t.ID, &t.WorkspaceID, &t.Name, &t.Kind, &t.CurrentVersionID, &t.DraftVersionID, &t.CreatedAt)
 	return t, fmtErr("tool", err)
 }
 
 func (s *Store) GetToolByName(ctx context.Context, name string) (model.Tool, error) {
 	var t model.Tool
-	err := s.db.QueryRowContext(ctx, `SELECT id,workspace_id,name,kind,COALESCE(current_version_id,''),created_at FROM tools WHERE name = ? ORDER BY created_at LIMIT 1`, name).
-		Scan(&t.ID, &t.WorkspaceID, &t.Name, &t.Kind, &t.CurrentVersionID, &t.CreatedAt)
+	err := s.db.QueryRowContext(ctx, `SELECT id,workspace_id,name,kind,COALESCE(current_version_id,''),COALESCE(draft_version_id,''),created_at FROM tools WHERE name = ? ORDER BY created_at LIMIT 1`, name).
+		Scan(&t.ID, &t.WorkspaceID, &t.Name, &t.Kind, &t.CurrentVersionID, &t.DraftVersionID, &t.CreatedAt)
 	return t, fmtErr("tool", err)
 }
 
@@ -218,7 +264,7 @@ func (s *Store) ListTools(
 	ctx context.Context,
 	filter model.ToolFilter,
 ) ([]model.ToolWithVersion, error) {
-	query := `SELECT t.id,t.workspace_id,t.name,t.kind,COALESCE(t.current_version_id,''),t.created_at
+	query := `SELECT t.id,t.workspace_id,t.name,t.kind,COALESCE(t.current_version_id,''),COALESCE(t.draft_version_id,''),t.created_at
 		FROM tools t WHERE 1=1`
 	args := []any{}
 	if filter.Kind != "" {
@@ -244,6 +290,7 @@ func (s *Store) ListTools(
 			&t.Name,
 			&t.Kind,
 			&t.CurrentVersionID,
+			&t.DraftVersionID,
 			&t.CreatedAt,
 		); err != nil {
 			return nil, err

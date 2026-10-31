@@ -81,6 +81,31 @@ func (a *App) CreateToolDraft(
 			}
 		}
 	}
+	if t.DraftVersionID != "" {
+		draft, err := a.Store.GetToolVersion(ctx, t.DraftVersionID)
+		if err == nil && (draft.Status == model.ToolDraft || draft.Status == model.ToolTested) {
+			if draft.CodePath != "" {
+				if err := os.WriteFile(
+					filepath.Join(draft.CodePath, "manifest.yaml"),
+					[]byte(manifestYAML),
+					0o644,
+				); err != nil {
+					return SaveToolResult{}, err
+				}
+			}
+			hash := hashToolDir(manifestYAML, draft.CodePath)
+			v, err := a.Store.UpdateToolDraft(ctx, draft.ID, manifestYAML, hash)
+			if err != nil {
+				return SaveToolResult{}, err
+			}
+			a.Bus.EmitNoErr(model.Event{Stream: model.StreamSys, Type: "tool.version.updated",
+				Payload: a.mustPayload(
+					map[string]any{"tool_id": t.ID, "version_id": v.ID, "version": v.Version,
+						"name": t.Name, "created_by": createdBy},
+				)})
+			return SaveToolResult{Tool: t, Version: v}, nil
+		}
+	}
 	dir := filepath.Join(a.cfg.ToolsDir, t.ID, ids.New())
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return SaveToolResult{}, err
@@ -108,6 +133,7 @@ func (a *App) CreateToolDraft(
 	if err != nil {
 		return SaveToolResult{}, err
 	}
+	t.DraftVersionID = v.ID
 	a.Bus.EmitNoErr(model.Event{Stream: model.StreamSys, Type: "tool.version.created",
 		Payload: a.mustPayload(
 			map[string]any{"tool_id": t.ID, "version_id": v.ID, "version": v.Version,
@@ -127,8 +153,8 @@ func (a *App) WriteToolFile(
 	if tv.ToolID != toolID {
 		return tv, errors.New("version does not belong to this tool")
 	}
-	if tv.Status != model.ToolDraft {
-		return tv, errors.New("only draft tool versions can be edited; create a new version")
+	if tv.Status != model.ToolDraft && tv.Status != model.ToolTested {
+		return tv, errors.New("only draft or tested tool versions can be edited")
 	}
 	if len(content) > 256*1024 {
 		return tv, errors.New("tool file is larger than 256KB")

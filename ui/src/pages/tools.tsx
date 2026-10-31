@@ -29,7 +29,7 @@ import { useToast } from '../components/toast'
 import { useConfirm } from '../components/confirm'
 import { useEventStream } from '../hooks'
 import type { EventEnvelope, SecretMeta, TestResult, Tool, ToolDetail, ToolVersion } from '../types'
-import { formatCost, formatDate, formatRelative, safeJSON, shortId, statusTone, titleCase } from '../format'
+import { formatCost, formatDate, formatRelative, safeJSON, shortId, statusTone, titleCase, versionLabel } from '../format'
 import { Badge, Button, CopyButton, EmptyState, Field, IconButton, InlineNotice, Modal, PageHeader, SectionTitle, Select, Spinner, StatusBadge, Tabs, TextArea, TextInput } from '../components/ui'
 import { InputForm, schemaDefaults, validateInputs, type JSONSchema } from '../components/input-form'
 import { ToolCard, type ToolView } from '../components/chat-bits'
@@ -158,11 +158,12 @@ function ToolTile({ tool }: { tool: Tool }) {
         </span>
         <div className="tool-tile-title"><strong>{tool.name}</strong><span>{tool.kind}</span></div>
         {v && <StatusBadge status={v.status} />}
+        {tool.draft_version_id && <Badge tone="warn">draft</Badge>}
       </div>
       <p>{tool.description || 'No description'}</p>
       <div className="tool-tile-foot">
         <Badge tone={tool.side_effect === 'write' || tool.side_effect === 'external' ? 'warn' : 'neutral'}>{tool.side_effect || 'none'}</Badge>
-        {v && <span className="muted tiny">v{v.version}</span>}
+        {v && v.status !== 'draft' && v.status !== 'tested' && <span className="muted tiny">{versionLabel(v)}</span>}
         <span className="muted tiny">{Array.isArray(tool.tests) ? `${tool.tests.length} tests` : 'tests ?'}</span>
       </div>
     </button>
@@ -278,7 +279,7 @@ function ToolDetailPage({ toolId }: { toolId: string }) {
   const version = tool.version
   const current = detail.versions.find((v) => v.id === version?.id)
   const status = current?.status || version?.status
-  const editable = status === 'draft'
+  const editable = status === 'draft' || status === 'tested'
   const manifest = parseManifestLite(detail.manifest_yaml)
   const declaredTests = Array.isArray(tool.tests) ? tool.tests : []
   const secretDecls = (Array.isArray(tool.secrets) ? tool.secrets : []) as { name: string; description?: string; inject?: string; required?: boolean }[]
@@ -307,7 +308,7 @@ function ToolDetailPage({ toolId }: { toolId: string }) {
     if (!current) return
     const ok = await confirm({
       title: 'Approve and activate tool',
-      message: `Approve and activate ${tool.name} v${current.version}? It becomes available to the agent and workflows.`,
+      message: `Approve and activate ${tool.name}? It becomes available to the agent and workflows.`,
       confirmLabel: 'Approve tool',
       tone: 'primary',
     })
@@ -368,7 +369,7 @@ function ToolDetailPage({ toolId }: { toolId: string }) {
               <div className="workflow-subline">
                 <Badge>{tool.kind}</Badge>
                 <StatusBadge status={status} />
-                {version && <span>v{version.version}</span>}
+                {version && status !== 'draft' && status !== 'tested' && <span>{versionLabel(version)}</span>}
                 <span className="dot-sep" />
                 <Badge tone={tool.side_effect === 'write' || tool.side_effect === 'external' ? 'warn' : 'neutral'}>{tool.side_effect || 'none'}</Badge>
                 {version && <span className="muted tiny">{shortId(version.content_hash)}</span>}
@@ -435,7 +436,7 @@ function ToolDetailPage({ toolId }: { toolId: string }) {
               <div className="version-stack">
                 {detail.versions.map((v) => (
                   <div key={v.id} className={clsx('version-mini', v.id === current?.id && 'current')}>
-                    <span className="mono">v{v.version}</span>
+                    <span className="mono">{versionLabel(v)}</span>
                     <StatusBadge status={v.status} />
                     <span className="muted tiny">{v.created_by}</span>
                   </div>
@@ -689,7 +690,7 @@ function CodeTab({ tool, detail, editable, onChanged }: { tool: Tool; detail: To
     setBusy(true)
     try {
       const res = await api.createTool(newManifest)
-      toast('New draft version created', undefined, 'success')
+      toast(editable ? 'Draft updated' : 'New draft version created', undefined, 'success')
       setNewVersionOpen(false)
       onChanged()
       navigate(`/tools/${res.result.tool.id}`)
@@ -706,7 +707,7 @@ function CodeTab({ tool, detail, editable, onChanged }: { tool: Tool; detail: To
   return (
     <div className="code-workspace">
       <aside className="code-files">
-        <div className="code-files-head"><span>Files</span><Badge tone={editable ? 'warn' : 'muted'}>{editable ? 'draft' : 'frozen'}</Badge></div>
+        <div className="code-files-head"><span>Files</span><Badge tone={editable ? 'warn' : 'muted'}>{editable ? 'editable' : 'frozen'}</Badge></div>
         {files.map((f) => (
           <button key={f.path} className={clsx('code-file', file === f.path && 'active')} onClick={() => loadFile(f.path)}>
             <FileCode2 size={13} />
@@ -715,7 +716,7 @@ function CodeTab({ tool, detail, editable, onChanged }: { tool: Tool; detail: To
           </button>
         ))}
         <div className="code-files-actions">
-          <Button size="sm" variant="subtle" icon={<Plus size={13} />} onClick={() => setNewVersionOpen(true)}>New version</Button>
+          <Button size="sm" variant="subtle" icon={<Plus size={13} />} onClick={() => setNewVersionOpen(true)}>{editable ? 'Draft manifest' : 'New version'}</Button>
         </div>
       </aside>
       <div className="code-main">
@@ -727,9 +728,22 @@ function CodeTab({ tool, detail, editable, onChanged }: { tool: Tool; detail: To
         </div>
         <textarea className="mono-editor code-editor-area" value={content} onChange={(e) => { setContent(e.target.value); setDirty(true) }} readOnly={!editable} spellCheck={false} />
       </div>
-      <Modal open={newVersionOpen} onClose={() => setNewVersionOpen(false)} title="New draft version" subtitle="Existing files are copied into the new version. Approval is required again." width={760}
-        footer={<><Button variant="ghost" onClick={() => setNewVersionOpen(false)}>Cancel</Button><Button variant="primary" onClick={createVersion} loading={busy}>Create draft</Button></>}>
-        <Field label="Manifest YAML" hint="Manifest changes create a new content hash and require re-approval.">
+      <Modal
+        open={newVersionOpen}
+        onClose={() => setNewVersionOpen(false)}
+        title={editable ? 'Edit draft manifest' : 'New draft version'}
+        subtitle={editable
+          ? 'Changes update the working draft. Tests must pass again before approval.'
+          : 'Existing files are copied into the new draft. Approval is required to activate it.'}
+        width={760}
+        footer={(
+          <>
+            <Button variant="ghost" onClick={() => setNewVersionOpen(false)}>Cancel</Button>
+            <Button variant="primary" onClick={createVersion} loading={busy}>{editable ? 'Save draft' : 'Create draft'}</Button>
+          </>
+        )}
+      >
+        <Field label="Manifest YAML" hint="Manifest changes update the content hash and require re-approval.">
           <TextArea rows={20} className="mono" value={newManifest} onChange={(e) => setNewManifest(e.target.value)} />
         </Field>
       </Modal>
@@ -777,7 +791,7 @@ function ToolVersionsTab({ detail, onApprove }: { detail: ToolDetail; onApprove:
         <div className="versions-head"><span>Version</span><span>Status</span><span>Author</span><span>Hash</span><span>Created</span><span /></div>
         {detail.versions.map((v) => (
           <div key={v.id} className="versions-row">
-            <span className="mono">v{v.version}</span>
+            <span className="mono">{versionLabel(v)}</span>
             <StatusBadge status={v.status} />
             <span>{v.created_by}</span>
             <span className="mono tiny">{shortId(v.content_hash)}</span>

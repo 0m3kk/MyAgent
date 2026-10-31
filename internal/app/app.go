@@ -223,6 +223,12 @@ func New(ctx context.Context, cfg Config) (*App, error) {
 	_ = os.Chmod(cfg.DBPath, 0o600)
 	_ = os.Chmod(cfg.DBPath+"-wal", 0o600)
 	_ = os.Chmod(cfg.DBPath+"-shm", 0o600)
+	// Profiles can move (migration/import); tool code and artifact rows carry
+	// absolute paths, so rebase them onto this profile's data directory.
+	if err := st.RebaseDataPaths(ctx, cfg.ToolsDir, cfg.ArtifactDir); err != nil {
+		st.Close()
+		return nil, err
+	}
 	// Older builds created a new draft row on every save. Keep only each
 	// workflow's current draft as active work; superseded drafts remain as
 	// deprecated audit rows but are hidden from the version picker.

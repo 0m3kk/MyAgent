@@ -14,7 +14,8 @@ export function formatRelative(ms?: number): string {
 
 export function versionLabel(v?: { version: number; status?: string } | null): string {
   if (!v) return ''
-  return v.status === 'draft' ? 'draft' : `v${v.version}`
+  if (v.status === 'draft' || v.status === 'tested') return v.status
+  return `v${v.version}`
 }
 
 export function formatDate(ms?: number): string {
