@@ -7,7 +7,7 @@ import (
 )
 
 func (s *Server) handleListTuning(w http.ResponseWriter, r *http.Request) {
-	proposals, err := s.app.Store.ListTuningProposals(r.Context())
+	proposals, err := s.app.TuningProposals(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error(), nil)
 		return

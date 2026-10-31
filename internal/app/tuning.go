@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/sergi/go-diff/diffmatchpatch"
+	"github.com/pmezard/go-difflib/difflib"
 
 	"myagent/internal/ids"
 	"myagent/internal/llm"
@@ -364,6 +364,45 @@ The diagnosis must classify the cause: bad input, wrong tool choice, weak prompt
 	)
 }
 
+func unifiedDiff(base, proposed string) string {
+	diff, err := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
+		A:        difflib.SplitLines(base),
+		B:        difflib.SplitLines(proposed),
+		FromFile: "current",
+		ToFile:   "proposed",
+		Context:  3,
+	})
+	if err != nil {
+		return ""
+	}
+	return diff
+}
+
+func (a *App) fillProposalPatch(ctx context.Context, p *model.TuningProposal) {
+	if p.BaseVersionID == "" || p.ProposedYAML == "" {
+		return
+	}
+	base, err := a.Store.GetWorkflowVersion(ctx, p.BaseVersionID)
+	if err != nil {
+		return
+	}
+	p.Patch = unifiedDiff(base.YAML, p.ProposedYAML)
+}
+
+// TuningProposals returns proposals with a readable unified diff. Older
+// proposals stored diff-match-patch text (percent-encoded), so regenerate the
+// patch from the base and proposed YAML when possible.
+func (a *App) TuningProposals(ctx context.Context) ([]model.TuningProposal, error) {
+	proposals, err := a.Store.ListTuningProposals(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for i := range proposals {
+		a.fillProposalPatch(ctx, &proposals[i])
+	}
+	return proposals, nil
+}
+
 func (a *App) createProposal(
 	ctx context.Context,
 	workflowID, baseVersionID, proposedYAML, diagnosis, createdBy string,
@@ -388,9 +427,7 @@ func (a *App) createProposal(
 		)
 	}
 	_ = spec
-	dmp := diffmatchpatch.New()
-	patches := dmp.PatchMake(base.YAML, proposedYAML)
-	diff := dmp.PatchToText(patches)
+	diff := unifiedDiff(base.YAML, proposedYAML)
 	p, err := a.Store.CreateTuningProposal(
 		ctx,
 		model.TuningProposal{

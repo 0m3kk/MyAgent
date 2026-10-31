@@ -246,6 +246,44 @@ export function TuningPage() {
   )
 }
 
+function decodePatchText(patch: string): string {
+  return patch
+    .split('\n')
+    .map((line) => {
+      if (line.startsWith('@@')) return line
+      const prefix = line[0] === '+' || line[0] === '-' || line[0] === ' ' ? line[0] : ' '
+      const body = prefix === line[0] ? line.slice(1) : line
+      let decoded = body
+      try {
+        decoded = decodeURIComponent(body)
+      } catch {
+        // Keep malformed input readable instead of hiding the whole patch.
+      }
+      return decoded.split('\n').map((part) => prefix + part).join('\n')
+    })
+    .join('\n')
+}
+
+function DiffBlock({ patch }: { patch: string }) {
+  // New proposals use a standard unified diff. Keep the decoder for old
+  // diff-match-patch text stored before the backend switch.
+  const text = patch.startsWith('--- ') ? patch : decodePatchText(patch)
+  const lines = text.split('\n')
+  return (
+    <pre className="diff-block">
+      {lines.map((line, i) => {
+        const tone = line.startsWith('@@') ? 'hunk' : line.startsWith('+') ? 'add' : line.startsWith('-') ? 'del' : ''
+        return (
+          <span key={i} className={clsx('diff-line', tone)}>
+            {line}
+            {i < lines.length - 1 ? '\n' : ''}
+          </span>
+        )
+      })}
+    </pre>
+  )
+}
+
 function ProposalCard({ proposal, workflow, busy, onDecide }: { proposal: TuningProposal; workflow: string; busy: string | null; onDecide: (p: TuningProposal, a: 'accept' | 'reject' | 'rollback') => void }) {
   const [showYaml, setShowYaml] = useState(false)
   const status = proposal.status
@@ -276,7 +314,7 @@ function ProposalCard({ proposal, workflow, busy, onDecide }: { proposal: Tuning
         </div>
         <div className="proposal-diff">
           <div className="proposal-label">Patch</div>
-          <pre className="diff-block">{proposal.patch || 'No diff recorded.'}</pre>
+          {proposal.patch ? <DiffBlock patch={proposal.patch} /> : <pre className="diff-block">No diff recorded.</pre>}
         </div>
         <div className="proposal-yaml">
           <button className="link-btn" onClick={() => setShowYaml((v) => !v)}>{showYaml ? 'Hide' : 'Show'} proposed YAML</button>
