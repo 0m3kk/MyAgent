@@ -397,8 +397,21 @@ export function RunPage({ runId }: { runId: string }) {
             <Button variant="ghost" size="sm" icon={<Save size={14} />} onClick={makeEvalCase} loading={busy === 'eval'}>Eval case</Button>
           )}
           {run.target_kind === 'workflow' && <Button variant="ghost" size="sm" icon={<BarChart3 size={14} />} onClick={analyze} loading={busy === 'analyze'}>Analyze</Button>}
+          {run.target_kind === 'workflow' && detail.workflow && (
+            <Button variant="ghost" size="sm" icon={<ArrowRight size={14} />} onClick={() => navigate(`/workflows/${detail.workflow!.id}`)}>
+              Open workflow
+            </Button>
+          )}
         </div>
       </header>
+
+      {run.target_kind === 'workflow' && detail.spec_stale && (
+        <div className="run-stale-note">
+          <InlineNotice tone="warn" title="Original workflow version is unavailable">
+            This run referenced a version that no longer exists. Showing the workflow's current graph instead.
+          </InlineNotice>
+        </div>
+      )}
 
       {run.status === 'waiting_approval' && (
         <div className="run-approval-banner">
@@ -424,10 +437,19 @@ export function RunPage({ runId }: { runId: string }) {
           <RunInspector spec={spec} run={run} events={events} stepOutputs={detail.step_outputs || {}} outputs={detail.outputs || {}} selectedStep={selectedStep} />
         </div>
       ) : (
-        <div className="run-workspace">
-          <ToolRunView run={run} events={events} outputs={detail.outputs || {}} stepOutputs={detail.step_outputs || {}} />
-          <RunInspector run={run} events={events} stepOutputs={detail.step_outputs || {}} outputs={detail.outputs || {}} />
-        </div>
+        <>
+          {run.target_kind === 'workflow' && (
+            <div className="run-stale-note">
+              <InlineNotice tone="warn" title="Workflow graph unavailable">
+                This run's workflow or version was deleted, so only its recorded output and trace are available.
+              </InlineNotice>
+            </div>
+          )}
+          <div className="run-workspace">
+            <ToolRunView run={run} events={events} outputs={detail.outputs || {}} stepOutputs={detail.step_outputs || {}} />
+            <RunInspector run={run} events={events} stepOutputs={detail.step_outputs || {}} outputs={detail.outputs || {}} />
+          </div>
+        </>
       )}
     </div>
   )

@@ -469,6 +469,7 @@ export interface RunDetail {
   version?: WorkflowVersion
   workflow?: Workflow
   spec?: WorkflowSpec
+  spec_stale?: boolean
 }
 
 export interface ToolDetailResponse {

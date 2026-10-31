@@ -58,6 +58,22 @@ func (s *Server) handleGetRun(w http.ResponseWriter, r *http.Request) {
 			if w, err := s.app.Store.GetWorkflowByID(r.Context(), v.WorkflowID); err == nil {
 				resp["workflow"] = w
 			}
+		} else if w, err := s.app.Store.GetWorkflowByID(r.Context(), run.TargetID); err == nil {
+			// The exact version was removed, but the workflow still exists.
+			// Fall back to its current graph so the canvas remains useful.
+			resp["workflow"] = w
+			if w.CurrentVersionID != "" {
+				if v, err := s.app.Store.GetWorkflowVersion(
+					r.Context(),
+					w.CurrentVersionID,
+				); err == nil {
+					resp["version"] = v
+					if spec, err := workflow.Parse([]byte(v.YAML)); err == nil {
+						resp["spec"] = spec
+						resp["spec_stale"] = true
+					}
+				}
+			}
 		}
 	}
 	writeJSON(w, http.StatusOK, resp)

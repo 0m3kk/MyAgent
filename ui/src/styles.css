@@ -937,6 +937,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .run-orb.st-waiting_approval { background: var(--amber-soft); color: var(--amber); }
 .run-actions .feedback-actions { display: flex; background: var(--surface-2); border: 1px solid var(--border-soft); border-radius: 8px; padding: 1px; }
 .run-approval-strip { flex: 0 0 auto; display: flex; flex-direction: column; gap: 8px; padding: 10px 0 12px; }
+.run-stale-note { flex: 0 0 auto; padding: 4px 0 10px; }
 .run-approval-strip .approval-card { max-width: 900px; }
 .run-approval-banner { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 9px 12px; margin: 2px 0 10px; border: 1px solid color-mix(in oklab, var(--amber) 34%, var(--border)); background: var(--amber-soft); border-radius: var(--radius-md); }
 .run-approval-icon { width: 30px; height: 30px; border-radius: 9px; background: color-mix(in oklab, var(--amber) 16%, transparent); color: var(--amber); display: grid; place-items: center; flex: 0 0 auto; }
