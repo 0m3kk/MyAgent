@@ -374,3 +374,49 @@ func TestConcurrentChats(t *testing.T) {
 		t.Fatalf("conversation title was not generated: %+v", generated)
 	}
 }
+
+func TestGenerateTitleFallsBackWhenModelReturnsEmpty(t *testing.T) {
+	llmSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(
+			w,
+			"data: {\"model\":\"fake\",\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n",
+		)
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer llmSrv.Close()
+
+	dir := t.TempDir()
+	ctx := context.Background()
+	a, err := app.New(ctx, app.Config{
+		DataDir: dir, WorkspaceRoot: filepath.Join(dir, "workspace"),
+		DBPath: filepath.Join(dir, "test.db"), ArtifactDir: filepath.Join(dir, "artifacts"),
+		ToolsDir: filepath.Join(dir, "tools"), Version: "test",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	if _, err := a.SaveModelProfile(ctx, model.ModelProfile{
+		Name: "fake", BaseURL: llmSrv.URL + "/v1", Model: "fake", Role: "executor",
+	}, ""); err != nil {
+		t.Fatal(err)
+	}
+	conv, err := a.Store.CreateConversation(ctx, a.Workspace.ID, "New chat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	content, _ := json.Marshal(map[string]any{"text": "first chat"})
+	if _, err := a.Store.AppendMessage(ctx, model.Message{
+		ConversationID: conv.ID, Role: "user", Content: content,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	updated, err := a.GenerateConversationTitle(ctx, conv.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Title != "first chat" {
+		t.Fatalf("expected first-message fallback, got %q", updated.Title)
+	}
+}

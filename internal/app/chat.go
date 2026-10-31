@@ -783,7 +783,7 @@ func (a *App) GenerateConversationTitle(
 				clipText(lastAssistant, 2000),
 			),
 		}},
-		MaxTokens:   24,
+		MaxTokens:   256,
 		Temperature: &temperature,
 	})
 	if err != nil {
@@ -791,7 +791,10 @@ func (a *App) GenerateConversationTitle(
 	}
 	title := cleanGeneratedTitle(res.Text)
 	if title == "" {
-		return conv, errors.New("the model returned an empty title")
+		// Reasoning models can consume the whole completion budget before
+		// emitting visible text. Fall back to the first-message title rather
+		// than failing the rename action.
+		title = titleFromText(firstUser)
 	}
 	return a.updateConversationTitle(ctx, conv, title)
 }

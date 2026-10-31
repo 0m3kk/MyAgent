@@ -527,7 +527,7 @@ export function ChatPage({ conversationId }: { conversationId: string }) {
       setConversation(updated)
       void refresh()
       toast(
-        mode === 'auto' ? 'Chat named by the model' : 'Title reset',
+        mode === 'auto' ? 'Chat named' : 'Title reset',
         mode === 'auto' ? 'You can rename it any time.' : 'Back to the first-message title.',
         'success',
       )
