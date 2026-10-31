@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -157,6 +158,21 @@ func (a *App) ChatActive(conversationID string) bool {
 	a.chatMu.Lock()
 	defer a.chatMu.Unlock()
 	return a.chatActive[conversationID]
+}
+
+// ActiveConversations returns the IDs of conversations where the agent is
+// currently running. IDs are sorted so polling clients can compare cheaply.
+func (a *App) ActiveConversations() []string {
+	a.chatMu.Lock()
+	defer a.chatMu.Unlock()
+	ids := make([]string, 0, len(a.chatActive))
+	for id, active := range a.chatActive {
+		if active {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	return ids
 }
 
 func (a *App) ChatProgress(conversationID string) (ChatProgress, bool) {

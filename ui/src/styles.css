@@ -259,6 +259,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .recent-item:hover em { opacity: 1; }
 .recent-item.active { background: var(--surface-2); color: var(--text); }
 .recent-item svg { flex: 0 0 auto; opacity: 0.7; }
+.recent-item .recent-running { color: var(--blue); opacity: 1; }
 .sidebar-empty { padding: 8px 10px; color: var(--faint); font-size: calc(11.5px * var(--font-scale)); }
 .sidebar-foot { flex: 0 0 auto; padding-top: 12px; border-top: 1px solid var(--border-soft); display: flex; flex-direction: column; gap: 9px; }
 .approval-button {

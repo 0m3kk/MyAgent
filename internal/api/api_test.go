@@ -304,6 +304,10 @@ func TestConcurrentChats(t *testing.T) {
 	if firstDetail["active"] != true {
 		t.Fatalf("conversation should report active: %+v", firstDetail)
 	}
+	activeIDs := c.must("GET", "/api/conversations/active", nil)["conversation_ids"].([]any)
+	if len(activeIDs) != 1 || activeIDs[0] != firstID {
+		t.Fatalf("active conversations should contain the first chat: %+v", activeIDs)
+	}
 	progress, ok := firstDetail["progress"].(map[string]any)
 	if !ok {
 		t.Fatalf("conversation should report progress: %+v", firstDetail)
@@ -320,6 +324,10 @@ func TestConcurrentChats(t *testing.T) {
 	if !a.ChatActive(secondID) {
 		t.Fatal("second chat should be active")
 	}
+	activeIDs = c.must("GET", "/api/conversations/active", nil)["conversation_ids"].([]any)
+	if len(activeIDs) != 2 || activeIDs[0] != firstID || activeIDs[1] != secondID {
+		t.Fatalf("active conversations should contain both chats: %+v", activeIDs)
+	}
 
 	close(release)
 	deadline := time.Now().Add(5 * time.Second)
@@ -328,6 +336,10 @@ func TestConcurrentChats(t *testing.T) {
 	}
 	if a.ChatActive(firstID) || a.ChatActive(secondID) {
 		t.Fatal("chats did not finish")
+	}
+	activeIDs = c.must("GET", "/api/conversations/active", nil)["conversation_ids"].([]any)
+	if len(activeIDs) != 0 {
+		t.Fatalf("no conversation should be active after completion: %+v", activeIDs)
 	}
 
 	for _, id := range []string{firstID, secondID} {

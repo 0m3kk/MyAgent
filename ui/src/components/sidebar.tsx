@@ -1,9 +1,11 @@
+import { useCallback, useEffect, useState } from 'react'
 import {
   Activity,
   Bot,
   Command,
   GitBranch,
   Home,
+  Loader2,
   MessageSquareText,
   Search,
   Settings2,
@@ -12,7 +14,9 @@ import {
   Wrench,
 } from 'lucide-react'
 import clsx from 'clsx'
+import { api } from '../api'
 import { formatRelative } from '../format'
+import { usePolling } from '../hooks'
 import { href, navigate, useRoute } from '../router'
 import { useApp } from '../store'
 import { Badge } from './ui'
@@ -27,6 +31,23 @@ export function Sidebar({
 }) {
   const { data, approvals } = useApp()
   const route = useRoute()
+  const [activeChats, setActiveChats] = useState<Set<string>>(() => new Set())
+  const refreshActiveChats = useCallback(async () => {
+    try {
+      const res = await api.activeConversations()
+      const ids = res.conversation_ids ?? []
+      setActiveChats((prev) => {
+        if (prev.size === ids.length && ids.every((id) => prev.has(id))) return prev
+        return new Set(ids)
+      })
+    } catch {
+      // Keep the last known state while the local core restarts.
+    }
+  }, [])
+  useEffect(() => {
+    void refreshActiveChats()
+  }, [refreshActiveChats])
+  usePolling(refreshActiveChats, 2_000, !!data)
   if (!data) return null
   const conversations = data.conversations.slice(0, 5)
   const defaultModel = data.model_profiles.find((m) => m.id === data.settings.default_model_id) || data.model_profiles[0]
@@ -83,19 +104,23 @@ export function Sidebar({
           <button className="link-btn tiny" onClick={onCommand}><Search size={12} /> Search</button>
         </div>
         <div className="recent-list">
-          {conversations.map((c) => (
-            <a
-              key={c.id}
-              href={href(`/chats/${c.id}`)}
-              className={clsx('recent-item', route.segments[1] === c.id && 'active')}
-              onClick={(e) => { e.preventDefault(); navigate(`/chats/${c.id}`) }}
-              title={c.title}
-            >
-              <MessageSquareText size={13} />
-              <span>{c.title}</span>
-              <em>{formatRelative(c.updated_at)}</em>
-            </a>
-          ))}
+          {conversations.map((c) => {
+            const isRunning = activeChats.has(c.id)
+            return (
+              <a
+                key={c.id}
+                href={href(`/chats/${c.id}`)}
+                className={clsx('recent-item', route.segments[1] === c.id && 'active', isRunning && 'running')}
+                onClick={(e) => { e.preventDefault(); navigate(`/chats/${c.id}`) }}
+                title={c.title}
+              >
+                <MessageSquareText size={13} />
+                <span>{c.title}</span>
+                {isRunning && <Loader2 size={11} className="spin recent-running" aria-label="Agent is running" />}
+                <em>{formatRelative(c.updated_at)}</em>
+              </a>
+            )
+          })}
           {conversations.length === 0 && <div className="sidebar-empty">No conversations yet</div>}
         </div>
       </div>

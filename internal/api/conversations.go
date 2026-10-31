@@ -15,6 +15,10 @@ func (s *Server) handleListConversations(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, map[string]any{"conversations": list})
 }
 
+func (s *Server) handleActiveConversations(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"conversation_ids": s.app.ActiveConversations()})
+}
+
 func (s *Server) handleCreateConversation(w http.ResponseWriter, r *http.Request) {
 	body, ok := readJSON(w, r, 1<<20)
 	if !ok {

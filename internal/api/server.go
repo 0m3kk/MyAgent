@@ -96,6 +96,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/workspaces/{id}/export", s.handleExportWorkspace)
 
 	s.mux.HandleFunc("GET /api/conversations", s.handleListConversations)
+	s.mux.HandleFunc("GET /api/conversations/active", s.handleActiveConversations)
 	s.mux.HandleFunc("POST /api/conversations", s.handleCreateConversation)
 	s.mux.HandleFunc("GET /api/conversations/{id}", s.handleGetConversation)
 	s.mux.HandleFunc("PATCH /api/conversations/{id}", s.handleRenameConversation)

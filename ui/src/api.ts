@@ -124,6 +124,7 @@ export const api = {
     `/api/workspaces/${id}/export?token=${encodeURIComponent(getToken())}`,
 
   conversations: () => request<{ conversations: Conversation[] }>('/api/conversations'),
+  activeConversations: () => request<{ conversation_ids: string[] }>('/api/conversations/active'),
   createConversation: (title = 'New chat') => request<Conversation>('/api/conversations', json({ title })),
   conversation: (id: string) => request<{ conversation: Conversation; messages: Message[]; active: boolean; progress: ChatProgress | null }>(`/api/conversations/${id}`),
   renameConversation: (id: string, title: string) =>
