@@ -45,24 +45,50 @@ export function ChatHome() {
   const { data, approvals, refresh } = useApp()
   const toast = useToast()
   const [starting, setStarting] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  useEffect(() => {
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, 180)}px`
+  }, [draft])
   if (!data) return null
   const recent = data.conversations.slice(0, 6)
   const hasModel = data.model_profiles.length > 0
+  const defaultModel = data.model_profiles.find((m) => m.id === data.settings.default_model_id) || data.model_profiles[0]
 
-  async function start(prompt: string) {
+  async function start(prompt: string): Promise<boolean> {
     if (!hasModel) {
       navigate('/settings/models/new')
-      return
+      return false
     }
     setStarting(prompt)
     try {
       const res = await api.sendChat('', prompt)
       void refresh()
       navigate(`/chats/${res.conversation.id}`)
+      return true
     } catch (err) {
       toast('Could not start the chat', err instanceof Error ? err.message : undefined, 'error')
+      return false
     } finally {
       setStarting(null)
+    }
+  }
+
+  async function sendDraft() {
+    const text = draft.trim()
+    if (!text || starting) return
+    setDraft('')
+    const ok = await start(text)
+    if (!ok) setDraft(text)
+  }
+
+  function onDraftKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      void sendDraft()
     }
   }
 
@@ -95,9 +121,45 @@ export function ChatHome() {
         </div>
       )}
 
+      <div className="home-composer">
+        <div className="composer">
+          <TextArea
+            ref={textareaRef}
+            rows={1}
+            placeholder={hasModel ? 'Ask anything, or describe a task to automate…' : 'Add a model in Settings to start chatting…'}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={onDraftKeyDown}
+            disabled={!!starting || !hasModel}
+            autoFocus
+          />
+          <div className="composer-actions">
+            <span className="composer-hint">
+              <span><kbd>↵</kbd> send</span>
+              <span><kbd>⇧ ↵</kbd> newline</span>
+            </span>
+            <Button
+              variant="primary"
+              size="sm"
+              icon={<Send size={14} />}
+              onClick={sendDraft}
+              loading={!!starting}
+              disabled={!hasModel || !draft.trim()}
+            >
+              Send
+            </Button>
+          </div>
+        </div>
+        <div className="composer-foot">
+          <span>{defaultModel?.model || 'No model selected'}</span>
+          <span>·</span>
+          <span>Secrets never enter the prompt</span>
+        </div>
+      </div>
+
       <div className="suggestion-grid">
         {SUGGESTIONS.map((s) => (
-          <button key={s.title} className="suggestion-card" onClick={() => start(s.prompt)} disabled={!!starting}>
+          <button key={s.title} className="suggestion-card" onClick={() => { void start(s.prompt) }} disabled={!!starting}>
             <span className="suggestion-icon">{starting === s.prompt ? <Spinner size={18} /> : s.icon}</span>
             <span>
               <strong>{s.title}</strong>

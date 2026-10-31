@@ -543,6 +543,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .home-hero h1 { font-size: clamp(calc(30px * var(--font-scale)), 3.6vw, calc(44px * var(--font-scale))); letter-spacing: -0.05em; margin-bottom: 13px; }
 .home-hero p { max-width: 620px; margin: 0 auto; color: var(--muted); font-size: calc(13px * var(--font-scale)); line-height: 1.65; }
 .hero-approval { margin: 20px auto 0; display: inline-flex; align-items: center; gap: 8px; border: 1px solid color-mix(in oklab, var(--amber) 35%, var(--border)); background: var(--amber-soft); color: var(--amber); border-radius: 999px; padding: 6px 12px; font-size: calc(11px * var(--font-scale)); }
+.home-composer { max-width: 860px; margin: 0 auto 22px; }
 .suggestion-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; max-width: 900px; margin: 0 auto 28px; }
 .suggestion-card { display: flex; align-items: center; gap: 12px; text-align: left; border: 1px solid var(--border-soft); background: var(--surface); border-radius: var(--radius-md); padding: 13px 14px; box-shadow: var(--shadow-sm); transition: transform 0.15s var(--ease), border-color 0.15s, background 0.15s; }
 .suggestion-card:hover { transform: translateY(-1px); border-color: var(--border-strong); background: var(--surface-2); }
