@@ -18,7 +18,15 @@ import (
 	"myagent/internal/model"
 )
 
-func (ex *executor) runKind(ctx context.Context, st *Step, path string, env *Env, depth int, sr model.StepRun, siblings []Step) (any, error) {
+func (ex *executor) runKind(
+	ctx context.Context,
+	st *Step,
+	path string,
+	env *Env,
+	depth int,
+	sr model.StepRun,
+	siblings []Step,
+) (any, error) {
 	switch st.StepKind() {
 	case "tool":
 		return ex.runTool(ctx, st, path, env, sr)
@@ -57,7 +65,13 @@ func (ex *executor) resolveBinding(ctx context.Context, ref string) (ToolBinding
 	return b, nil
 }
 
-func (ex *executor) runTool(ctx context.Context, st *Step, path string, env *Env, sr model.StepRun) (any, error) {
+func (ex *executor) runTool(
+	ctx context.Context,
+	st *Step,
+	path string,
+	env *Env,
+	sr model.StepRun,
+) (any, error) {
 	argsVal, err := EvalValue(st.With, env)
 	if err != nil {
 		return nil, fmt.Errorf("tool arguments: %w", err)
@@ -79,7 +93,10 @@ func (ex *executor) runTool(ctx context.Context, st *Step, path string, env *Env
 		effective = binding.SideEffect
 	}
 	ex.emit(ctx, "tool.call.started", path, map[string]any{
-		"tool": binding.Name, "tool_version_id": binding.VersionID, "args": args, "side_effect": effective,
+		"tool":            binding.Name,
+		"tool_version_id": binding.VersionID,
+		"args":            args,
+		"side_effect":     effective,
 	}, nil)
 	if ex.req.Replay != nil {
 		if v, ok := ex.req.Replay[path]; ok {
@@ -90,8 +107,19 @@ func (ex *executor) runTool(ctx context.Context, st *Step, path string, env *Env
 		}
 	}
 	if ex.req.DryRun && (effective == "write" || effective == "external") {
-		out := map[string]any{"mocked": true, "tool": binding.Name, "args": args, "reason": "dry run"}
-		ex.emit(ctx, "tool.call.finished", path, map[string]any{"tool": binding.Name, "mocked": true, "duration_ms": 0}, nil)
+		out := map[string]any{
+			"mocked": true,
+			"tool":   binding.Name,
+			"args":   args,
+			"reason": "dry run",
+		}
+		ex.emit(
+			ctx,
+			"tool.call.finished",
+			path,
+			map[string]any{"tool": binding.Name, "mocked": true, "duration_ms": 0},
+			nil,
+		)
 		return out, nil
 	}
 	start := time.Now()
@@ -113,7 +141,11 @@ func (ex *executor) runTool(ctx context.Context, st *Step, path string, env *Env
 			kind = te.Kind
 		}
 		ex.emit(ctx, "tool.call.finished", path, map[string]any{
-			"tool": binding.Name, "status": "failed", "duration_ms": time.Since(start).Milliseconds(), "error": err.Error(), "kind": kind,
+			"tool":        binding.Name,
+			"status":      "failed",
+			"duration_ms": time.Since(start).Milliseconds(),
+			"error":       err.Error(),
+			"kind":        kind,
 		}, nil)
 		if kind == "permission_denied" {
 			ex.emit(ctx, "tool.sandbox.denied", path, map[string]any{
@@ -123,7 +155,10 @@ func (ex *executor) runTool(ctx context.Context, st *Step, path string, env *Env
 		return nil, err
 	}
 	ex.emit(ctx, "tool.call.finished", path, map[string]any{
-		"tool": binding.Name, "status": "succeeded", "duration_ms": time.Since(start).Milliseconds(), "result": previewValue(output),
+		"tool":        binding.Name,
+		"status":      "succeeded",
+		"duration_ms": time.Since(start).Milliseconds(),
+		"result":      previewValue(output),
 	}, nil)
 	return output, nil
 }
@@ -141,7 +176,9 @@ func (ex *executor) runLLM(ctx context.Context, st *Step, path string, env *Env)
 	promptStr := toStringValue(prompt)
 	systemStr := toStringValue(system)
 	if st.LLM.OutputSchema != nil {
-		hint := "\n\nReturn only a JSON object that conforms to this JSON Schema:\n" + mustJSONString(st.LLM.OutputSchema)
+		hint := "\n\nReturn only a JSON object that conforms to this JSON Schema:\n" + mustJSONString(
+			st.LLM.OutputSchema,
+		)
 		if systemStr != "" {
 			systemStr += hint
 		} else {
@@ -149,7 +186,9 @@ func (ex *executor) runLLM(ctx context.Context, st *Step, path string, env *Env)
 		}
 	}
 	ex.emit(ctx, "llm.request", path, map[string]any{
-		"role": role, "prompt": previewString(promptStr, 4000), "system": previewString(systemStr, 2000),
+		"role":          role,
+		"prompt":        previewString(promptStr, 4000),
+		"system":        previewString(systemStr, 2000),
 		"output_schema": st.LLM.OutputSchema != nil,
 	}, nil)
 	stream := func(text string) {
@@ -157,24 +196,45 @@ func (ex *executor) runLLM(ctx context.Context, st *Step, path string, env *Env)
 		ex.emitDelta("step.output.delta", path, map[string]any{"chunk": text})
 	}
 	res, err := ex.e.LLM.ChatWithTools(ctx, LLMChatRequest{
-		RunID: ex.req.RunID, StepID: path, SessionID: ex.req.RunID, Role: role, System: systemStr,
+		RunID:        ex.req.RunID,
+		StepID:       path,
+		SessionID:    ex.req.RunID,
+		Role:         role,
+		System:       systemStr,
 		Messages:     []llm.Message{{Role: "user", Content: promptStr}},
-		OutputSchema: st.LLM.OutputSchema, MaxTokens: st.LLM.MaxTokens, Temperature: st.LLM.Temperature,
-		Stream: stream,
+		OutputSchema: st.LLM.OutputSchema,
+		MaxTokens:    st.LLM.MaxTokens,
+		Temperature:  st.LLM.Temperature,
+		Stream:       stream,
 	})
 	if err != nil {
-		ex.emit(ctx, "llm.finished", path, map[string]any{"status": "failed", "error": err.Error()}, nil)
+		ex.emit(
+			ctx,
+			"llm.finished",
+			path,
+			map[string]any{"status": "failed", "error": err.Error()},
+			nil,
+		)
 		return nil, err
 	}
 	if err := ex.addUsage(res.TokensIn, res.TokensOut, res.CostMicro); err != nil {
 		return nil, err
 	}
 	ex.emit(ctx, "llm.finished", path, map[string]any{
-		"model": res.Model, "role": role, "usage": map[string]any{"in": res.TokensIn, "out": res.TokensOut},
-		"cost_micro": res.CostMicro, "finish_reason": res.Finish,
+		"model":         res.Model,
+		"role":          role,
+		"usage":         map[string]any{"in": res.TokensIn, "out": res.TokensOut},
+		"cost_micro":    res.CostMicro,
+		"finish_reason": res.Finish,
 	}, func(tx *sql.Tx) error {
-		_, err := tx.ExecContext(context.Background(), `UPDATE runs SET tokens_in=tokens_in+?, tokens_out=tokens_out+?, cost_micro=cost_micro+? WHERE id=?`,
-			res.TokensIn, res.TokensOut, res.CostMicro, ex.req.RunID)
+		_, err := tx.ExecContext(
+			context.Background(),
+			`UPDATE runs SET tokens_in=tokens_in+?, tokens_out=tokens_out+?, cost_micro=cost_micro+? WHERE id=?`,
+			res.TokensIn,
+			res.TokensOut,
+			res.CostMicro,
+			ex.req.RunID,
+		)
 		return err
 	})
 	var output any
@@ -209,7 +269,13 @@ func (ex *executor) runSet(st *Step, env *Env) (any, error) {
 	return out, nil
 }
 
-func (ex *executor) runBranch(ctx context.Context, st *Step, path string, env *Env, depth int) (any, error) {
+func (ex *executor) runBranch(
+	ctx context.Context,
+	st *Step,
+	path string,
+	env *Env,
+	depth int,
+) (any, error) {
 	chosen := []Step(nil)
 	for i, c := range st.Branch.Cases {
 		ok, err := ex.evalCondition(c.When, env)
@@ -241,7 +307,13 @@ func (ex *executor) runBranch(ctx context.Context, st *Step, path string, env *E
 	return out, nil
 }
 
-func (ex *executor) runMap(ctx context.Context, st *Step, path string, env *Env, depth int) (any, error) {
+func (ex *executor) runMap(
+	ctx context.Context,
+	st *Step,
+	path string,
+	env *Env,
+	depth int,
+) (any, error) {
 	overVal, err := evalWorkflowString(st.Map.Over, env)
 	if err != nil {
 		return nil, fmt.Errorf("map.over: %w", err)
@@ -312,7 +384,13 @@ func (ex *executor) runMap(ctx context.Context, st *Step, path string, env *Env,
 	return results, nil
 }
 
-func (ex *executor) runParallel(ctx context.Context, st *Step, path string, env *Env, depth int) (any, error) {
+func (ex *executor) runParallel(
+	ctx context.Context,
+	st *Step,
+	path string,
+	env *Env,
+	depth int,
+) (any, error) {
 	outputs, _, err := ex.executeList(ctx, st.Parallel.Do, env, path+".", depth+1)
 	if err != nil {
 		return nil, err
@@ -324,7 +402,13 @@ func (ex *executor) runParallel(ctx context.Context, st *Step, path string, env 
 	return out, nil
 }
 
-func (ex *executor) runApproval(ctx context.Context, st *Step, path string, env *Env, stepRunID string) (any, error) {
+func (ex *executor) runApproval(
+	ctx context.Context,
+	st *Step,
+	path string,
+	env *Env,
+	stepRunID string,
+) (any, error) {
 	var msg any = st.Approval.Message
 	var err error
 	if strings.Contains(st.Approval.Message, "${") {
@@ -341,7 +425,13 @@ func (ex *executor) runApproval(ctx context.Context, st *Step, path string, env 
 		}
 	}
 	if ex.req.DryRun {
-		ex.emit(ctx, "step.log", path, map[string]any{"stream": "stdout", "text": "dry run: approval auto-approved"}, nil)
+		ex.emit(
+			ctx,
+			"step.log",
+			path,
+			map[string]any{"stream": "stdout", "text": "dry run: approval auto-approved"},
+			nil,
+		)
 		return map[string]any{"approved": true, "comment": "dry run"}, nil
 	}
 	unattended := ex.req.Unattended
@@ -379,7 +469,13 @@ func (ex *executor) runApproval(ctx context.Context, st *Step, path string, env 
 	return map[string]any{"approved": decision.Approved, "comment": decision.Comment}, nil
 }
 
-func (ex *executor) runSubworkflow(ctx context.Context, st *Step, path string, env *Env, depth int) (any, error) {
+func (ex *executor) runSubworkflow(
+	ctx context.Context,
+	st *Step,
+	path string,
+	env *Env,
+	depth int,
+) (any, error) {
 	if depth > 6 {
 		return nil, errors.New("workflow nesting is too deep")
 	}
@@ -402,7 +498,16 @@ func (ex *executor) runSubworkflow(ctx context.Context, st *Step, path string, e
 		}
 		inputs = m
 	}
-	ex.emit(ctx, "step.log", path, map[string]any{"stream": "stdout", "text": "running subworkflow " + st.Workflow + " (" + versionID + ")"}, nil)
+	ex.emit(
+		ctx,
+		"step.log",
+		path,
+		map[string]any{
+			"stream": "stdout",
+			"text":   "running subworkflow " + st.Workflow + " (" + versionID + ")",
+		},
+		nil,
+	)
 	childEnv := &Env{Inputs: inputs, Steps: map[string]StepView{}, Run: env.Run}
 	childOutputs, _, err := ex.executeList(ctx, child.Steps, childEnv, path+".", depth+1)
 	if err != nil {
@@ -457,7 +562,9 @@ func (ex *executor) runAgent(ctx context.Context, st *Step, path string, env *En
 		systemStr = "You are a careful executor. Use the provided tools to complete the goal. Reply briefly when done."
 	}
 	if st.Agent.OutputSchema != nil {
-		systemStr += "\n\nWhen finished, return only JSON matching this schema:\n" + mustJSONString(st.Agent.OutputSchema)
+		systemStr += "\n\nWhen finished, return only JSON matching this schema:\n" + mustJSONString(
+			st.Agent.OutputSchema,
+		)
 	}
 	messages := []llm.Message{{Role: "user", Content: toStringValue(goal)}}
 	var finalText string
@@ -465,10 +572,22 @@ func (ex *executor) runAgent(ctx context.Context, st *Step, path string, env *En
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		ex.emit(ctx, "llm.request", path+":agent", map[string]any{"role": role, "step": step + 1, "tools": len(defs)}, nil)
+		ex.emit(
+			ctx,
+			"llm.request",
+			path+":agent",
+			map[string]any{"role": role, "step": step + 1, "tools": len(defs)},
+			nil,
+		)
 		res, err := ex.e.LLM.ChatWithTools(ctx, LLMChatRequest{
-			RunID: ex.req.RunID, StepID: path + ":agent", SessionID: ex.req.RunID, Role: role, System: systemStr,
-			Messages: messages, Tools: defs, MaxTokens: 0,
+			RunID:     ex.req.RunID,
+			StepID:    path + ":agent",
+			SessionID: ex.req.RunID,
+			Role:      role,
+			System:    systemStr,
+			Messages:  messages,
+			Tools:     defs,
+			MaxTokens: 0,
 			Stream: func(text string) {
 				ex.emitDelta("llm.delta", path, map[string]any{"text": text})
 				ex.emitDelta("step.output.delta", path, map[string]any{"chunk": text})
@@ -481,7 +600,9 @@ func (ex *executor) runAgent(ctx context.Context, st *Step, path string, env *En
 			return nil, err
 		}
 		ex.emit(ctx, "llm.finished", path+":agent", map[string]any{
-			"model": res.Model, "usage": map[string]any{"in": res.TokensIn, "out": res.TokensOut}, "cost_micro": res.CostMicro,
+			"model":      res.Model,
+			"usage":      map[string]any{"in": res.TokensIn, "out": res.TokensOut},
+			"cost_micro": res.CostMicro,
 		}, nil)
 		assistant := res.Message
 		assistant.Role = "assistant"
@@ -496,31 +617,94 @@ func (ex *executor) runAgent(ctx context.Context, st *Step, path string, env *En
 		for _, call := range assistant.ToolCalls {
 			b, rerr := ex.resolveBinding(ctx, call.Function.Name)
 			if rerr != nil {
-				messages = append(messages, llm.Message{Role: "tool", ToolCallID: call.ID, Content: mustJSONString(map[string]any{"error": rerr.Error()})})
+				messages = append(
+					messages,
+					llm.Message{
+						Role:       "tool",
+						ToolCallID: call.ID,
+						Content:    mustJSONString(map[string]any{"error": rerr.Error()}),
+					},
+				)
 				continue
 			}
 			args := map[string]any{}
 			if call.Function.Arguments != "" {
 				if err := json.Unmarshal([]byte(call.Function.Arguments), &args); err != nil {
-					messages = append(messages, llm.Message{Role: "tool", ToolCallID: call.ID, Content: mustJSONString(map[string]any{"error": "invalid arguments: " + err.Error()})})
+					messages = append(
+						messages,
+						llm.Message{
+							Role:       "tool",
+							ToolCallID: call.ID,
+							Content: mustJSONString(
+								map[string]any{"error": "invalid arguments: " + err.Error()},
+							),
+						},
+					)
 					continue
 				}
 			}
-			ex.emit(ctx, "tool.call.started", path, map[string]any{"tool": b.Name, "tool_version_id": b.VersionID, "args": args}, nil)
+			ex.emit(
+				ctx,
+				"tool.call.started",
+				path,
+				map[string]any{"tool": b.Name, "tool_version_id": b.VersionID, "args": args},
+				nil,
+			)
 			start := time.Now()
 			out, terr := ex.e.Tools.Execute(ctx, b, args, ToolExecOptions{
-				RunID: ex.req.RunID, StepID: path, IdemKey: ex.req.RunID + ":" + path + ":" + call.ID,
-				Source: ex.req.Source, DryRun: ex.req.DryRun,
+				RunID:   ex.req.RunID,
+				StepID:  path,
+				IdemKey: ex.req.RunID + ":" + path + ":" + call.ID,
+				Source:  ex.req.Source,
+				DryRun:  ex.req.DryRun,
 				OnLog: func(stream, text string) {
-					ex.emit(ctx, "step.log", path, map[string]any{"stream": stream, "text": text}, nil)
+					ex.emit(
+						ctx,
+						"step.log",
+						path,
+						map[string]any{"stream": stream, "text": text},
+						nil,
+					)
 				},
 			})
 			if terr != nil {
-				ex.emit(ctx, "tool.call.finished", path, map[string]any{"tool": b.Name, "status": "failed", "duration_ms": time.Since(start).Milliseconds(), "error": terr.Error()}, nil)
-				messages = append(messages, llm.Message{Role: "tool", ToolCallID: call.ID, Content: mustJSONString(map[string]any{"error": terr.Error()})})
+				ex.emit(
+					ctx,
+					"tool.call.finished",
+					path,
+					map[string]any{
+						"tool":        b.Name,
+						"status":      "failed",
+						"duration_ms": time.Since(start).Milliseconds(),
+						"error":       terr.Error(),
+					},
+					nil,
+				)
+				messages = append(
+					messages,
+					llm.Message{
+						Role:       "tool",
+						ToolCallID: call.ID,
+						Content:    mustJSONString(map[string]any{"error": terr.Error()}),
+					},
+				)
 			} else {
-				ex.emit(ctx, "tool.call.finished", path, map[string]any{"tool": b.Name, "status": "succeeded", "duration_ms": time.Since(start).Milliseconds(), "result": previewValue(out)}, nil)
-				messages = append(messages, llm.Message{Role: "tool", ToolCallID: call.ID, Content: mustJSONString(out)})
+				ex.emit(
+					ctx,
+					"tool.call.finished",
+					path,
+					map[string]any{
+						"tool":        b.Name,
+						"status":      "succeeded",
+						"duration_ms": time.Since(start).Milliseconds(),
+						"result":      previewValue(out),
+					},
+					nil,
+				)
+				messages = append(
+					messages,
+					llm.Message{Role: "tool", ToolCallID: call.ID, Content: mustJSONString(out)},
+				)
 			}
 		}
 	}
@@ -539,7 +723,11 @@ func (ex *executor) runAgent(ctx context.Context, st *Step, path string, env *En
 
 // ---- output persistence ----
 
-func (ex *executor) saveOutput(ctx context.Context, stepRunID, path string, value any) (string, error) {
+func (ex *executor) saveOutput(
+	ctx context.Context,
+	stepRunID, path string,
+	value any,
+) (string, error) {
 	raw, err := json.Marshal(value)
 	if err != nil {
 		return "", err
@@ -605,7 +793,8 @@ func (ex *executor) loadOutput(ctx context.Context, ref string) (any, error) {
 func sanitizeFile(s string) string {
 	var b strings.Builder
 	for _, r := range s {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' ||
+			r == '_' {
 			b.WriteRune(r)
 		} else {
 			b.WriteByte('_')

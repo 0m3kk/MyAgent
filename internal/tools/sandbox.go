@@ -74,7 +74,10 @@ func RunSandboxed(ctx context.Context, spec SandboxSpec) SandboxResult {
 	}
 	cmd.WaitDelay = 2 * time.Second
 	err := cmd.Run()
-	res := SandboxResult{ExitCode: 0, Sandboxed: sbx != "" && os.Getenv("MYAGENT_NO_SANDBOX") != "1"}
+	res := SandboxResult{
+		ExitCode:  0,
+		Sandboxed: sbx != "" && os.Getenv("MYAGENT_NO_SANDBOX") != "1",
+	}
 	if ctx.Err() == context.DeadlineExceeded {
 		res.TimedOut = true
 	}
@@ -128,7 +131,9 @@ func sandboxProfile(spec SandboxSpec) string {
 	if spec.AllowWrite && spec.Workspace != "" {
 		b.WriteString(" (subpath " + quote(spec.Workspace) + ")")
 	}
-	b.WriteString(" (literal \"/dev/null\") (literal \"/dev/urandom\") (literal \"/dev/stdout\") (literal \"/dev/stderr\"))\n")
+	b.WriteString(
+		" (literal \"/dev/null\") (literal \"/dev/urandom\") (literal \"/dev/stdout\") (literal \"/dev/stderr\"))\n",
+	)
 	if spec.AllowNet {
 		b.WriteString("(allow network*)\n")
 	}

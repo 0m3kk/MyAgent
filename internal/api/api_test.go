@@ -149,7 +149,11 @@ func TestEndToEndAPI(t *testing.T) {
 		"yaml": testWorkflow, "change_note": "api test", "approve": true,
 	})
 	workflowID := saved["workflow"].(map[string]any)["id"].(string)
-	runResp := c.must("POST", "/api/workflows/"+workflowID+"/run", map[string]any{"inputs": map[string]any{}})
+	runResp := c.must(
+		"POST",
+		"/api/workflows/"+workflowID+"/run",
+		map[string]any{"inputs": map[string]any{}},
+	)
 	run := runResp["run"].(map[string]any)
 	runID := run["id"].(string)
 
@@ -176,7 +180,11 @@ func TestEndToEndAPI(t *testing.T) {
 		t.Fatal("no approval created")
 	}
 	ap := approvals[0].(map[string]any)
-	c.must("POST", "/api/approvals/"+ap["id"].(string)+"/decision", map[string]any{"decision": "approve", "comment": "ok"})
+	c.must(
+		"POST",
+		"/api/approvals/"+ap["id"].(string)+"/decision",
+		map[string]any{"decision": "approve", "comment": "ok"},
+	)
 
 	for time.Now().Before(deadline) {
 		detail := c.must("GET", "/api/runs/"+runID, nil)

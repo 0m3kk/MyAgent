@@ -117,18 +117,30 @@ func NewClient() *Client {
 }
 
 func IsMock(p Profile) bool {
-	return strings.HasPrefix(p.BaseURL, "mock://") || p.Model == "demo" || strings.HasPrefix(p.BaseURL, "demo:")
+	return strings.HasPrefix(p.BaseURL, "mock://") || p.Model == "demo" ||
+		strings.HasPrefix(p.BaseURL, "demo:")
 }
 
-func (c *Client) Chat(ctx context.Context, p Profile, req ChatRequest, onDelta func(StreamEvent)) (ChatResult, error) {
+func (c *Client) Chat(
+	ctx context.Context,
+	p Profile,
+	req ChatRequest,
+	onDelta func(StreamEvent),
+) (ChatResult, error) {
 	if IsMock(p) {
 		return c.mock(ctx, p, req, onDelta)
 	}
 	if strings.TrimSpace(p.BaseURL) == "" {
-		return ChatResult{}, &ProviderError{Message: "model profile has no base URL", Retryable: false}
+		return ChatResult{}, &ProviderError{
+			Message:   "model profile has no base URL",
+			Retryable: false,
+		}
 	}
 	if strings.TrimSpace(p.Model) == "" {
-		return ChatResult{}, &ProviderError{Message: "model profile has no model name", Retryable: false}
+		return ChatResult{}, &ProviderError{
+			Message:   "model profile has no model name",
+			Retryable: false,
+		}
 	}
 	payload := map[string]any{
 		"model":    p.Model,
@@ -191,7 +203,11 @@ func (c *Client) Chat(ctx context.Context, p Profile, req ChatRequest, onDelta f
 		if json.Unmarshal(raw, &apiErr) == nil && apiErr.Error.Message != "" {
 			msg = apiErr.Error.Message
 		}
-		return ChatResult{}, &ProviderError{Status: resp.StatusCode, Message: msg, Retryable: retryableStatus(resp.StatusCode)}
+		return ChatResult{}, &ProviderError{
+			Status:    resp.StatusCode,
+			Message:   msg,
+			Retryable: retryableStatus(resp.StatusCode),
+		}
 	}
 	contentType := resp.Header.Get("Content-Type")
 	if !strings.Contains(contentType, "text/event-stream") {
@@ -252,12 +268,20 @@ func parseCompletion(raw []byte) (ChatResult, error) {
 		Usage Usage `json:"usage"`
 	}
 	if err := json.Unmarshal(raw, &resp); err != nil {
-		return ChatResult{}, &ProviderError{Message: "invalid completion response", Retryable: false}
+		return ChatResult{}, &ProviderError{
+			Message:   "invalid completion response",
+			Retryable: false,
+		}
 	}
 	if len(resp.Choices) == 0 {
 		return ChatResult{}, &ProviderError{Message: "model returned no choices", Retryable: false}
 	}
-	return ChatResult{Message: resp.Choices[0].Message, Usage: resp.Usage, FinishReason: resp.Choices[0].FinishReason, Model: resp.Model}, nil
+	return ChatResult{
+		Message:      resp.Choices[0].Message,
+		Usage:        resp.Usage,
+		FinishReason: resp.Choices[0].FinishReason,
+		Model:        resp.Model,
+	}, nil
 }
 
 func readSSE(body io.Reader, onDelta func(StreamEvent)) (ChatResult, error) {
@@ -341,7 +365,10 @@ func readSSE(body io.Reader, onDelta func(StreamEvent)) (ChatResult, error) {
 				}
 				if onDelta != nil {
 					ev := StreamEvent{ToolCall: &ToolCall{Index: idx, ID: tc.ID, Type: tc.Type,
-						Function: FunctionCall{Name: tc.Function.Name, Arguments: tc.Function.Arguments}}}
+						Function: FunctionCall{
+							Name:      tc.Function.Name,
+							Arguments: tc.Function.Arguments,
+						}}}
 					onDelta(ev)
 				}
 			}
@@ -364,12 +391,20 @@ func readSSE(body io.Reader, onDelta func(StreamEvent)) (ChatResult, error) {
 		msg.ToolCalls = append(msg.ToolCalls, *tc)
 	}
 	if msg.Content == "" && len(msg.ToolCalls) == 0 && finishReason == "" {
-		return ChatResult{}, &ProviderError{Message: "model stream ended without content (check the model and base URL)", Retryable: true}
+		return ChatResult{}, &ProviderError{
+			Message:   "model stream ended without content (check the model and base URL)",
+			Retryable: true,
+		}
 	}
 	return ChatResult{Message: msg, Usage: usage, FinishReason: finishReason, Model: model}, nil
 }
 
-func (c *Client) mock(ctx context.Context, p Profile, req ChatRequest, onDelta func(StreamEvent)) (ChatResult, error) {
+func (c *Client) mock(
+	ctx context.Context,
+	p Profile,
+	req ChatRequest,
+	onDelta func(StreamEvent),
+) (ChatResult, error) {
 	lastUser := ""
 	for _, m := range req.Messages {
 		if m.Role == "user" {
@@ -399,22 +434,38 @@ func (c *Client) mock(ctx context.Context, p Profile, req ChatRequest, onDelta f
 
 	// A tiny scripted policy demonstrates real tool calls, approvals and run
 	// cards without requiring an API key.
-	if toolNames["save_workflow_draft"] && strings.Contains(lower, "create") && strings.Contains(lower, "workflow") {
+	if toolNames["save_workflow_draft"] && strings.Contains(lower, "create") &&
+		strings.Contains(lower, "workflow") {
 		yaml := "schema: 1\nname: demo-digest\ndescription: Save a simple workspace digest after approval.\ninputs:\n  output:\n    type: string\n    format: path\n    default: \"digests/demo.md\"\n    description: Destination file\nsteps:\n  - id: list\n    tool: fs.list\n    with: {path: \".\", limit: 20}\n  - id: review\n    needs: [list]\n    approval:\n      message: \"Save the demo digest to ${inputs.output}?\"\n      show: ${steps.list.output.entries}\n  - id: write\n    needs: [review]\n    when: ${steps.review.output.approved}\n    tool: fs.write_text\n    side_effect: write\n    with:\n      path: ${inputs.output}\n      content: \"${steps.list.output.entries}\"\noutputs:\n  file: ${inputs.output}\n"
 		args, _ := json.Marshal(map[string]any{"yaml": yaml, "change_note": "Demo model draft"})
 		return c.mockToolCall(ctx, "save_workflow_draft", string(args), lastUser, onDelta), nil
 	}
-	if toolNames["run_workflow"] && (strings.Contains(lower, "run ") || strings.Contains(lower, "weekly report")) {
+	if toolNames["run_workflow"] &&
+		(strings.Contains(lower, "run ") || strings.Contains(lower, "weekly report")) {
 		name := "workspace-digest"
 		if strings.Contains(lower, "weekly") || strings.Contains(lower, "report") {
 			name = "weekly-report"
 		}
-		return c.mockToolCall(ctx, "run_workflow", fmt.Sprintf(`{"name":%q,"inputs":{}}`, name), lastUser, onDelta), nil
+		return c.mockToolCall(
+			ctx,
+			"run_workflow",
+			fmt.Sprintf(`{"name":%q,"inputs":{}}`, name),
+			lastUser,
+			onDelta,
+		), nil
 	}
-	if toolNames["fs__write_text"] && strings.Contains(lower, "write") && (strings.Contains(lower, "file") || strings.Contains(lower, "note")) {
-		return c.mockToolCall(ctx, "fs__write_text", `{"path":"demo-note.md","content":"Hello from the offline demo agent.\n"}`, lastUser, onDelta), nil
+	if toolNames["fs__write_text"] && strings.Contains(lower, "write") &&
+		(strings.Contains(lower, "file") || strings.Contains(lower, "note")) {
+		return c.mockToolCall(
+			ctx,
+			"fs__write_text",
+			`{"path":"demo-note.md","content":"Hello from the offline demo agent.\n"}`,
+			lastUser,
+			onDelta,
+		), nil
 	}
-	if toolNames["fs__list"] && (strings.Contains(lower, "summar") || strings.Contains(lower, "workspace") || strings.Contains(lower, "digest") || strings.Contains(lower, "file")) {
+	if toolNames["fs__list"] &&
+		(strings.Contains(lower, "summar") || strings.Contains(lower, "workspace") || strings.Contains(lower, "digest") || strings.Contains(lower, "file")) {
 		return c.mockToolCall(ctx, "fs__list", `{"path":".","limit":20}`, lastUser, onDelta), nil
 	}
 
@@ -429,7 +480,11 @@ func (c *Client) mock(ctx context.Context, p Profile, req ChatRequest, onDelta f
 	return c.mockText(ctx, text, lastUser, onDelta)
 }
 
-func (c *Client) mockText(ctx context.Context, text, lastUser string, onDelta func(StreamEvent)) (ChatResult, error) {
+func (c *Client) mockText(
+	ctx context.Context,
+	text, lastUser string,
+	onDelta func(StreamEvent),
+) (ChatResult, error) {
 	words := strings.SplitAfter(text, " ")
 	for _, w := range words {
 		if w == "" {
@@ -444,24 +499,46 @@ func (c *Client) mockText(ctx context.Context, text, lastUser string, onDelta fu
 		case <-time.After(8 * time.Millisecond):
 		}
 	}
-	usage := Usage{PromptTokens: len(lastUser) / 4, CompletionTokens: len(text) / 4, TotalTokens: len(lastUser)/4 + len(text)/4}
+	usage := Usage{
+		PromptTokens:     len(lastUser) / 4,
+		CompletionTokens: len(text) / 4,
+		TotalTokens:      len(lastUser)/4 + len(text)/4,
+	}
 	if onDelta != nil {
 		onDelta(StreamEvent{Usage: &usage, FinishReason: "stop"})
 	}
-	return ChatResult{Message: Message{Role: "assistant", Content: text}, Usage: usage, FinishReason: "stop", Model: "demo"}, nil
+	return ChatResult{
+		Message:      Message{Role: "assistant", Content: text},
+		Usage:        usage,
+		FinishReason: "stop",
+		Model:        "demo",
+	}, nil
 }
 
-func (c *Client) mockToolCall(ctx context.Context, name, args, lastUser string, onDelta func(StreamEvent)) ChatResult {
+func (c *Client) mockToolCall(
+	ctx context.Context,
+	name, args, lastUser string,
+	onDelta func(StreamEvent),
+) ChatResult {
 	call := ToolCall{ID: "call_demo_" + fmt.Sprint(time.Now().UnixNano()), Type: "function",
 		Function: FunctionCall{Name: name, Arguments: args}}
 	if onDelta != nil {
 		onDelta(StreamEvent{ToolCall: &call})
 	}
-	usage := Usage{PromptTokens: len(lastUser) / 4, CompletionTokens: 12, TotalTokens: len(lastUser)/4 + 12}
+	usage := Usage{
+		PromptTokens:     len(lastUser) / 4,
+		CompletionTokens: 12,
+		TotalTokens:      len(lastUser)/4 + 12,
+	}
 	if onDelta != nil {
 		onDelta(StreamEvent{Usage: &usage, FinishReason: "tool_calls"})
 	}
-	return ChatResult{Message: Message{Role: "assistant", ToolCalls: []ToolCall{call}}, Usage: usage, FinishReason: "tool_calls", Model: "demo"}
+	return ChatResult{
+		Message:      Message{Role: "assistant", ToolCalls: []ToolCall{call}},
+		Usage:        usage,
+		FinishReason: "tool_calls",
+		Model:        "demo",
+	}
 }
 
 func summarizeMockTool(toolName, content, userText string) string {
@@ -489,7 +566,11 @@ func summarizeMockTool(toolName, content, userText string) string {
 		if len(names) > 8 {
 			names = append(names[:8], "…")
 		}
-		text := fmt.Sprintf("I found %d items in the workspace: %s.", res.Count, strings.Join(names, ", "))
+		text := fmt.Sprintf(
+			"I found %d items in the workspace: %s.",
+			res.Count,
+			strings.Join(names, ", "),
+		)
 		if strings.Contains(userText, "digest") || strings.Contains(userText, "summar") {
 			text += " The workspace-digest workflow can read them and save a markdown index after you approve it. Open Workflows → workspace-digest to run it."
 		}
@@ -549,7 +630,12 @@ func (c *Client) Probe(ctx context.Context, p Profile) Capabilities {
 		},
 	}}}
 	req := ChatRequest{
-		Messages:  []Message{{Role: "user", Content: "Call report_capability with phrase \"ok\". Do not answer with text."}},
+		Messages: []Message{
+			{
+				Role:    "user",
+				Content: "Call report_capability with phrase \"ok\". Do not answer with text.",
+			},
+		},
 		Tools:     tools,
 		MaxTokens: 64,
 		SessionID: uuid.NewString(),

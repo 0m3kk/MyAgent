@@ -36,12 +36,23 @@ func (s *Server) handleCreateTool(w http.ResponseWriter, r *http.Request) {
 	base := intFrom(body["base_version"], 0)
 	res, err := s.app.CreateToolDraft(r.Context(), manifest, createdBy, base)
 	if err != nil {
-		writeError(w, http.StatusUnprocessableEntity, err.Error(), map[string]any{"issues": res.Issues, "version": res.Version})
+		writeError(
+			w,
+			http.StatusUnprocessableEntity,
+			err.Error(),
+			map[string]any{"issues": res.Issues, "version": res.Version},
+		)
 		return
 	}
 	if files, ok := body["files"].(map[string]any); ok {
 		for path, content := range files {
-			if _, err := s.app.WriteToolFile(r.Context(), res.Tool.ID, res.Version.ID, path, contentString(content)); err != nil {
+			if _, err := s.app.WriteToolFile(
+				r.Context(),
+				res.Tool.ID,
+				res.Version.ID,
+				path,
+				contentString(content),
+			); err != nil {
 				writeError(w, http.StatusUnprocessableEntity, err.Error(), nil)
 				return
 			}
@@ -66,7 +77,13 @@ func (s *Server) handleWriteToolFile(w http.ResponseWriter, r *http.Request) {
 	}
 	path, _ := body["path"].(string)
 	content, _ := body["content"].(string)
-	tv, err := s.app.WriteToolFile(r.Context(), r.PathValue("id"), r.PathValue("vid"), path, content)
+	tv, err := s.app.WriteToolFile(
+		r.Context(),
+		r.PathValue("id"),
+		r.PathValue("vid"),
+		path,
+		content,
+	)
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, err.Error(), nil)
 		return
@@ -100,7 +117,11 @@ func (s *Server) handleTestTool(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleApproveTool(w http.ResponseWriter, r *http.Request) {
-	if err := s.app.ApproveToolVersion(r.Context(), r.PathValue("id"), r.PathValue("vid")); err != nil {
+	if err := s.app.ApproveToolVersion(
+		r.Context(),
+		r.PathValue("id"),
+		r.PathValue("vid"),
+	); err != nil {
 		writeError(w, http.StatusUnprocessableEntity, err.Error(), nil)
 		return
 	}

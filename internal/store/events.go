@@ -11,7 +11,11 @@ import (
 
 // AppendEventTx assigns the next per-stream sequence and writes the event. It is
 // always called inside the same transaction as the projection update.
-func (s *Store) AppendEventTx(ctx context.Context, tx *sql.Tx, evt model.Event) (model.Event, error) {
+func (s *Store) AppendEventTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	evt model.Event,
+) (model.Event, error) {
 	if evt.TS == 0 {
 		evt.TS = ids.NowMS()
 	}
@@ -21,12 +25,23 @@ func (s *Store) AppendEventTx(ctx context.Context, tx *sql.Tx, evt model.Event) 
 	if len(evt.Payload) == 0 {
 		evt.Payload = json.RawMessage(`{}`)
 	}
-	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(seq),0)+1 FROM events WHERE stream=?`, evt.Stream).Scan(&evt.Seq); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(seq),0)+1 FROM events WHERE stream=?`, evt.Stream).
+		Scan(&evt.Seq); err != nil {
 		return evt, err
 	}
-	res, err := tx.ExecContext(ctx, `INSERT INTO events (stream,seq,type,ts,run_id,step_id,schema_ver,payload)
+	res, err := tx.ExecContext(
+		ctx,
+		`INSERT INTO events (stream,seq,type,ts,run_id,step_id,schema_ver,payload)
 		VALUES (?,?,?,?,?,?,?,?)`,
-		evt.Stream, evt.Seq, evt.Type, evt.TS, nullString(evt.RunID), nullString(evt.StepID), evt.SchemaVer, string(evt.Payload))
+		evt.Stream,
+		evt.Seq,
+		evt.Type,
+		evt.TS,
+		nullString(evt.RunID),
+		nullString(evt.StepID),
+		evt.SchemaVer,
+		string(evt.Payload),
+	)
 	if err != nil {
 		return evt, err
 	}
@@ -50,7 +65,17 @@ func scanEvents(rows *sql.Rows) ([]model.Event, error) {
 	for rows.Next() {
 		var e model.Event
 		var payload string
-		err := rows.Scan(&e.ID, &e.Stream, &e.Seq, &e.Type, &e.TS, &e.RunID, &e.StepID, &e.SchemaVer, &payload)
+		err := rows.Scan(
+			&e.ID,
+			&e.Stream,
+			&e.Seq,
+			&e.Type,
+			&e.TS,
+			&e.RunID,
+			&e.StepID,
+			&e.SchemaVer,
+			&payload,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -60,12 +85,23 @@ func scanEvents(rows *sql.Rows) ([]model.Event, error) {
 	return out, rows.Err()
 }
 
-func (s *Store) EventsAfter(ctx context.Context, stream string, after int64, limit int) ([]model.Event, error) {
+func (s *Store) EventsAfter(
+	ctx context.Context,
+	stream string,
+	after int64,
+	limit int,
+) ([]model.Event, error) {
 	if limit <= 0 || limit > 2000 {
 		limit = 500
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id,stream,seq,type,ts,COALESCE(run_id,''),COALESCE(step_id,''),schema_ver,payload
-		FROM events WHERE stream=? AND seq>? ORDER BY seq LIMIT ?`, stream, after, limit)
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT id,stream,seq,type,ts,COALESCE(run_id,''),COALESCE(step_id,''),schema_ver,payload
+		FROM events WHERE stream=? AND seq>? ORDER BY seq LIMIT ?`,
+		stream,
+		after,
+		limit,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -76,33 +112,55 @@ func (s *Store) AllEventsAfter(ctx context.Context, after int64, limit int) ([]m
 	if limit <= 0 || limit > 2000 {
 		limit = 500
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id,stream,seq,type,ts,COALESCE(run_id,''),COALESCE(step_id,''),schema_ver,payload
-		FROM events WHERE id>? ORDER BY id LIMIT ?`, after, limit)
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT id,stream,seq,type,ts,COALESCE(run_id,''),COALESCE(step_id,''),schema_ver,payload
+		FROM events WHERE id>? ORDER BY id LIMIT ?`,
+		after,
+		limit,
+	)
 	if err != nil {
 		return nil, err
 	}
 	return scanEvents(rows)
 }
 
-func (s *Store) RunEvents(ctx context.Context, runID string, after int64, limit int) ([]model.Event, error) {
+func (s *Store) RunEvents(
+	ctx context.Context,
+	runID string,
+	after int64,
+	limit int,
+) ([]model.Event, error) {
 	if limit <= 0 || limit > 2000 {
 		limit = 500
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id,stream,seq,type,ts,COALESCE(run_id,''),COALESCE(step_id,''),schema_ver,payload
-		FROM events WHERE run_id=? AND id>? ORDER BY id LIMIT ?`, runID, after, limit)
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT id,stream,seq,type,ts,COALESCE(run_id,''),COALESCE(step_id,''),schema_ver,payload
+		FROM events WHERE run_id=? AND id>? ORDER BY id LIMIT ?`,
+		runID,
+		after,
+		limit,
+	)
 	if err != nil {
 		return nil, err
 	}
 	return scanEvents(rows)
 }
 
-func (s *Store) ConversationEvents(ctx context.Context, convID string, after int64, limit int) ([]model.Event, error) {
+func (s *Store) ConversationEvents(
+	ctx context.Context,
+	convID string,
+	after int64,
+	limit int,
+) ([]model.Event, error) {
 	return s.EventsAfter(ctx, model.ConvStream(convID), after, limit)
 }
 
 func (s *Store) LastSeq(ctx context.Context, stream string) (int64, error) {
 	var n int64
-	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(MAX(seq),0) FROM events WHERE stream=?`, stream).Scan(&n)
+	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(MAX(seq),0) FROM events WHERE stream=?`, stream).
+		Scan(&n)
 	return n, err
 }
 

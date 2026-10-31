@@ -30,7 +30,11 @@ type LocalProxy struct {
 	once     sync.Once
 }
 
-func StartProxy(domains []string, headers []HeaderSecret, mocks map[string]MockResponse) (*LocalProxy, error) {
+func StartProxy(
+	domains []string,
+	headers []HeaderSecret,
+	mocks map[string]MockResponse,
+) (*LocalProxy, error) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, err

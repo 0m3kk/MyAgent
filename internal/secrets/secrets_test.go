@@ -29,7 +29,15 @@ func TestSecretRoundTripAndRedaction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	meta, err := svc.Put(ctx, "GITHUB_TOKEN", "token", "read only", "ghp_1234567890abcdef", 0, false)
+	meta, err := svc.Put(
+		ctx,
+		"GITHUB_TOKEN",
+		"token",
+		"read only",
+		"ghp_1234567890abcdef",
+		0,
+		false,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

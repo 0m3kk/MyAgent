@@ -25,76 +25,172 @@ func toolDef(name, description string, props map[string]any, required ...string)
 		}
 		params["required"] = req
 	}
-	return llm.ToolDef{Type: "function", Function: llm.FunctionDef{Name: name, Description: description, Parameters: params}}
+	return llm.ToolDef{
+		Type:     "function",
+		Function: llm.FunctionDef{Name: name, Description: description, Parameters: params},
+	}
 }
 
 func metaToolDefs() []llm.ToolDef {
 	return []llm.ToolDef{
 		toolDef("search_tools", "Search approved tools by name or description.", map[string]any{
 			"query": map[string]any{"type": "string", "description": "Search words"},
-			"limit": map[string]any{"type": "integer", "description": "Maximum results", "default": 10},
+			"limit": map[string]any{
+				"type":        "integer",
+				"description": "Maximum results",
+				"default":     10,
+			},
 		}, "query"),
-		toolDef("describe_tool", "Get the full input/output schema, permissions, secrets and tests of a tool. Never guess tool schemas.", map[string]any{
-			"name":    map[string]any{"type": "string", "description": "Tool name, e.g. fs.list"},
-			"version": map[string]any{"type": "integer", "description": "Optional pinned version"},
-		}, "name"),
-		toolDef("list_workflows", "List workflows with current version, status and inputs.", map[string]any{}),
-		toolDef("get_workflow", "Get a workflow YAML and its validation diagnostics.", map[string]any{
-			"name":    map[string]any{"type": "string", "description": "Workflow name"},
-			"version": map[string]any{"type": "integer", "description": "Optional version"},
-		}, "name"),
-		toolDef("validate_workflow", "Validate workflow YAML without saving it. Returns E-code diagnostics.", map[string]any{
-			"yaml": map[string]any{"type": "string", "description": "Workflow YAML"},
-		}, "yaml"),
-		toolDef("save_workflow_draft", "Save workflow YAML as a new draft after validation. E-code errors prevent saving. Never approves or activates.", map[string]any{
-			"yaml":         map[string]any{"type": "string", "description": "Workflow YAML"},
-			"base_version": map[string]any{"type": "integer", "description": "Required when editing an existing workflow; prevents overwriting newer changes"},
-			"change_note":  map[string]any{"type": "string", "description": "Short note describing the change"},
-		}, "yaml"),
-		toolDef("dry_run_workflow", "Run a workflow with side effects mocked and approvals auto-accepted. Returns a run summary.", map[string]any{
-			"name":    map[string]any{"type": "string", "description": "Workflow name"},
-			"version": map[string]any{"type": "integer", "description": "Optional version"},
-			"inputs":  map[string]any{"type": "object", "description": "Workflow inputs"},
-		}, "name", "inputs"),
-		toolDef("run_workflow", "Start a real workflow run asynchronously. Returns a run_id.", map[string]any{
-			"name":    map[string]any{"type": "string", "description": "Workflow name"},
-			"version": map[string]any{"type": "integer", "description": "Optional version"},
-			"inputs":  map[string]any{"type": "object", "description": "Workflow inputs"},
-		}, "name", "inputs"),
+		toolDef(
+			"describe_tool",
+			"Get the full input/output schema, permissions, secrets and tests of a tool. Never guess tool schemas.",
+			map[string]any{
+				"name": map[string]any{
+					"type":        "string",
+					"description": "Tool name, e.g. fs.list",
+				},
+				"version": map[string]any{
+					"type":        "integer",
+					"description": "Optional pinned version",
+				},
+			},
+			"name",
+		),
+		toolDef(
+			"list_workflows",
+			"List workflows with current version, status and inputs.",
+			map[string]any{},
+		),
+		toolDef(
+			"get_workflow",
+			"Get a workflow YAML and its validation diagnostics.",
+			map[string]any{
+				"name":    map[string]any{"type": "string", "description": "Workflow name"},
+				"version": map[string]any{"type": "integer", "description": "Optional version"},
+			},
+			"name",
+		),
+		toolDef(
+			"validate_workflow",
+			"Validate workflow YAML without saving it. Returns E-code diagnostics.",
+			map[string]any{
+				"yaml": map[string]any{"type": "string", "description": "Workflow YAML"},
+			},
+			"yaml",
+		),
+		toolDef(
+			"save_workflow_draft",
+			"Save workflow YAML as a new draft after validation. E-code errors prevent saving. Never approves or activates.",
+			map[string]any{
+				"yaml": map[string]any{"type": "string", "description": "Workflow YAML"},
+				"base_version": map[string]any{
+					"type":        "integer",
+					"description": "Required when editing an existing workflow; prevents overwriting newer changes",
+				},
+				"change_note": map[string]any{
+					"type":        "string",
+					"description": "Short note describing the change",
+				},
+			},
+			"yaml",
+		),
+		toolDef(
+			"dry_run_workflow",
+			"Run a workflow with side effects mocked and approvals auto-accepted. Returns a run summary.",
+			map[string]any{
+				"name":    map[string]any{"type": "string", "description": "Workflow name"},
+				"version": map[string]any{"type": "integer", "description": "Optional version"},
+				"inputs":  map[string]any{"type": "object", "description": "Workflow inputs"},
+			},
+			"name",
+			"inputs",
+		),
+		toolDef(
+			"run_workflow",
+			"Start a real workflow run asynchronously. Returns a run_id.",
+			map[string]any{
+				"name":    map[string]any{"type": "string", "description": "Workflow name"},
+				"version": map[string]any{"type": "integer", "description": "Optional version"},
+				"inputs":  map[string]any{"type": "object", "description": "Workflow inputs"},
+			},
+			"name",
+			"inputs",
+		),
 		toolDef("get_run", "Get the status, steps, costs and errors of a run.", map[string]any{
 			"run_id": map[string]any{"type": "string", "description": "Run ID"},
 		}, "run_id"),
 		toolDef("wait_run", "Wait for a run to finish, then return its summary.", map[string]any{
-			"run_id":    map[string]any{"type": "string", "description": "Run ID"},
-			"timeout_s": map[string]any{"type": "integer", "description": "Maximum wait in seconds", "default": 60},
+			"run_id": map[string]any{"type": "string", "description": "Run ID"},
+			"timeout_s": map[string]any{
+				"type":        "integer",
+				"description": "Maximum wait in seconds",
+				"default":     60,
+			},
 		}, "run_id"),
 		toolDef("list_runs", "List recent runs, optionally filtered.", map[string]any{
 			"workflow": map[string]any{"type": "string", "description": "Workflow ID or name"},
 			"status":   map[string]any{"type": "string", "description": "Run status"},
-			"limit":    map[string]any{"type": "integer", "description": "Maximum results", "default": 20},
+			"limit": map[string]any{
+				"type":        "integer",
+				"description": "Maximum results",
+				"default":     20,
+			},
 		}),
 		toolDef("read_run", "Read a run's events and step details for diagnosis.", map[string]any{
 			"run_id": map[string]any{"type": "string", "description": "Run ID"},
 		}, "run_id"),
-		toolDef("compare_runs", "Compare two runs: status, cost, latency and failed steps.", map[string]any{
-			"run_a": map[string]any{"type": "string", "description": "First run ID"},
-			"run_b": map[string]any{"type": "string", "description": "Second run ID"},
-		}, "run_a", "run_b"),
+		toolDef(
+			"compare_runs",
+			"Compare two runs: status, cost, latency and failed steps.",
+			map[string]any{
+				"run_a": map[string]any{"type": "string", "description": "First run ID"},
+				"run_b": map[string]any{"type": "string", "description": "Second run ID"},
+			},
+			"run_a",
+			"run_b",
+		),
 		toolDef("get_feedback", "Get the user's thumbs up/down and note for a run.", map[string]any{
 			"run_id": map[string]any{"type": "string", "description": "Run ID"},
 		}, "run_id"),
-		toolDef("list_secrets", "List secret NAMES and status only. Values are never available.", map[string]any{}),
-		toolDef("get_environment", "Get workspace path, date, runtime availability and current model profiles.", map[string]any{}),
-		toolDef("create_tool_draft", "Create a new draft tool from a complete manifest YAML. Use write_tool_file for implementation files.", map[string]any{
-			"manifest_yaml": map[string]any{"type": "string", "description": "Tool manifest YAML"},
-			"base_version":  map[string]any{"type": "integer", "description": "Required when editing an existing tool"},
-		}, "manifest_yaml"),
-		toolDef("write_tool_file", "Write a file inside a draft tool version. Never touches files outside the tool directory.", map[string]any{
-			"tool":       map[string]any{"type": "string", "description": "Tool name"},
-			"version_id": map[string]any{"type": "string", "description": "Draft version ID"},
-			"path":       map[string]any{"type": "string", "description": "Relative file path"},
-			"content":    map[string]any{"type": "string", "description": "File content"},
-		}, "tool", "version_id", "path", "content"),
+		toolDef(
+			"list_secrets",
+			"List secret NAMES and status only. Values are never available.",
+			map[string]any{},
+		),
+		toolDef(
+			"get_environment",
+			"Get workspace path, date, runtime availability and current model profiles.",
+			map[string]any{},
+		),
+		toolDef(
+			"create_tool_draft",
+			"Create a new draft tool from a complete manifest YAML. Use write_tool_file for implementation files.",
+			map[string]any{
+				"manifest_yaml": map[string]any{
+					"type":        "string",
+					"description": "Tool manifest YAML",
+				},
+				"base_version": map[string]any{
+					"type":        "integer",
+					"description": "Required when editing an existing tool",
+				},
+			},
+			"manifest_yaml",
+		),
+		toolDef(
+			"write_tool_file",
+			"Write a file inside a draft tool version. Never touches files outside the tool directory.",
+			map[string]any{
+				"tool":       map[string]any{"type": "string", "description": "Tool name"},
+				"version_id": map[string]any{"type": "string", "description": "Draft version ID"},
+				"path":       map[string]any{"type": "string", "description": "Relative file path"},
+				"content":    map[string]any{"type": "string", "description": "File content"},
+			},
+			"tool",
+			"version_id",
+			"path",
+			"content",
+		),
 		toolDef("read_tool_file", "Read a file inside a tool version.", map[string]any{
 			"tool":       map[string]any{"type": "string", "description": "Tool name"},
 			"version_id": map[string]any{"type": "string", "description": "Version ID"},
@@ -104,47 +200,135 @@ func metaToolDefs() []llm.ToolDef {
 			"tool":       map[string]any{"type": "string", "description": "Tool name"},
 			"version_id": map[string]any{"type": "string", "description": "Version ID"},
 		}, "tool", "version_id"),
-		toolDef("run_tool_tests", "Run a tool's manifest tests in the sandbox and report each result.", map[string]any{
-			"tool":       map[string]any{"type": "string", "description": "Tool name"},
-			"version_id": map[string]any{"type": "string", "description": "Version ID"},
-		}, "tool", "version_id"),
-		toolDef("probe_permissions", "Run tests in learning mode and report denied resources.", map[string]any{
-			"tool":       map[string]any{"type": "string", "description": "Tool name"},
-			"version_id": map[string]any{"type": "string", "description": "Version ID"},
-		}, "tool", "version_id"),
-		toolDef("request_tool_approval", "Show the user an approval card. The user decides; the agent can never activate a tool itself.", map[string]any{
-			"tool":       map[string]any{"type": "string", "description": "Tool name"},
-			"version_id": map[string]any{"type": "string", "description": "Version ID"},
-			"summary":    map[string]any{"type": "string", "description": "Plain-language summary of access and behavior"},
-		}, "tool", "version_id", "summary"),
-		toolDef("ask_user", "Ask exactly one short question when a wrong guess is costly.", map[string]any{
-			"question": map[string]any{"type": "string", "description": "Question"},
-			"kind":     map[string]any{"type": "string", "enum": []any{"text", "choice", "confirm"}, "description": "Question kind"},
-			"options":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Choices for kind=choice"},
-		}, "question", "kind"),
-		toolDef("remember", "Save a durable note about the user's preferences or workspace conventions.", map[string]any{
-			"note": map[string]any{"type": "string", "description": "Short note"},
-		}, "note"),
-		toolDef("propose_trigger", "Propose a schedule, file watcher or local webhook. The user must approve it.", map[string]any{
-			"workflow": map[string]any{"type": "string", "description": "Workflow name"},
-			"kind":     map[string]any{"type": "string", "enum": []any{"cron", "file", "webhook"}, "description": "Trigger kind"},
-			"config":   map[string]any{"type": "object", "description": "cron: {schedule}; file: {paths}; webhook: {token}"},
-			"inputs":   map[string]any{"type": "object", "description": "Fixed workflow inputs"},
-		}, "workflow", "kind", "config"),
-		toolDef("propose_patch", "Create a tuning proposal with a backward-compatible patch and rationale. Does not apply it.", map[string]any{
-			"target":       map[string]any{"type": "string", "description": "Workflow name"},
-			"base_version": map[string]any{"type": "integer", "description": "Current version number"},
-			"content":      map[string]any{"type": "string", "description": "Full proposed workflow YAML"},
-			"rationale":    map[string]any{"type": "string", "description": "Root cause and expected effect"},
-		}, "target", "base_version", "content", "rationale"),
-		toolDef("run_eval", "Run an eval suite against a target version and return pass/cost comparison.", map[string]any{
-			"suite":          map[string]any{"type": "string", "description": "Eval suite ID or name"},
-			"target_version": map[string]any{"type": "string", "description": "Workflow version ID"},
-		}, "suite", "target_version"),
+		toolDef(
+			"run_tool_tests",
+			"Run a tool's manifest tests in the sandbox and report each result.",
+			map[string]any{
+				"tool":       map[string]any{"type": "string", "description": "Tool name"},
+				"version_id": map[string]any{"type": "string", "description": "Version ID"},
+			},
+			"tool",
+			"version_id",
+		),
+		toolDef(
+			"probe_permissions",
+			"Run tests in learning mode and report denied resources.",
+			map[string]any{
+				"tool":       map[string]any{"type": "string", "description": "Tool name"},
+				"version_id": map[string]any{"type": "string", "description": "Version ID"},
+			},
+			"tool",
+			"version_id",
+		),
+		toolDef(
+			"request_tool_approval",
+			"Show the user an approval card. The user decides; the agent can never activate a tool itself.",
+			map[string]any{
+				"tool":       map[string]any{"type": "string", "description": "Tool name"},
+				"version_id": map[string]any{"type": "string", "description": "Version ID"},
+				"summary": map[string]any{
+					"type":        "string",
+					"description": "Plain-language summary of access and behavior",
+				},
+			},
+			"tool",
+			"version_id",
+			"summary",
+		),
+		toolDef(
+			"ask_user",
+			"Ask exactly one short question when a wrong guess is costly.",
+			map[string]any{
+				"question": map[string]any{"type": "string", "description": "Question"},
+				"kind": map[string]any{
+					"type":        "string",
+					"enum":        []any{"text", "choice", "confirm"},
+					"description": "Question kind",
+				},
+				"options": map[string]any{
+					"type":        "array",
+					"items":       map[string]any{"type": "string"},
+					"description": "Choices for kind=choice",
+				},
+			},
+			"question",
+			"kind",
+		),
+		toolDef(
+			"remember",
+			"Save a durable note about the user's preferences or workspace conventions.",
+			map[string]any{
+				"note": map[string]any{"type": "string", "description": "Short note"},
+			},
+			"note",
+		),
+		toolDef(
+			"propose_trigger",
+			"Propose a schedule, file watcher or local webhook. The user must approve it.",
+			map[string]any{
+				"workflow": map[string]any{"type": "string", "description": "Workflow name"},
+				"kind": map[string]any{
+					"type":        "string",
+					"enum":        []any{"cron", "file", "webhook"},
+					"description": "Trigger kind",
+				},
+				"config": map[string]any{
+					"type":        "object",
+					"description": "cron: {schedule}; file: {paths}; webhook: {token}",
+				},
+				"inputs": map[string]any{"type": "object", "description": "Fixed workflow inputs"},
+			},
+			"workflow",
+			"kind",
+			"config",
+		),
+		toolDef(
+			"propose_patch",
+			"Create a tuning proposal with a backward-compatible patch and rationale. Does not apply it.",
+			map[string]any{
+				"target": map[string]any{"type": "string", "description": "Workflow name"},
+				"base_version": map[string]any{
+					"type":        "integer",
+					"description": "Current version number",
+				},
+				"content": map[string]any{
+					"type":        "string",
+					"description": "Full proposed workflow YAML",
+				},
+				"rationale": map[string]any{
+					"type":        "string",
+					"description": "Root cause and expected effect",
+				},
+			},
+			"target",
+			"base_version",
+			"content",
+			"rationale",
+		),
+		toolDef(
+			"run_eval",
+			"Run an eval suite against a target version and return pass/cost comparison.",
+			map[string]any{
+				"suite": map[string]any{
+					"type":        "string",
+					"description": "Eval suite ID or name",
+				},
+				"target_version": map[string]any{
+					"type":        "string",
+					"description": "Workflow version ID",
+				},
+			},
+			"suite",
+			"target_version",
+		),
 	}
 }
 
-func (a *App) executeMetaTool(ctx context.Context, convID, name string, args map[string]any) (any, error) {
+func (a *App) executeMetaTool(
+	ctx context.Context,
+	convID, name string,
+	args map[string]any,
+) (any, error) {
 	switch name {
 	case "search_tools":
 		return a.metaSearchTools(ctx, str(args, "query"), intg(args, "limit", 10))
@@ -173,7 +357,11 @@ func (a *App) executeMetaTool(ctx context.Context, convID, name string, args map
 			}
 			out = append(out, item)
 		}
-		return map[string]any{"ok": true, "workflows": out, "next_hint": "Use get_workflow for the full YAML."}, nil
+		return map[string]any{
+			"ok":        true,
+			"workflows": out,
+			"next_hint": "Use get_workflow for the full YAML.",
+		}, nil
 	case "get_workflow":
 		w, v, spec, err := a.ResolveWorkflowVersion(ctx, str(args, "name"), "", "manual")
 		if err != nil {
@@ -190,15 +378,28 @@ func (a *App) executeMetaTool(ctx context.Context, convID, name string, args map
 	case "validate_workflow":
 		spec, res, perr := a.ValidateWorkflowYAML(ctx, str(args, "yaml"), false)
 		if perr != nil {
-			return map[string]any{"ok": false, "diagnostics": res.Errors, "next_hint": "Fix YAML syntax first."}, nil
+			return map[string]any{
+				"ok":          false,
+				"diagnostics": res.Errors,
+				"next_hint":   "Fix YAML syntax first.",
+			}, nil
 		}
 		return map[string]any{"ok": res.OK(), "name": spec.Name, "diagnostics": res.Errors,
 			"warnings": res.Warnings, "next_hint": "Fix every E-code. W-codes are advice."}, nil
 	case "save_workflow_draft":
 		base := intg(args, "base_version", 0)
-		res, err := a.SaveWorkflowDraft(ctx, str(args, "yaml"), str(args, "change_note"), "agent", base)
-		out := map[string]any{"saved": err == nil && res.Validation.OK(), "diagnostics": res.Validation.Errors,
-			"warnings": res.Validation.Warnings}
+		res, err := a.SaveWorkflowDraft(
+			ctx,
+			str(args, "yaml"),
+			str(args, "change_note"),
+			"agent",
+			base,
+		)
+		out := map[string]any{
+			"saved":       err == nil && res.Validation.OK(),
+			"diagnostics": res.Validation.Errors,
+			"warnings":    res.Validation.Warnings,
+		}
 		if res.Version.ID != "" {
 			out["version_id"] = res.Version.ID
 			out["version"] = res.Version.Version
@@ -213,7 +414,17 @@ func (a *App) executeMetaTool(ctx context.Context, convID, name string, args map
 		return out, nil
 	case "dry_run_workflow":
 		inputs := object(args, "inputs")
-		run, err := a.RunWorkflow(ctx, str(args, "name"), "", inputs, "chat", convID, true, "ask", "")
+		run, err := a.RunWorkflow(
+			ctx,
+			str(args, "name"),
+			"",
+			inputs,
+			"chat",
+			convID,
+			true,
+			"ask",
+			"",
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -233,7 +444,17 @@ func (a *App) executeMetaTool(ctx context.Context, convID, name string, args map
 			}
 			versionID = wv.ID
 		}
-		run, err := a.RunWorkflow(ctx, str(args, "name"), versionID, inputs, "chat", convID, false, "ask", "")
+		run, err := a.RunWorkflow(
+			ctx,
+			str(args, "name"),
+			versionID,
+			inputs,
+			"chat",
+			convID,
+			false,
+			"ask",
+			"",
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -278,7 +499,15 @@ func (a *App) executeMetaTool(ctx context.Context, convID, name string, args map
 			if e.Type == "step.output.delta" || e.Type == "llm.delta" {
 				continue
 			}
-			evs = append(evs, map[string]any{"type": e.Type, "step": e.StepID, "ts": e.TS, "payload": previewJSON(e.Payload, 1000)})
+			evs = append(
+				evs,
+				map[string]any{
+					"type":    e.Type,
+					"step":    e.StepID,
+					"ts":      e.TS,
+					"payload": previewJSON(e.Payload, 1000),
+				},
+			)
 		}
 		summary["events"] = evs
 		return summary, nil
@@ -291,7 +520,11 @@ func (a *App) executeMetaTool(ctx context.Context, convID, name string, args map
 		if err != nil {
 			return nil, err
 		}
-		return map[string]any{"ok": true, "a": a.runSummary(ctx, a1), "b": a.runSummary(ctx, b1)}, nil
+		return map[string]any{
+			"ok": true,
+			"a":  a.runSummary(ctx, a1),
+			"b":  a.runSummary(ctx, b1),
+		}, nil
 	case "get_feedback":
 		f, err := a.Store.GetFeedback(ctx, "run", str(args, "run_id"))
 		if err != nil {
@@ -305,14 +538,35 @@ func (a *App) executeMetaTool(ctx context.Context, convID, name string, args map
 		}
 		out := []map[string]any{}
 		for _, s := range list {
-			out = append(out, map[string]any{"name": s.Name, "kind": s.Kind, "status": s.Status, "used_by": s.UsedBy, "ask_each_run": s.AskEachRun})
+			out = append(
+				out,
+				map[string]any{
+					"name":         s.Name,
+					"kind":         s.Kind,
+					"status":       s.Status,
+					"used_by":      s.UsedBy,
+					"ask_each_run": s.AskEachRun,
+				},
+			)
 		}
-		return map[string]any{"ok": true, "secrets": out, "next_hint": "Values are never available to the agent."}, nil
+		return map[string]any{
+			"ok":        true,
+			"secrets":   out,
+			"next_hint": "Values are never available to the agent.",
+		}, nil
 	case "get_environment":
 		profiles, _ := a.Store.ListModelProfiles(ctx)
 		mods := []map[string]any{}
 		for _, p := range profiles {
-			mods = append(mods, map[string]any{"name": p.Name, "model": p.Model, "role": p.Role, "base_url": p.BaseURL})
+			mods = append(
+				mods,
+				map[string]any{
+					"name":     p.Name,
+					"model":    p.Model,
+					"role":     p.Role,
+					"base_url": p.BaseURL,
+				},
+			)
 		}
 		bins := map[string]string{}
 		for _, b := range []string{"python3", "node", "git", "rg", "jq"} {
@@ -320,10 +574,23 @@ func (a *App) executeMetaTool(ctx context.Context, convID, name string, args map
 				bins[b] = p
 			}
 		}
-		return map[string]any{"ok": true, "workspace": a.Workspace.RootPath, "date": time.Now().Format(time.RFC3339),
-			"os": runtime.GOOS, "arch": runtime.GOARCH, "runtimes": bins, "models": mods, "settings": a.GetSettings()}, nil
+		return map[string]any{
+			"ok":        true,
+			"workspace": a.Workspace.RootPath,
+			"date":      time.Now().Format(time.RFC3339),
+			"os":        runtime.GOOS,
+			"arch":      runtime.GOARCH,
+			"runtimes":  bins,
+			"models":    mods,
+			"settings":  a.GetSettings(),
+		}, nil
 	case "create_tool_draft":
-		res, err := a.CreateToolDraft(ctx, str(args, "manifest_yaml"), "agent", intg(args, "base_version", 0))
+		res, err := a.CreateToolDraft(
+			ctx,
+			str(args, "manifest_yaml"),
+			"agent",
+			intg(args, "base_version", 0),
+		)
 		out := map[string]any{"ok": err == nil, "issues": res.Issues}
 		if res.Version.ID != "" {
 			out["tool"] = res.Tool.Name
@@ -339,11 +606,22 @@ func (a *App) executeMetaTool(ctx context.Context, convID, name string, args map
 		if err != nil {
 			return nil, err
 		}
-		tv, err := a.WriteToolFile(ctx, t.ID, str(args, "version_id"), str(args, "path"), str(args, "content"))
+		tv, err := a.WriteToolFile(
+			ctx,
+			t.ID,
+			str(args, "version_id"),
+			str(args, "path"),
+			str(args, "content"),
+		)
 		if err != nil {
 			return nil, err
 		}
-		return map[string]any{"ok": true, "version_id": tv.ID, "hash": tv.ContentHash, "next_hint": "Run tests next."}, nil
+		return map[string]any{
+			"ok":         true,
+			"version_id": tv.ID,
+			"hash":       tv.ContentHash,
+			"next_hint":  "Run tests next.",
+		}, nil
 	case "read_tool_file":
 		t, err := a.Store.GetToolByName(ctx, str(args, "tool"))
 		if err != nil {
@@ -380,7 +658,11 @@ func (a *App) executeMetaTool(ctx context.Context, convID, name string, args map
 				passed = false
 			}
 		}
-		return map[string]any{"ok": passed, "tests": results, "next_hint": "Fix failures, or request_tool_approval when green."}, nil
+		return map[string]any{
+			"ok":        passed,
+			"tests":     results,
+			"next_hint": "Fix failures, or request_tool_approval when green.",
+		}, nil
 	case "probe_permissions":
 		t, err := a.Store.GetToolByName(ctx, str(args, "tool"))
 		if err != nil {
@@ -393,7 +675,8 @@ func (a *App) executeMetaTool(ctx context.Context, convID, name string, args map
 		denied := []string{}
 		for _, r := range results {
 			for _, l := range r.Logs {
-				if strings.Contains(strings.ToLower(l), "permission") || strings.Contains(strings.ToLower(l), "denied") {
+				if strings.Contains(strings.ToLower(l), "permission") ||
+					strings.Contains(strings.ToLower(l), "denied") {
 					denied = append(denied, l)
 				}
 			}
@@ -411,24 +694,44 @@ func (a *App) executeMetaTool(ctx context.Context, convID, name string, args map
 		}
 		m, _ := tools.ParseManifest(tv.Manifest)
 		payload := map[string]any{"tool": t.Name, "version_id": tv.ID, "version": tv.Version,
-			"summary": str(args, "summary"), "side_effect": m.SideEffect, "permissions": m.Permissions,
+			"summary": str(
+				args,
+				"summary",
+			), "side_effect": m.SideEffect, "permissions": m.Permissions,
 			"secrets": m.Secrets, "tests": m.Tests}
 		d, err := a.askApproval(ctx, workflow.ApprovalRequest{
 			ConversationID: convID, Kind: "tool", Title: "Approve tool " + t.Name + "?",
-			Description: str(args, "summary"), Source: "chat", ExpiresAt: time.Now().Add(2 * time.Hour),
+			Description: str(
+				args,
+				"summary",
+			), Source: "chat", ExpiresAt: time.Now().Add(2 * time.Hour),
 		}, payload)
 		if err != nil {
 			return nil, err
 		}
 		if !d.Approved {
-			return map[string]any{"ok": false, "status": "rejected", "next_hint": "Do not retry the approval without changes."}, nil
+			return map[string]any{
+				"ok":        false,
+				"status":    "rejected",
+				"next_hint": "Do not retry the approval without changes.",
+			}, nil
 		}
 		if err := a.ApproveToolVersion(ctx, t.ID, tv.ID); err != nil {
 			return nil, err
 		}
-		return map[string]any{"ok": true, "status": "active", "next_hint": "The tool is active and can be used in workflows."}, nil
+		return map[string]any{
+			"ok":        true,
+			"status":    "active",
+			"next_hint": "The tool is active and can be used in workflows.",
+		}, nil
 	case "ask_user":
-		answer, err := a.AskUser(ctx, convID, str(args, "question"), str(args, "kind"), stringsArg(args, "options"))
+		answer, err := a.AskUser(
+			ctx,
+			convID,
+			str(args, "question"),
+			str(args, "kind"),
+			stringsArg(args, "options"),
+		)
 		if err != nil {
 			return map[string]any{"ok": false, "answer": "", "error": err.Error()}, nil
 		}
@@ -437,8 +740,17 @@ func (a *App) executeMetaTool(ctx context.Context, convID, name string, args map
 		if err := a.Store.AddNote(ctx, a.Workspace.ID, str(args, "note")); err != nil {
 			return nil, err
 		}
-		a.Bus.EmitNoErr(model.Event{Stream: model.StreamSys, Type: "note.created", Payload: a.mustPayload(map[string]any{"note": str(args, "note")})})
-		return map[string]any{"ok": true, "next_hint": "The note is visible in Settings and workspace prompts."}, nil
+		a.Bus.EmitNoErr(
+			model.Event{
+				Stream:  model.StreamSys,
+				Type:    "note.created",
+				Payload: a.mustPayload(map[string]any{"note": str(args, "note")}),
+			},
+		)
+		return map[string]any{
+			"ok":        true,
+			"next_hint": "The note is visible in Settings and workspace prompts.",
+		}, nil
 	case "propose_trigger":
 		return a.metaProposeTrigger(ctx, convID, args)
 	case "propose_patch":
@@ -474,14 +786,23 @@ func (a *App) metaSearchTools(ctx context.Context, query string, limit int) (any
 		if !match {
 			continue
 		}
-		item := map[string]any{"name": t.Name, "description": t.Description, "status": t.Version.Status,
-			"side_effect": t.SideEffect, "version": t.Version.Version}
+		item := map[string]any{
+			"name":        t.Name,
+			"description": t.Description,
+			"status":      t.Version.Status,
+			"side_effect": t.SideEffect,
+			"version":     t.Version.Version,
+		}
 		out = append(out, item)
 		if len(out) >= limit {
 			break
 		}
 	}
-	return map[string]any{"ok": true, "tools": out, "next_hint": "Call describe_tool before using or referencing a tool."}, nil
+	return map[string]any{
+		"ok":        true,
+		"tools":     out,
+		"next_hint": "Call describe_tool before using or referencing a tool.",
+	}, nil
 }
 
 func (a *App) metaDescribeTool(ctx context.Context, name string, version int) (any, error) {
@@ -522,14 +843,30 @@ func (a *App) metaDescribeTool(ctx context.Context, name string, version int) (a
 		secrets = append(secrets, map[string]any{"name": d.Name, "description": d.Description,
 			"inject": d.Inject, "required": d.Required, "status": status, "scope": d.Scope})
 	}
-	return map[string]any{"ok": true, "name": m.Name, "description": m.Description, "kind": m.Kind,
-		"version": tv.Version, "version_id": tv.ID, "status": tv.Status, "side_effect": m.SideEffect,
-		"input_schema": m.InputSchema, "output_schema": m.OutputSchema, "permissions": m.Permissions,
-		"secrets": secrets, "limits": m.Limits, "tests": m.Tests,
-		"next_hint": "Use the exact input schema when calling this tool or writing a workflow."}, nil
+	return map[string]any{
+		"ok":            true,
+		"name":          m.Name,
+		"description":   m.Description,
+		"kind":          m.Kind,
+		"version":       tv.Version,
+		"version_id":    tv.ID,
+		"status":        tv.Status,
+		"side_effect":   m.SideEffect,
+		"input_schema":  m.InputSchema,
+		"output_schema": m.OutputSchema,
+		"permissions":   m.Permissions,
+		"secrets":       secrets,
+		"limits":        m.Limits,
+		"tests":         m.Tests,
+		"next_hint":     "Use the exact input schema when calling this tool or writing a workflow.",
+	}, nil
 }
 
-func (a *App) waitForRun(ctx context.Context, runID string, timeout time.Duration) (model.Run, error) {
+func (a *App) waitForRun(
+	ctx context.Context,
+	runID string,
+	timeout time.Duration,
+) (model.Run, error) {
 	deadline := time.Now().Add(timeout)
 	for {
 		run, err := a.Store.GetRun(ctx, runID)
@@ -553,14 +890,28 @@ func (a *App) waitForRun(ctx context.Context, runID string, timeout time.Duratio
 func (a *App) runSummary(ctx context.Context, run model.Run) map[string]any {
 	steps := []map[string]any{}
 	for _, s := range run.Steps {
-		steps = append(steps, map[string]any{"step_id": s.StepID, "attempt": s.Attempt, "status": s.Status,
-			"error": s.Error, "started_at": s.StartedAt, "finished_at": s.FinishedAt})
+		steps = append(
+			steps,
+			map[string]any{"step_id": s.StepID, "attempt": s.Attempt, "status": s.Status,
+				"error": s.Error, "started_at": s.StartedAt, "finished_at": s.FinishedAt},
+		)
 	}
-	return map[string]any{"ok": true, "run_id": run.ID, "target": run.TargetKind, "name": run.TargetName,
-		"status": run.Status, "source": run.Source, "error": run.Error, "steps": steps,
-		"tokens_in": run.TokensIn, "tokens_out": run.TokensOut, "cost_micro": run.CostMicro,
-		"started_at": run.StartedAt, "finished_at": run.FinishedAt,
-		"next_hint": "If the run failed, call read_run to inspect events before proposing a patch."}
+	return map[string]any{
+		"ok":          true,
+		"run_id":      run.ID,
+		"target":      run.TargetKind,
+		"name":        run.TargetName,
+		"status":      run.Status,
+		"source":      run.Source,
+		"error":       run.Error,
+		"steps":       steps,
+		"tokens_in":   run.TokensIn,
+		"tokens_out":  run.TokensOut,
+		"cost_micro":  run.CostMicro,
+		"started_at":  run.StartedAt,
+		"finished_at": run.FinishedAt,
+		"next_hint":   "If the run failed, call read_run to inspect events before proposing a patch.",
+	}
 }
 
 func previewJSON(raw json.RawMessage, n int) any {

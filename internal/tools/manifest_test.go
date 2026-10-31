@@ -63,7 +63,12 @@ func TestStarlarkExecutionAndTests(t *testing.T) {
 		t.Fatal(err)
 	}
 	ex := NewExecutor(t.TempDir(), t.TempDir())
-	out, err := ex.Execute(context.Background(), m, map[string]any{"name": "Ada"}, ExecOptions{ToolDir: dir, ToolName: m.Name, Manifest: m})
+	out, err := ex.Execute(
+		context.Background(),
+		m,
+		map[string]any{"name": "Ada"},
+		ExecOptions{ToolDir: dir, ToolName: m.Name, Manifest: m},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -20,7 +20,12 @@ import (
 	"myagent/internal/workflow"
 )
 
-func (e *Executor) executeBuiltin(ctx context.Context, m *Manifest, input map[string]any, opts ExecOptions) (any, error) {
+func (e *Executor) executeBuiltin(
+	ctx context.Context,
+	m *Manifest,
+	input map[string]any,
+	opts ExecOptions,
+) (any, error) {
 	name := m.Runtime.Builtin
 	if name == "" {
 		name = m.Name
@@ -48,7 +53,11 @@ func (e *Executor) executeBuiltin(ctx context.Context, m *Manifest, input map[st
 	return nil, &workflow.ToolError{Kind: "unsupported", Message: "unknown builtin " + name}
 }
 
-func (e *Executor) fsList(ctx context.Context, input map[string]any, opts ExecOptions) (any, error) {
+func (e *Executor) fsList(
+	ctx context.Context,
+	input map[string]any,
+	opts ExecOptions,
+) (any, error) {
 	path := stringArg(input, "path", "")
 	resolved, err := e.ResolveFilePath(path, false)
 	if err != nil {
@@ -57,7 +66,10 @@ func (e *Executor) fsList(ctx context.Context, input map[string]any, opts ExecOp
 	entries, err := os.ReadDir(resolved)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, &workflow.ToolError{Kind: "not_found", Message: "directory does not exist: " + resolved}
+			return nil, &workflow.ToolError{
+				Kind:    "not_found",
+				Message: "directory does not exist: " + resolved,
+			}
 		}
 		return nil, &workflow.ToolError{Kind: "crashed", Message: err.Error()}
 	}
@@ -89,10 +101,20 @@ func (e *Executor) fsList(ctx context.Context, input map[string]any, opts ExecOp
 			files = append(files, item)
 		}
 	}
-	return map[string]any{"path": resolved, "entries": out, "files": files, "dirs": dirs, "count": len(out)}, nil
+	return map[string]any{
+		"path":    resolved,
+		"entries": out,
+		"files":   files,
+		"dirs":    dirs,
+		"count":   len(out),
+	}, nil
 }
 
-func (e *Executor) fsReadText(ctx context.Context, input map[string]any, opts ExecOptions) (any, error) {
+func (e *Executor) fsReadText(
+	ctx context.Context,
+	input map[string]any,
+	opts ExecOptions,
+) (any, error) {
 	path := stringArg(input, "path", "")
 	if path == "" {
 		return nil, &workflow.ToolError{Kind: "invalid_input", Message: "path is required"}
@@ -130,7 +152,11 @@ func (e *Executor) fsReadText(ctx context.Context, input map[string]any, opts Ex
 		"truncated": truncated, "relative": relativeTo(e.WorkspaceRoot, resolved)}, nil
 }
 
-func (e *Executor) fsWriteText(ctx context.Context, input map[string]any, opts ExecOptions) (any, error) {
+func (e *Executor) fsWriteText(
+	ctx context.Context,
+	input map[string]any,
+	opts ExecOptions,
+) (any, error) {
 	path := stringArg(input, "path", "")
 	if path == "" {
 		return nil, &workflow.ToolError{Kind: "invalid_input", Message: "path is required"}
@@ -161,10 +187,18 @@ func (e *Executor) fsWriteText(ctx context.Context, input map[string]any, opts E
 	if err != nil {
 		return nil, &workflow.ToolError{Kind: "crashed", Message: err.Error()}
 	}
-	return map[string]any{"path": resolved, "relative": relativeTo(e.WorkspaceRoot, resolved), "bytes_written": n}, nil
+	return map[string]any{
+		"path":          resolved,
+		"relative":      relativeTo(e.WorkspaceRoot, resolved),
+		"bytes_written": n,
+	}, nil
 }
 
-func (e *Executor) fsStat(ctx context.Context, input map[string]any, opts ExecOptions) (any, error) {
+func (e *Executor) fsStat(
+	ctx context.Context,
+	input map[string]any,
+	opts ExecOptions,
+) (any, error) {
 	path := stringArg(input, "path", "")
 	resolved, err := e.ResolveFilePath(path, false)
 	if err != nil {
@@ -174,11 +208,21 @@ func (e *Executor) fsStat(ctx context.Context, input map[string]any, opts ExecOp
 	if err != nil {
 		return nil, &workflow.ToolError{Kind: "not_found", Message: err.Error()}
 	}
-	return map[string]any{"path": resolved, "name": info.Name(), "size": info.Size(), "is_dir": info.IsDir(),
-		"modified": info.ModTime().UnixMilli(), "mode": info.Mode().String()}, nil
+	return map[string]any{
+		"path":     resolved,
+		"name":     info.Name(),
+		"size":     info.Size(),
+		"is_dir":   info.IsDir(),
+		"modified": info.ModTime().UnixMilli(),
+		"mode":     info.Mode().String(),
+	}, nil
 }
 
-func (e *Executor) fsDelete(ctx context.Context, input map[string]any, opts ExecOptions) (any, error) {
+func (e *Executor) fsDelete(
+	ctx context.Context,
+	input map[string]any,
+	opts ExecOptions,
+) (any, error) {
 	path := stringArg(input, "path", "")
 	if path == "" {
 		return nil, &workflow.ToolError{Kind: "invalid_input", Message: "path is required"}
@@ -189,7 +233,10 @@ func (e *Executor) fsDelete(ctx context.Context, input map[string]any, opts Exec
 	}
 	root, _ := e.ResolveFilePath("", true)
 	if resolved == root {
-		return nil, &workflow.ToolError{Kind: "permission_denied", Message: "refusing to delete the workspace root"}
+		return nil, &workflow.ToolError{
+			Kind:    "permission_denied",
+			Message: "refusing to delete the workspace root",
+		}
 	}
 	recursive, _ := input["recursive"].(bool)
 	if recursive {
@@ -203,7 +250,12 @@ func (e *Executor) fsDelete(ctx context.Context, input map[string]any, opts Exec
 	return map[string]any{"path": resolved, "deleted": true}, nil
 }
 
-func (e *Executor) httpFetch(ctx context.Context, m *Manifest, input map[string]any, opts ExecOptions) (any, error) {
+func (e *Executor) httpFetch(
+	ctx context.Context,
+	m *Manifest,
+	input map[string]any,
+	opts ExecOptions,
+) (any, error) {
 	rawURL := stringArg(input, "url", "")
 	if rawURL == "" {
 		return nil, &workflow.ToolError{Kind: "invalid_input", Message: "url is required"}
@@ -218,10 +270,16 @@ func (e *Executor) httpFetch(ctx context.Context, m *Manifest, input map[string]
 	switch method {
 	case "GET", "POST", "PUT", "PATCH", "DELETE", "HEAD":
 	default:
-		return nil, &workflow.ToolError{Kind: "invalid_input", Message: "unsupported HTTP method " + method}
+		return nil, &workflow.ToolError{
+			Kind:    "invalid_input",
+			Message: "unsupported HTTP method " + method,
+		}
 	}
 	if m.SideEffect == "read" && method != "GET" && method != "HEAD" {
-		return nil, &workflow.ToolError{Kind: "permission_denied", Message: "read-only tool cannot issue " + method}
+		return nil, &workflow.ToolError{
+			Kind:    "permission_denied",
+			Message: "read-only tool cannot issue " + method,
+		}
 	}
 	if resp, ok := mockFor(opts.Mocks, method, rawURL); ok {
 		return e.mockResponse(resp, rawURL)
@@ -273,7 +331,11 @@ func (e *Executor) httpFetch(ctx context.Context, m *Manifest, input map[string]
 		}
 	}
 	if resp.StatusCode >= 400 {
-		return out, &workflow.ToolError{Kind: "http_error", Message: fmt.Sprintf("HTTP %d: %s", resp.StatusCode, truncate(string(raw), 300)), Retryable: resp.StatusCode == 429 || resp.StatusCode >= 500}
+		return out, &workflow.ToolError{
+			Kind:      "http_error",
+			Message:   fmt.Sprintf("HTTP %d: %s", resp.StatusCode, truncate(string(raw), 300)),
+			Retryable: resp.StatusCode == 429 || resp.StatusCode >= 500,
+		}
 	}
 	return out, nil
 }
@@ -287,7 +349,10 @@ func (e *Executor) mockResponse(resp MockResponse, rawURL string) (any, error) {
 		}
 		raw, err := os.ReadFile(path)
 		if err != nil {
-			return nil, &workflow.ToolError{Kind: "mock_error", Message: "mock file: " + err.Error()}
+			return nil, &workflow.ToolError{
+				Kind:    "mock_error",
+				Message: "mock file: " + err.Error(),
+			}
 		}
 		body = string(raw)
 	}
@@ -296,18 +361,28 @@ func (e *Executor) mockResponse(resp MockResponse, rawURL string) (any, error) {
 		body = string(raw)
 	}
 	out := map[string]any{"url": rawURL, "status": resp.Status, "ok": resp.Status < 400,
-		"headers": map[string]string{"Content-Type": "application/json"}, "body": body, "mocked": true}
+		"headers": map[string]string{
+			"Content-Type": "application/json",
+		}, "body": body, "mocked": true}
 	var parsed any
 	if json.Unmarshal([]byte(body), &parsed) == nil {
 		out["json"] = parsed
 	}
 	if resp.Status >= 400 {
-		return out, &workflow.ToolError{Kind: "http_error", Message: fmt.Sprintf("HTTP %d: %s", resp.Status, truncate(body, 300))}
+		return out, &workflow.ToolError{
+			Kind:    "http_error",
+			Message: fmt.Sprintf("HTTP %d: %s", resp.Status, truncate(body, 300)),
+		}
 	}
 	return out, nil
 }
 
-func (e *Executor) shellExec(ctx context.Context, m *Manifest, input map[string]any, opts ExecOptions) (any, error) {
+func (e *Executor) shellExec(
+	ctx context.Context,
+	m *Manifest,
+	input map[string]any,
+	opts ExecOptions,
+) (any, error) {
 	command := stringArg(input, "command", "")
 	if command == "" {
 		return nil, &workflow.ToolError{Kind: "invalid_input", Message: "command is required"}
@@ -321,7 +396,10 @@ func (e *Executor) shellExec(ctx context.Context, m *Manifest, input map[string]
 			}
 		}
 		if !allowed {
-			return nil, &workflow.ToolError{Kind: "permission_denied", Message: "executable is not allowed by the manifest: " + command}
+			return nil, &workflow.ToolError{
+				Kind:    "permission_denied",
+				Message: "executable is not allowed by the manifest: " + command,
+			}
 		}
 	}
 	args := []string{}
@@ -351,7 +429,10 @@ func (e *Executor) shellExec(ctx context.Context, m *Manifest, input map[string]
 	if len(m.Permissions.Network.Domains) > 0 {
 		proxy, perr := StartProxy(m.Permissions.Network.Domains, nil, opts.Mocks)
 		if perr != nil {
-			return nil, &workflow.ToolError{Kind: "crashed", Message: "cannot start network proxy: " + perr.Error()}
+			return nil, &workflow.ToolError{
+				Kind:    "crashed",
+				Message: "cannot start network proxy: " + perr.Error(),
+			}
 		}
 		defer proxy.Close()
 		env = append(env, proxy.ProxyEnv()...)
@@ -370,7 +451,11 @@ func (e *Executor) shellExec(ctx context.Context, m *Manifest, input map[string]
 		Env:        env,
 	})
 	if res.TimedOut {
-		return nil, &workflow.ToolError{Kind: "timeout", Message: "command timed out", Retryable: true}
+		return nil, &workflow.ToolError{
+			Kind:      "timeout",
+			Message:   "command timed out",
+			Retryable: true,
+		}
 	}
 	output := map[string]any{
 		"command": command, "args": args, "cwd": resolved, "exit_code": res.ExitCode,

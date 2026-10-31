@@ -26,7 +26,10 @@ func (a *App) SetFeedback(ctx context.Context, runID, rating, note string) (mode
 	if _, err := a.Store.GetRun(ctx, runID); err != nil {
 		return model.Feedback{}, err
 	}
-	f, err := a.Store.UpsertFeedback(ctx, model.Feedback{TargetKind: "run", TargetID: runID, Rating: rating, Note: note})
+	f, err := a.Store.UpsertFeedback(
+		ctx,
+		model.Feedback{TargetKind: "run", TargetID: runID, Rating: rating, Note: note},
+	)
 	if err != nil {
 		return f, err
 	}
@@ -49,7 +52,10 @@ func (a *App) CreateEvalCaseFromRun(ctx context.Context, runID string) (model.Ev
 	}
 	suite, err := a.Store.EvalSuiteByTarget(ctx, w.ID)
 	if err != nil {
-		suite, err = a.Store.CreateEvalSuite(ctx, model.EvalSuite{Name: w.Name + " evals", TargetKind: "workflow", TargetID: w.ID})
+		suite, err = a.Store.CreateEvalSuite(
+			ctx,
+			model.EvalSuite{Name: w.Name + " evals", TargetKind: "workflow", TargetID: w.ID},
+		)
 		if err != nil {
 			return model.EvalCase{}, err
 		}
@@ -64,7 +70,16 @@ func (a *App) CreateEvalCaseFromRun(ctx context.Context, runID string) (model.Ev
 		path := filepath.Join(dir, id+".json")
 		if err := os.WriteFile(path, raw, 0o600); err == nil {
 			sum := sha256Hex(raw)
-			art, aerr := a.Store.AddArtifact(ctx, model.Artifact{ID: id, Path: path, SHA256: sum, Size: int64(len(raw)), Mime: "application/json"})
+			art, aerr := a.Store.AddArtifact(
+				ctx,
+				model.Artifact{
+					ID:     id,
+					Path:   path,
+					SHA256: sum,
+					Size:   int64(len(raw)),
+					Mime:   "application/json",
+				},
+			)
 			if aerr == nil {
 				ref = "artifact:" + art.ID
 			}
@@ -81,11 +96,16 @@ func (a *App) CreateEvalCaseFromRun(ctx context.Context, runID string) (model.Ev
 		return caseRec, err
 	}
 	a.Bus.EmitNoErr(model.Event{Stream: model.StreamSys, Type: "eval.case.created",
-		Payload: a.mustPayload(map[string]any{"suite_id": suite.ID, "case_id": caseRec.ID, "run_id": runID})})
+		Payload: a.mustPayload(
+			map[string]any{"suite_id": suite.ID, "case_id": caseRec.ID, "run_id": runID},
+		)})
 	return caseRec, nil
 }
 
-func (a *App) RunEvalSuite(ctx context.Context, suiteRef, targetVersionID string) (model.EvalRun, error) {
+func (a *App) RunEvalSuite(
+	ctx context.Context,
+	suiteRef, targetVersionID string,
+) (model.EvalRun, error) {
 	suite, err := a.Store.GetEvalSuite(ctx, suiteRef)
 	if err != nil {
 		suite, err = a.Store.EvalSuiteByName(ctx, suiteRef)
@@ -126,12 +146,17 @@ func (a *App) RunEvalSuite(ctx context.Context, suiteRef, targetVersionID string
 	if err != nil {
 		return model.EvalRun{}, err
 	}
-	evalRun, err := a.Store.CreateEvalRun(ctx, model.EvalRun{SuiteID: suite.ID, TargetVer: v.ID, Status: "running"})
+	evalRun, err := a.Store.CreateEvalRun(
+		ctx,
+		model.EvalRun{SuiteID: suite.ID, TargetVer: v.ID, Status: "running"},
+	)
 	if err != nil {
 		return model.EvalRun{}, err
 	}
 	a.Bus.EmitNoErr(model.Event{Stream: model.StreamSys, Type: "eval.run.started",
-		Payload: a.mustPayload(map[string]any{"eval_run_id": evalRun.ID, "suite_id": suite.ID, "target_ver": v.ID})})
+		Payload: a.mustPayload(
+			map[string]any{"eval_run_id": evalRun.ID, "suite_id": suite.ID, "target_ver": v.ID},
+		)})
 	for _, c := range suite.Cases {
 		if ctx.Err() != nil {
 			break
@@ -147,7 +172,21 @@ func (a *App) RunEvalSuite(ctx context.Context, suiteRef, targetVersionID string
 			}
 		}
 		start := time.Now()
-		run, rerr := a.startWorkflowRun(ctx, w, v, spec, inputs, bindings, "replay", "", "", "", true, "allow", replay)
+		run, rerr := a.startWorkflowRun(
+			ctx,
+			w,
+			v,
+			spec,
+			inputs,
+			bindings,
+			"replay",
+			"",
+			"",
+			"",
+			true,
+			"allow",
+			replay,
+		)
 		var runErr string
 		if rerr == nil {
 			run, rerr = a.waitForRun(ctx, run.ID, 5*time.Minute)
@@ -178,15 +217,26 @@ func (a *App) RunEvalSuite(ctx context.Context, suiteRef, targetVersionID string
 			score = 1
 		}
 		rawOut, _ := json.Marshal(outputs)
-		res, err := a.Store.AddEvalResult(ctx, model.EvalResult{EvalRunID: evalRun.ID, CaseID: c.ID,
-			TargetVer: v.ID, Passed: passed, Score: score, Judge: "assertions", CostMicro: run.CostMicro,
-			LatencyMS: time.Since(start).Milliseconds(), Output: rawOut, Error: runErr})
+		res, err := a.Store.AddEvalResult(ctx, model.EvalResult{
+			EvalRunID: evalRun.ID,
+			CaseID:    c.ID,
+			TargetVer: v.ID,
+			Passed:    passed,
+			Score:     score,
+			Judge:     "assertions",
+			CostMicro: run.CostMicro,
+			LatencyMS: time.Since(start).Milliseconds(),
+			Output:    rawOut,
+			Error:     runErr,
+		})
 		if err != nil {
 			return evalRun, err
 		}
 		a.Bus.EmitNoErr(model.Event{Stream: model.StreamSys, Type: "eval.case.finished",
-			Payload: a.mustPayload(map[string]any{"eval_run_id": evalRun.ID, "case_id": c.ID, "passed": passed,
-				"score": score, "cost_micro": res.CostMicro, "latency_ms": res.LatencyMS})})
+			Payload: a.mustPayload(
+				map[string]any{"eval_run_id": evalRun.ID, "case_id": c.ID, "passed": passed,
+					"score": score, "cost_micro": res.CostMicro, "latency_ms": res.LatencyMS},
+			)})
 	}
 	_ = a.Store.FinishEvalRun(ctx, evalRun.ID, "finished")
 	evalRun, _ = a.Store.GetEvalRun(ctx, evalRun.ID)
@@ -232,10 +282,18 @@ func (a *App) AnalyzeRun(ctx context.Context, runID string) (model.TuningProposa
 		if e.Type == "llm.delta" || e.Type == "step.output.delta" {
 			continue
 		}
-		trimmed = append(trimmed, map[string]any{"type": e.Type, "step": e.StepID, "payload": previewJSON(e.Payload, 1500)})
+		trimmed = append(
+			trimmed,
+			map[string]any{
+				"type":    e.Type,
+				"step":    e.StepID,
+				"payload": previewJSON(e.Payload, 1500),
+			},
+		)
 	}
 	trace, _ := json.Marshal(trimmed)
-	prompt := fmt.Sprintf(`A workflow run failed or was rated poorly. Diagnose the root cause and propose the smallest backward-compatible patch.
+	prompt := fmt.Sprintf(
+		`A workflow run failed or was rated poorly. Diagnose the root cause and propose the smallest backward-compatible patch.
 
 Workflow YAML:
 %s
@@ -252,32 +310,64 @@ Events:
 
 Return JSON:
 {"diagnosis":"...", "patch_summary":"...", "expected_effect":"...", "proposed_yaml":"<full corrected workflow YAML>"}
-The diagnosis must classify the cause: bad input, wrong tool choice, weak prompt, tool bug, model limit, or flaky external service. Do not change steps that passed.`, v.YAML, run.Status, run.Error, run.Source, string(run.Inputs), mustJSON(run.Steps), string(trace))
+The diagnosis must classify the cause: bad input, wrong tool choice, weak prompt, tool bug, model limit, or flaky external service. Do not change steps that passed.`,
+		v.YAML,
+		run.Status,
+		run.Error,
+		run.Source,
+		string(run.Inputs),
+		mustJSON(run.Steps),
+		string(trace),
+	)
 	res, err := a.ChatWithTools(ctx, workflow.LLMChatRequest{
 		SessionID: runID,
 		Role:      "planner",
 		System:    "You are the tuner inside MyAgent. Diagnose from evidence, not guesses. Propose the smallest backward-compatible patch for one root cause. Do not touch steps that passed.",
 		Messages:  []llm.Message{{Role: "user", Content: prompt}},
-		OutputSchema: map[string]any{"type": "object", "required": []any{"diagnosis", "patch_summary", "expected_effect", "proposed_yaml"},
-			"properties": map[string]any{"diagnosis": map[string]any{"type": "string"}, "patch_summary": map[string]any{"type": "string"},
-				"expected_effect": map[string]any{"type": "string"}, "proposed_yaml": map[string]any{"type": "string"}}},
+		OutputSchema: map[string]any{
+			"type":     "object",
+			"required": []any{"diagnosis", "patch_summary", "expected_effect", "proposed_yaml"},
+			"properties": map[string]any{
+				"diagnosis":     map[string]any{"type": "string"},
+				"patch_summary": map[string]any{"type": "string"},
+				"expected_effect": map[string]any{
+					"type": "string",
+				},
+				"proposed_yaml": map[string]any{"type": "string"},
+			},
+		},
 	})
 	if err != nil {
 		return model.TuningProposal{}, err
 	}
 	data, _ := res.Data.(map[string]any)
 	if data == nil {
-		return model.TuningProposal{}, errors.New("the model did not return a structured diagnosis; use a stronger planner model")
+		return model.TuningProposal{}, errors.New(
+			"the model did not return a structured diagnosis; use a stronger planner model",
+		)
 	}
 	proposed, _ := data["proposed_yaml"].(string)
 	if proposed == "" {
 		return model.TuningProposal{}, errors.New("the model returned no proposed YAML")
 	}
-	return a.createProposal(ctx, run.TargetID, v.ID, proposed,
-		fmt.Sprint(data["diagnosis"])+"\n\nExpected effect: "+fmt.Sprint(data["expected_effect"]), "agent")
+	return a.createProposal(
+		ctx,
+		run.TargetID,
+		v.ID,
+		proposed,
+		fmt.Sprint(
+			data["diagnosis"],
+		)+"\n\nExpected effect: "+fmt.Sprint(
+			data["expected_effect"],
+		),
+		"agent",
+	)
 }
 
-func (a *App) createProposal(ctx context.Context, workflowID, baseVersionID, proposedYAML, diagnosis, createdBy string) (model.TuningProposal, error) {
+func (a *App) createProposal(
+	ctx context.Context,
+	workflowID, baseVersionID, proposedYAML, diagnosis, createdBy string,
+) (model.TuningProposal, error) {
 	w, err := a.Store.GetWorkflowByID(ctx, workflowID)
 	if err != nil {
 		return model.TuningProposal{}, err
@@ -291,23 +381,47 @@ func (a *App) createProposal(ctx context.Context, workflowID, baseVersionID, pro
 		return model.TuningProposal{}, perr
 	}
 	if !res.OK() {
-		return model.TuningProposal{}, fmt.Errorf("proposed workflow is invalid: %s %s", res.Errors[0].Code, res.Errors[0].Message)
+		return model.TuningProposal{}, fmt.Errorf(
+			"proposed workflow is invalid: %s %s",
+			res.Errors[0].Code,
+			res.Errors[0].Message,
+		)
 	}
 	_ = spec
 	dmp := diffmatchpatch.New()
 	patches := dmp.PatchMake(base.YAML, proposedYAML)
 	diff := dmp.PatchToText(patches)
-	p, err := a.Store.CreateTuningProposal(ctx, model.TuningProposal{TargetKind: "workflow", TargetID: w.ID,
-		BaseVersionID: base.ID, Diagnosis: diagnosis, Patch: diff, ProposedYAML: proposedYAML, Status: "proposed"})
+	p, err := a.Store.CreateTuningProposal(
+		ctx,
+		model.TuningProposal{
+			TargetKind:    "workflow",
+			TargetID:      w.ID,
+			BaseVersionID: base.ID,
+			Diagnosis:     diagnosis,
+			Patch:         diff,
+			ProposedYAML:  proposedYAML,
+			Status:        "proposed",
+		},
+	)
 	if err != nil {
 		return p, err
 	}
 	a.Bus.EmitNoErr(model.Event{Stream: model.StreamSys, Type: "tuning.proposal.created",
-		Payload: a.mustPayload(map[string]any{"proposal_id": p.ID, "workflow": w.Name, "base_version": base.Version, "diagnosis": diagnosis})})
+		Payload: a.mustPayload(
+			map[string]any{
+				"proposal_id":  p.ID,
+				"workflow":     w.Name,
+				"base_version": base.Version,
+				"diagnosis":    diagnosis,
+			},
+		)})
 	return p, nil
 }
 
-func (a *App) DecideProposal(ctx context.Context, proposalID, action, comment string) (model.TuningProposal, error) {
+func (a *App) DecideProposal(
+	ctx context.Context,
+	proposalID, action, comment string,
+) (model.TuningProposal, error) {
 	p, err := a.Store.GetTuningProposal(ctx, proposalID)
 	if err != nil {
 		return p, err
@@ -324,7 +438,13 @@ func (a *App) DecideProposal(ctx context.Context, proposalID, action, comment st
 		if err != nil {
 			return p, err
 		}
-		v, err := a.SaveWorkflowDraft(ctx, p.ProposedYAML, "Accepted tuning proposal "+p.ID+". "+comment, "tuner", 0)
+		v, err := a.SaveWorkflowDraft(
+			ctx,
+			p.ProposedYAML,
+			"Accepted tuning proposal "+p.ID+". "+comment,
+			"tuner",
+			0,
+		)
 		if err != nil || !v.Validation.OK() {
 			return p, errors.New("proposed workflow is no longer valid")
 		}
@@ -361,11 +481,22 @@ func (a *App) metaProposePatch(ctx context.Context, args map[string]any) (any, e
 	if err != nil {
 		return nil, err
 	}
-	p, err := a.createProposal(ctx, w.ID, base.ID, str(args, "content"), str(args, "rationale"), "tuner")
+	p, err := a.createProposal(
+		ctx,
+		w.ID,
+		base.ID,
+		str(args, "content"),
+		str(args, "rationale"),
+		"tuner",
+	)
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"ok": true, "proposal_id": p.ID, "next_hint": "Ask the user to review the diff and run the eval suite before accepting."}, nil
+	return map[string]any{
+		"ok":          true,
+		"proposal_id": p.ID,
+		"next_hint":   "Ask the user to review the diff and run the eval suite before accepting.",
+	}, nil
 }
 
 func (a *App) metaRunEval(ctx context.Context, suite, targetVersion string) (any, error) {
@@ -379,8 +510,14 @@ func (a *App) metaRunEval(ctx context.Context, suite, targetVersion string) (any
 			passed++
 		}
 	}
-	return map[string]any{"ok": true, "eval_run_id": r.ID, "passed": passed, "total": len(r.Results),
-		"results": r.Results, "next_hint": "Compare pass rate, cost and latency with the baseline before accepting a patch."}, nil
+	return map[string]any{
+		"ok":          true,
+		"eval_run_id": r.ID,
+		"passed":      passed,
+		"total":       len(r.Results),
+		"results":     r.Results,
+		"next_hint":   "Compare pass rate, cost and latency with the baseline before accepting a patch.",
+	}, nil
 }
 
 func (a *App) EvalSuiteList(ctx context.Context) ([]model.EvalSuite, error) {

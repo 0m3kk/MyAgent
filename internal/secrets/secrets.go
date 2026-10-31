@@ -89,7 +89,13 @@ func New(ctx context.Context, st *store.Store, kp KeyProvider) (*Service, error)
 	if len(key) != 32 {
 		return nil, errors.New("master key must be 32 bytes")
 	}
-	s := &Service{store: st, key: key, kind: kp.Kind(), desc: kp.Description(), values: map[string]string{}}
+	s := &Service{
+		store:  st,
+		key:    key,
+		kind:   kp.Kind(),
+		desc:   kp.Description(),
+		values: map[string]string{},
+	}
 	if err := s.load(ctx); err != nil {
 		return nil, err
 	}
@@ -148,7 +154,12 @@ func (s *Service) decrypt(rec model.Secret) (string, error) {
 	return string(plain), nil
 }
 
-func (s *Service) Put(ctx context.Context, name, kind, description, value string, expiresAt int64, askEachRun bool) (model.SecretMeta, error) {
+func (s *Service) Put(
+	ctx context.Context,
+	name, kind, description, value string,
+	expiresAt int64,
+	askEachRun bool,
+) (model.SecretMeta, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return model.SecretMeta{}, errors.New("secret name is required")
@@ -171,8 +182,18 @@ func (s *Service) Put(ctx context.Context, name, kind, description, value string
 	if err != nil {
 		return model.SecretMeta{}, err
 	}
-	rec := model.Secret{ID: id, Name: name, Kind: kind, Description: description, ExpiresAt: expiresAt,
-		AskEachRun: askEachRun, CreatedAt: createdAt, Ciphertext: ciphertext, Nonce: nonce, KeyVersion: kv}
+	rec := model.Secret{
+		ID:          id,
+		Name:        name,
+		Kind:        kind,
+		Description: description,
+		ExpiresAt:   expiresAt,
+		AskEachRun:  askEachRun,
+		CreatedAt:   createdAt,
+		Ciphertext:  ciphertext,
+		Nonce:       nonce,
+		KeyVersion:  kv,
+	}
 	if rec.Kind == "" {
 		rec.Kind = "api_key"
 	}
@@ -182,8 +203,16 @@ func (s *Service) Put(ctx context.Context, name, kind, description, value string
 	s.mu.Lock()
 	s.values[name] = value
 	s.mu.Unlock()
-	return model.SecretMeta{ID: id, Name: name, Kind: rec.Kind, Description: description,
-		ExpiresAt: expiresAt, AskEachRun: askEachRun, CreatedAt: rec.CreatedAt, Status: "present"}, nil
+	return model.SecretMeta{
+		ID:          id,
+		Name:        name,
+		Kind:        rec.Kind,
+		Description: description,
+		ExpiresAt:   expiresAt,
+		AskEachRun:  askEachRun,
+		CreatedAt:   rec.CreatedAt,
+		Status:      "present",
+	}, nil
 }
 
 func (s *Service) Get(ctx context.Context, id string) (string, model.Secret, error) {
@@ -250,7 +279,8 @@ func (s *Service) Status(ctx context.Context, name string) string {
 	if !ok {
 		return "missing"
 	}
-	if rec, err := s.store.GetSecretByName(ctx, name); err == nil && rec.ExpiresAt > 0 && rec.ExpiresAt <= ids.NowMS() {
+	if rec, err := s.store.GetSecretByName(ctx, name); err == nil && rec.ExpiresAt > 0 &&
+		rec.ExpiresAt <= ids.NowMS() {
 		return "expired"
 	}
 	return "present"
@@ -298,7 +328,16 @@ func (s *Service) RedactJSON(raw []byte) []byte {
 // DetectLikelySecret catches common API-key shapes pasted into chat. The value
 // must not be sent to the model. Returns the candidate value.
 func DetectLikelySecret(text string) (string, bool) {
-	prefixes := []string{"sk-", "sk_live_", "ghp_", "github_pat_", "xoxb-", "AKIA", "AIza", "glpat-"}
+	prefixes := []string{
+		"sk-",
+		"sk_live_",
+		"ghp_",
+		"github_pat_",
+		"xoxb-",
+		"AKIA",
+		"AIza",
+		"glpat-",
+	}
 	for _, field := range strings.Fields(text) {
 		clean := strings.Trim(field, `"'`+"`.,;:()[]{}<>")
 		for _, p := range prefixes {

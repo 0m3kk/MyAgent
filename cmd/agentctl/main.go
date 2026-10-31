@@ -118,7 +118,11 @@ func cmdRun(c *client, args []string) {
 	if err != nil {
 		fail("%v", err)
 	}
-	res, err := c.do("POST", "/api/workflows/"+str(wf["id"])+"/run", map[string]any{"inputs": inputs, "source": "cli"})
+	res, err := c.do(
+		"POST",
+		"/api/workflows/"+str(wf["id"])+"/run",
+		map[string]any{"inputs": inputs, "source": "cli"},
+	)
 	if err != nil {
 		fail("%v", err)
 	}
@@ -157,7 +161,14 @@ func cmdRuns(c *client, args []string) {
 	fmt.Printf("%-38s %-20s %-12s %-10s %s\n", "RUN", "TARGET", "STATUS", "SOURCE", "COST")
 	for _, item := range runs {
 		r, _ := item.(map[string]any)
-		fmt.Printf("%-38s %-20s %-12s %-10s $%.4f\n", str(r["id"]), str(r["target_name"]), str(r["status"]), str(r["source"]), num(r["cost_micro"])/1e6)
+		fmt.Printf(
+			"%-38s %-20s %-12s %-10s $%.4f\n",
+			str(r["id"]),
+			str(r["target_name"]),
+			str(r["status"]),
+			str(r["source"]),
+			num(r["cost_micro"])/1e6,
+		)
 	}
 }
 
@@ -177,7 +188,13 @@ func cmdStatus(c *client, args []string) {
 	steps, _ := run["steps"].([]any)
 	for _, s := range steps {
 		sm, _ := s.(map[string]any)
-		fmt.Printf("  %-20s attempt=%v %-12s %s\n", str(sm["step_id"]), sm["attempt"], str(sm["status"]), str(sm["error"]))
+		fmt.Printf(
+			"  %-20s attempt=%v %-12s %s\n",
+			str(sm["step_id"]),
+			sm["attempt"],
+			str(sm["status"]),
+			str(sm["error"]),
+		)
 	}
 }
 
@@ -202,7 +219,14 @@ func cmdTools(c *client) {
 	for _, item := range list {
 		t, _ := item.(map[string]any)
 		ver, _ := t["version"].(map[string]any)
-		fmt.Printf("%-28s %-10s %-12v %-10s %s\n", str(t["name"]), str(t["kind"]), ver["version"], str(ver["status"]), str(t["side_effect"]))
+		fmt.Printf(
+			"%-28s %-10s %-12v %-10s %s\n",
+			str(t["name"]),
+			str(t["kind"]),
+			ver["version"],
+			str(ver["status"]),
+			str(t["side_effect"]),
+		)
 	}
 }
 

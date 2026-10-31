@@ -37,7 +37,11 @@ func (b *Bus) Store() *store.Store { return b.store }
 
 // Emit writes an event and its projection in one transaction, then broadcasts
 // it. Projection is optional. Ephemeral events are never written to SQLite.
-func (b *Bus) Emit(ctx context.Context, evt model.Event, projection func(*sql.Tx) error) (model.Event, error) {
+func (b *Bus) Emit(
+	ctx context.Context,
+	evt model.Event,
+	projection func(*sql.Tx) error,
+) (model.Event, error) {
 	if evt.Stream == "" {
 		evt.Stream = model.StreamSys
 	}
@@ -75,8 +79,10 @@ func (b *Bus) EmitSimple(ctx context.Context, evt model.Event) (model.Event, err
 
 func (b *Bus) Delta(stream, typ, runID, stepID string, payload any) {
 	raw, _ := json.Marshal(payload)
-	b.EmitNoErr(model.Event{Stream: stream, Type: typ, TS: model.Now(), RunID: runID, StepID: stepID,
-		SchemaVer: 1, Payload: raw, Ephemeral: true})
+	b.EmitNoErr(
+		model.Event{Stream: stream, Type: typ, TS: model.Now(), RunID: runID, StepID: stepID,
+			SchemaVer: 1, Payload: raw, Ephemeral: true},
+	)
 }
 
 func (b *Bus) EmitNoErr(evt model.Event) {

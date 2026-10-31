@@ -60,7 +60,8 @@ func TestStreamingChatAndToolCalls(t *testing.T) {
 	if res.Message.Content != "Hello world" {
 		t.Fatalf("content %q", res.Message.Content)
 	}
-	if len(res.Message.ToolCalls) != 1 || res.Message.ToolCalls[0].Function.Arguments != `{"path":"."}` {
+	if len(res.Message.ToolCalls) != 1 ||
+		res.Message.ToolCalls[0].Function.Arguments != `{"path":"."}` {
 		t.Fatalf("tool calls %+v", res.Message.ToolCalls)
 	}
 	if res.Usage.TotalTokens != 15 {
@@ -80,7 +81,11 @@ func TestSessionHeader(t *testing.T) {
 		session = r.Header.Get("x-opencode-session")
 		static = r.Header.Get("x-static")
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"model":"m","choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}`))
+		_, _ = w.Write(
+			[]byte(
+				`{"model":"m","choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}`,
+			),
+		)
 	}))
 	defer srv.Close()
 	c := NewClient()
@@ -88,7 +93,10 @@ func TestSessionHeader(t *testing.T) {
 		BaseURL: srv.URL, Model: "m",
 		Params: map[string]any{
 			"session_header": "x-opencode-session",
-			"headers":        map[string]any{"x-opencode-session": "static-value", "x-static": "yes"},
+			"headers": map[string]any{
+				"x-opencode-session": "static-value",
+				"x-static":           "yes",
+			},
 		},
 	}, ChatRequest{
 		Messages: []Message{{Role: "user", Content: "hi"}}, SessionID: "conv-123",
@@ -105,13 +113,20 @@ func TestSessionHeader(t *testing.T) {
 }
 
 func TestSessionHeaderAutoDetect(t *testing.T) {
-	if got := sessionHeaderName(Profile{BaseURL: "https://opencode.ai/zen/go/v1"}); got != "x-opencode-session" {
+	if got := sessionHeaderName(
+		Profile{BaseURL: "https://opencode.ai/zen/go/v1"},
+	); got != "x-opencode-session" {
 		t.Fatalf("opencode auto header = %q", got)
 	}
 	if got := sessionHeaderName(Profile{BaseURL: "https://api.example.com/v1"}); got != "" {
 		t.Fatalf("non-opencode header = %q", got)
 	}
-	if got := sessionHeaderName(Profile{BaseURL: "https://opencode.ai/zen/go/v1", Params: map[string]any{"session_header": "x-custom-session"}}); got != "x-custom-session" {
+	if got := sessionHeaderName(
+		Profile{
+			BaseURL: "https://opencode.ai/zen/go/v1",
+			Params:  map[string]any{"session_header": "x-custom-session"},
+		},
+	); got != "x-custom-session" {
 		t.Fatalf("explicit header = %q", got)
 	}
 }
@@ -122,7 +137,12 @@ func TestProviderErrorRetryable(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := NewClient()
-	_, err := c.Chat(context.Background(), Profile{BaseURL: srv.URL, Model: "x"}, ChatRequest{Messages: []Message{{Role: "user", Content: "hi"}}}, nil)
+	_, err := c.Chat(
+		context.Background(),
+		Profile{BaseURL: srv.URL, Model: "x"},
+		ChatRequest{Messages: []Message{{Role: "user", Content: "hi"}}},
+		nil,
+	)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -151,7 +171,12 @@ func TestMockDemoCallsTools(t *testing.T) {
 }
 
 func TestCost(t *testing.T) {
-	p := Profile{Params: map[string]any{"input_cost_per_mtok": float64(2), "output_cost_per_mtok": float64(4)}}
+	p := Profile{
+		Params: map[string]any{
+			"input_cost_per_mtok":  float64(2),
+			"output_cost_per_mtok": float64(4),
+		},
+	}
 	cost := CostMicro(p, Usage{PromptTokens: 1_000_000, CompletionTokens: 1_000_000})
 	if cost != 6_000_000 {
 		t.Fatalf("cost %d", cost)

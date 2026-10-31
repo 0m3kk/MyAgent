@@ -44,7 +44,9 @@ func (a *App) SendChat(ctx context.Context, conversationID, text string) (ChatRe
 		return ChatReply{}, errors.New("message is too long")
 	}
 	if _, found := secrets.DetectLikelySecret(text); found {
-		return ChatReply{}, errors.New("an API key was detected in your message. It was not sent or saved. Add it in Settings → Secrets, then refer to it by name.")
+		return ChatReply{}, errors.New(
+			"an API key was detected in your message. It was not sent or saved. Add it in Settings → Secrets, then refer to it by name.",
+		)
 	}
 	// Stored secrets that were pasted into chat must never reach SQLite or the
 	// model. The user still sees the redaction marker.
@@ -70,7 +72,10 @@ func (a *App) SendChat(ctx context.Context, conversationID, text string) (ChatRe
 	a.chatActive[conv.ID] = true
 	a.chatMu.Unlock()
 	content, _ := json.Marshal(map[string]any{"text": text})
-	msg, err := a.Store.AppendMessage(ctx, model.Message{ConversationID: conv.ID, Role: "user", Content: content})
+	msg, err := a.Store.AppendMessage(
+		ctx,
+		model.Message{ConversationID: conv.ID, Role: "user", Content: content},
+	)
 	if err != nil {
 		a.chatMu.Lock()
 		delete(a.chatActive, conv.ID)
@@ -94,7 +99,10 @@ func (a *App) SendChat(ctx context.Context, conversationID, text string) (ChatRe
 // StartWorkflowEditChat opens a fresh conversation with the workflow context.
 // The agent reads the YAML through get_workflow and proposes a draft; it cannot
 // activate anything.
-func (a *App) StartWorkflowEditChat(ctx context.Context, workflowID string) (model.Conversation, error) {
+func (a *App) StartWorkflowEditChat(
+	ctx context.Context,
+	workflowID string,
+) (model.Conversation, error) {
 	detail, err := a.WorkflowDetail(ctx, workflowID)
 	if err != nil {
 		return model.Conversation{}, err
@@ -107,9 +115,17 @@ func (a *App) StartWorkflowEditChat(ctx context.Context, workflowID string) (mod
 	if err != nil {
 		return model.Conversation{}, err
 	}
-	text := fmt.Sprintf("Help me improve the workflow %q (current v%d, status %s). Read it with get_workflow first. Propose a small, backward-compatible draft and explain the expected effect. Do not activate anything; I will review and approve it.", detail.Workflow.Name, v.Version, v.Status)
+	text := fmt.Sprintf(
+		"Help me improve the workflow %q (current v%d, status %s). Read it with get_workflow first. Propose a small, backward-compatible draft and explain the expected effect. Do not activate anything; I will review and approve it.",
+		detail.Workflow.Name,
+		v.Version,
+		v.Status,
+	)
 	content, _ := json.Marshal(map[string]any{"text": text})
-	msg, err := a.Store.AppendMessage(ctx, model.Message{ConversationID: conv.ID, Role: "user", Content: content})
+	msg, err := a.Store.AppendMessage(
+		ctx,
+		model.Message{ConversationID: conv.ID, Role: "user", Content: content},
+	)
 	if err != nil {
 		return conv, err
 	}
@@ -153,17 +169,41 @@ func (a *App) runAssistant(convID, userText string) {
 
 	prof, _, err := a.ModelProfileForRole(ctx, "executor")
 	if err != nil {
-		a.saveAssistantText(convID, "No model is available. Open **Settings → Models** and add an OpenAI-compatible profile.", nil, "", 0, 0, 0)
+		a.saveAssistantText(
+			convID,
+			"No model is available. Open **Settings → Models** and add an OpenAI-compatible profile.",
+			nil,
+			"",
+			0,
+			0,
+			0,
+		)
 		return
 	}
 	messages, err := a.chatHistory(ctx, convID)
 	if err != nil {
-		a.saveAssistantText(convID, "I could not load the conversation: "+err.Error(), nil, prof.ID, 0, 0, 0)
+		a.saveAssistantText(
+			convID,
+			"I could not load the conversation: "+err.Error(),
+			nil,
+			prof.ID,
+			0,
+			0,
+			0,
+		)
 		return
 	}
 	toolSet, err := a.chatToolSet(ctx)
 	if err != nil {
-		a.saveAssistantText(convID, "I could not load the tool catalog: "+err.Error(), nil, prof.ID, 0, 0, 0)
+		a.saveAssistantText(
+			convID,
+			"I could not load the tool catalog: "+err.Error(),
+			nil,
+			prof.ID,
+			0,
+			0,
+			0,
+		)
 		return
 	}
 	system := a.chatSystemPrompt(ctx, toolSet)
@@ -177,12 +217,29 @@ func (a *App) runAssistant(convID, userText string) {
 		}
 		streamedThisTurn = ""
 		a.Bus.EmitNoErr(model.Event{Stream: model.ConvStream(convID), Type: "llm.request",
-			Payload: a.mustPayload(map[string]any{"role": "executor", "model": prof.Model, "step": step + 1, "tools": len(toolSet.Defs)})})
+			Payload: a.mustPayload(
+				map[string]any{
+					"role":  "executor",
+					"model": prof.Model,
+					"step":  step + 1,
+					"tools": len(toolSet.Defs),
+				},
+			)})
 		res, err := a.ChatWithTools(ctx, workflow.LLMChatRequest{
-			SessionID: convID, Role: "executor", System: system, Messages: messages, Tools: toolSet.Defs,
+			SessionID: convID,
+			Role:      "executor",
+			System:    system,
+			Messages:  messages,
+			Tools:     toolSet.Defs,
 			Stream: func(text string) {
 				streamedThisTurn += text
-				a.Bus.Delta(model.ConvStream(convID), "llm.delta", "", "", map[string]any{"text": text})
+				a.Bus.Delta(
+					model.ConvStream(convID),
+					"llm.delta",
+					"",
+					"",
+					map[string]any{"text": text},
+				)
 			},
 		})
 		if err != nil {
@@ -199,14 +256,28 @@ func (a *App) runAssistant(convID, userText string) {
 		}
 		totalTokens += res.TokensIn + res.TokensOut
 		a.Bus.EmitNoErr(model.Event{Stream: model.ConvStream(convID), Type: "llm.finished",
-			Payload: a.mustPayload(map[string]any{"model": res.Model, "usage": map[string]any{"in": res.TokensIn, "out": res.TokensOut}, "cost_micro": res.CostMicro})})
+			Payload: a.mustPayload(
+				map[string]any{
+					"model":      res.Model,
+					"usage":      map[string]any{"in": res.TokensIn, "out": res.TokensOut},
+					"cost_micro": res.CostMicro,
+				},
+			)})
 		assistant := res.Message
 		assistant.Role = "assistant"
 		if assistant.Content == "" {
 			assistant.Content = res.Text
 		}
 		if len(assistant.ToolCalls) == 0 {
-			a.saveAssistantText(convID, assistant.Content, nil, prof.ID, res.TokensIn, res.TokensOut, res.CostMicro)
+			a.saveAssistantText(
+				convID,
+				assistant.Content,
+				nil,
+				prof.ID,
+				res.TokensIn,
+				res.TokensOut,
+				res.CostMicro,
+			)
 			return
 		}
 		parts := []model.Part{}
@@ -229,8 +300,17 @@ func (a *App) runAssistant(convID, userText string) {
 			}
 			start := time.Now()
 			a.Bus.EmitNoErr(model.Event{Stream: model.ConvStream(convID), Type: "tool.call.started",
-				Payload: a.mustPayload(map[string]any{"tool_call_id": call.ID, "tool": display, "args": args})})
-			out, execErr, logs := a.dispatchChatTool(ctx, convID, toolSet, call.Function.Name, args, call.ID)
+				Payload: a.mustPayload(
+					map[string]any{"tool_call_id": call.ID, "tool": display, "args": args},
+				)})
+			out, execErr, logs := a.dispatchChatTool(
+				ctx,
+				convID,
+				toolSet,
+				call.Function.Name,
+				args,
+				call.ID,
+			)
 			part := model.Part{Type: "tool-call", ToolCallID: call.ID, Name: display, Args: argsRaw,
 				Status: "succeeded", DurationMS: time.Since(start).Milliseconds(), Logs: logs}
 			if execErr != nil {
@@ -240,30 +320,74 @@ func (a *App) runAssistant(convID, userText string) {
 				part.Result = truncateRawJSON(out, 64*1024)
 			}
 			parts = append(parts, part)
-			a.Bus.EmitNoErr(model.Event{Stream: model.ConvStream(convID), Type: "tool.call.finished",
-				Payload: a.mustPayload(map[string]any{"tool_call_id": call.ID, "tool": display,
-					"status": part.Status, "result": json.RawMessage(part.Result), "error": part.Error})})
+			a.Bus.EmitNoErr(
+				model.Event{Stream: model.ConvStream(convID), Type: "tool.call.finished",
+					Payload: a.mustPayload(map[string]any{
+						"tool_call_id": call.ID,
+						"tool":         display,
+						"status":       part.Status,
+						"result":       json.RawMessage(part.Result),
+						"error":        part.Error,
+					})},
+			)
 			toolContent := ""
 			if execErr != nil {
 				toolContent = mustJSON(map[string]any{"error": a.Secrets.Redact(execErr.Error())})
 			} else {
 				toolContent = string(truncateRawJSON(out, 32*1024))
 			}
-			toolMessages = append(toolMessages, llm.Message{Role: "tool", ToolCallID: call.ID, Content: toolContent})
+			toolMessages = append(
+				toolMessages,
+				llm.Message{Role: "tool", ToolCallID: call.ID, Content: toolContent},
+			)
 		}
-		msg := a.saveAssistantTurn(convID, assistant.Content, parts, prof.ID, res.TokensIn, res.TokensOut, res.CostMicro)
+		msg := a.saveAssistantTurn(
+			convID,
+			assistant.Content,
+			parts,
+			prof.ID,
+			res.TokensIn,
+			res.TokensOut,
+			res.CostMicro,
+		)
 		messages = append(messages, assistant)
 		messages = append(messages, toolMessages...)
 		_ = msg
 		if totalTokens > settings.AgentBudgetTokens {
-			a.saveAssistantText(convID, "_I stopped because the conversation reached its token budget._", nil, prof.ID, 0, 0, 0)
+			a.saveAssistantText(
+				convID,
+				"_I stopped because the conversation reached its token budget._",
+				nil,
+				prof.ID,
+				0,
+				0,
+				0,
+			)
 			return
 		}
 	}
-	a.saveAssistantText(convID, fmt.Sprintf("_I stopped after %d steps. You can ask me to continue, or increase the limit in Settings._", settings.AgentMaxSteps), nil, prof.ID, 0, 0, 0)
+	a.saveAssistantText(
+		convID,
+		fmt.Sprintf(
+			"_I stopped after %d steps. You can ask me to continue, or increase the limit in Settings._",
+			settings.AgentMaxSteps,
+		),
+		nil,
+		prof.ID,
+		0,
+		0,
+		0,
+	)
 }
 
-func (a *App) dispatchChatTool(ctx context.Context, convID string, set chatToolSet, llmName string, args map[string]any, callID string) (any, error, []string) {
+func (a *App) dispatchChatTool(
+	ctx context.Context,
+	convID string,
+	set chatToolSet,
+	llmName string,
+	args map[string]any,
+	callID string,
+) (any, error, []string) {
 	route, ok := set.Routes[llmName]
 	if !ok {
 		return nil, fmt.Errorf("unknown tool %q", llmName), nil
@@ -283,21 +407,33 @@ func (a *App) dispatchChatTool(ctx context.Context, convID string, set chatToolS
 			secretStatus[n] = a.Secrets.Status(ctx, n)
 		}
 		payload := map[string]any{
-			"title": "Allow " + binding.Name + "?",
-			"tool":  binding.Name, "tool_version_id": binding.VersionID, "side_effect": binding.SideEffect,
-			"args": args, "secret_names": binding.Secrets, "secret_status": secretStatus,
-			"description": binding.Description,
+			"title":           "Allow " + binding.Name + "?",
+			"tool":            binding.Name,
+			"tool_version_id": binding.VersionID,
+			"side_effect":     binding.SideEffect,
+			"args":            args,
+			"secret_names":    binding.Secrets,
+			"secret_status":   secretStatus,
+			"description":     binding.Description,
 		}
 		desc := "The agent wants to run " + binding.Name + " (" + binding.SideEffect + ")."
 		d, err := a.askApproval(ctx, workflow.ApprovalRequest{
-			ConversationID: convID, Kind: "tool", StepID: callID, Title: "Allow " + binding.Name + "?",
-			Description: desc, Source: "chat", ExpiresAt: time.Now().Add(30 * time.Minute),
+			ConversationID: convID,
+			Kind:           "tool",
+			StepID:         callID,
+			Title:          "Allow " + binding.Name + "?",
+			Description:    desc,
+			Source:         "chat",
+			ExpiresAt:      time.Now().Add(30 * time.Minute),
 		}, payload)
 		if err != nil {
 			return nil, err, nil
 		}
 		if !d.Approved {
-			return nil, &workflow.ToolError{Kind: "approval_denied", Message: "the user denied this tool call"}, nil
+			return nil, &workflow.ToolError{
+				Kind:    "approval_denied",
+				Message: "the user denied this tool call",
+			}, nil
 		}
 	}
 	logs := []string{}
@@ -309,7 +445,14 @@ func (a *App) dispatchChatTool(ctx context.Context, convID string, set chatToolS
 				logs = append(logs, stream+": "+text)
 			}
 			a.Bus.EmitNoErr(model.Event{Stream: model.ConvStream(convID), Type: "tool.call.log",
-				Payload: a.mustPayload(map[string]any{"tool_call_id": callID, "tool": binding.Name, "stream": stream, "text": text})})
+				Payload: a.mustPayload(
+					map[string]any{
+						"tool_call_id": callID,
+						"tool":         binding.Name,
+						"stream":       stream,
+						"text":         text,
+					},
+				)})
 		},
 	})
 	if err != nil {
@@ -357,13 +500,23 @@ func (a *App) chatHistory(ctx context.Context, convID string) ([]llm.Message, er
 				} else {
 					content = string(truncateRawJSON(json.RawMessage(p.Result), 32*1024))
 				}
-				out = append(out, llm.Message{Role: "tool", ToolCallID: p.ToolCallID, Content: content})
+				out = append(
+					out,
+					llm.Message{Role: "tool", ToolCallID: p.ToolCallID, Content: content},
+				)
 			}
 		case "tool":
 			// Legacy tool messages, if present.
 			for _, p := range c.Parts {
 				if p.Type == "tool-result" {
-					out = append(out, llm.Message{Role: "tool", ToolCallID: p.ToolCallID, Content: string(p.Result)})
+					out = append(
+						out,
+						llm.Message{
+							Role:       "tool",
+							ToolCallID: p.ToolCallID,
+							Content:    string(p.Result),
+						},
+					)
 				}
 			}
 		}
@@ -395,8 +548,16 @@ You can use tools, author reusable workflows and tools, run them, inspect runs a
 - If a request is ambiguous and a wrong guess is costly, ask ONE short question with ask_user.
 - The user sees YAML/diffs in the UI; summarize outcomes instead of dumping long YAML unless asked.
 `)
-	fmt.Fprintf(&b, "\n# Environment\n- Date: %s\n- OS: %s/%s\n- Workspace: %s\n- App: MyAgent %s\n",
-		time.Now().Format("2006-01-02 15:04 MST"), runtime.GOOS, runtime.GOARCH, a.Workspace.RootPath, a.cfg.Version)
+	fmt.Fprintf(
+		&b,
+		"\n# Environment\n- Date: %s\n- OS: %s/%s\n- Workspace: %s\n- App: MyAgent %s\n",
+		time.Now().
+			Format("2006-01-02 15:04 MST"),
+		runtime.GOOS,
+		runtime.GOARCH,
+		a.Workspace.RootPath,
+		a.cfg.Version,
+	)
 	if len(secretNames) > 0 {
 		b.WriteString("- Secret names: " + strings.Join(secretNames, ", ") + "\n")
 	}
@@ -407,9 +568,13 @@ You can use tools, author reusable workflows and tools, run them, inspect runs a
 		}
 	}
 	b.WriteString("\n# Workflow authoring\n")
-	b.WriteString("When asked to make a workflow: describe_tool for every tool, write YAML with schema: 1, save_workflow_draft, fix every E-code (up to 5 attempts), then dry_run_workflow with realistic sample inputs and summarize the result. You never approve or activate anything.\n")
+	b.WriteString(
+		"When asked to make a workflow: describe_tool for every tool, write YAML with schema: 1, save_workflow_draft, fix every E-code (up to 5 attempts), then dry_run_workflow with realistic sample inputs and summarize the result. You never approve or activate anything.\n",
+	)
 	b.WriteString("\n# Tool authoring\n")
-	b.WriteString("When a tool is missing: create_tool_draft, write_tool_file, run_tool_tests, then request_tool_approval with a plain-language summary of what the tool can access. You never activate it yourself.\n")
+	b.WriteString(
+		"When a tool is missing: create_tool_draft, write_tool_file, run_tool_tests, then request_tool_approval with a plain-language summary of what the tool can access. You never activate it yourself.\n",
+	)
 	return b.String()
 }
 
@@ -417,7 +582,11 @@ func (a *App) chatToolSet(ctx context.Context) (chatToolSet, error) {
 	set := chatToolSet{Routes: map[string]chatToolRoute{}, Display: map[string]string{}}
 	for _, def := range metaToolDefs() {
 		set.Defs = append(set.Defs, def)
-		set.Routes[def.Function.Name] = chatToolRoute{Kind: "meta", Meta: def.Function.Name, LLM: def.Function.Name}
+		set.Routes[def.Function.Name] = chatToolRoute{
+			Kind: "meta",
+			Meta: def.Function.Name,
+			LLM:  def.Function.Name,
+		}
 		set.Display[def.Function.Name] = def.Function.Name
 	}
 	active, err := a.Store.ListActiveTools(ctx)
@@ -474,7 +643,13 @@ func safeToolName(name string) string {
 	return out
 }
 
-func (a *App) saveAssistantText(convID, text string, parts []model.Part, profileID string, tokensIn, tokensOut int, cost int64) model.Message {
+func (a *App) saveAssistantText(
+	convID, text string,
+	parts []model.Part,
+	profileID string,
+	tokensIn, tokensOut int,
+	cost int64,
+) model.Message {
 	content := model.MessageContent{Text: text, Parts: parts}
 	raw, _ := json.Marshal(content)
 	msg, err := a.Store.AppendMessage(context.Background(), model.Message{
@@ -488,7 +663,13 @@ func (a *App) saveAssistantText(convID, text string, parts []model.Part, profile
 	return msg
 }
 
-func (a *App) saveAssistantTurn(convID, text string, parts []model.Part, profileID string, tokensIn, tokensOut int, cost int64) model.Message {
+func (a *App) saveAssistantTurn(
+	convID, text string,
+	parts []model.Part,
+	profileID string,
+	tokensIn, tokensOut int,
+	cost int64,
+) model.Message {
 	return a.saveAssistantText(convID, text, parts, profileID, tokensIn, tokensOut, cost)
 }
 

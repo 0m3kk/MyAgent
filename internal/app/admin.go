@@ -54,7 +54,9 @@ func (a *App) Bootstrap(ctx context.Context) (Bootstrap, error) {
 		Workspace: a.Workspace, Settings: a.GetSettings(), ModelProfiles: profiles,
 		KeyKind: a.KeyKind(), KeyDescription: a.KeyDescription(), Conversations: convs,
 		Workflows: workflows, Tools: toolList, Runs: runs, Approvals: approvals,
-		SecretCount: len(secrets), Version: a.cfg.Version, PendingCount: len(approvals), Counts: counts,
+		SecretCount: len(
+			secrets,
+		), Version: a.cfg.Version, PendingCount: len(approvals), Counts: counts,
 	}, nil
 }
 
@@ -202,7 +204,11 @@ func (a *App) ReadToolFile(ctx context.Context, toolID, versionID, path string) 
 
 // ---- model profiles ----
 
-func (a *App) SaveModelProfile(ctx context.Context, p model.ModelProfile, apiKey string) (model.ModelProfile, error) {
+func (a *App) SaveModelProfile(
+	ctx context.Context,
+	p model.ModelProfile,
+	apiKey string,
+) (model.ModelProfile, error) {
 	if strings.TrimSpace(p.Name) == "" {
 		p.Name = p.Model
 	}
@@ -211,7 +217,15 @@ func (a *App) SaveModelProfile(ctx context.Context, p model.ModelProfile, apiKey
 	}
 	if apiKey != "" {
 		secretName := "MODEL_" + strings.ToUpper(sanitizeIdent(p.Name)) + "_API_KEY"
-		meta, err := a.Secrets.Put(ctx, secretName, "api_key", "API key for model profile "+p.Name, apiKey, 0, false)
+		meta, err := a.Secrets.Put(
+			ctx,
+			secretName,
+			"api_key",
+			"API key for model profile "+p.Name,
+			apiKey,
+			0,
+			false,
+		)
 		if err != nil {
 			return p, err
 		}
@@ -243,7 +257,10 @@ func (a *App) ProbeModel(ctx context.Context, id string) (llm.Capabilities, erro
 	return caps, nil
 }
 
-func (a *App) profileToLLM(ctx context.Context, p model.ModelProfile) (model.ModelProfile, llm.Profile, error) {
+func (a *App) profileToLLM(
+	ctx context.Context,
+	p model.ModelProfile,
+) (model.ModelProfile, llm.Profile, error) {
 	apiKey := ""
 	if p.SecretID != "" {
 		val, _, err := a.Secrets.Get(ctx, p.SecretID)
@@ -262,7 +279,12 @@ func (a *App) DeleteModelProfile(ctx context.Context, id string) error {
 
 // ---- secrets ----
 
-func (a *App) PutSecret(ctx context.Context, name, kind, description, value string, expiresAt int64, askEachRun bool) (model.SecretMeta, error) {
+func (a *App) PutSecret(
+	ctx context.Context,
+	name, kind, description, value string,
+	expiresAt int64,
+	askEachRun bool,
+) (model.SecretMeta, error) {
 	return a.Secrets.Put(ctx, name, kind, description, value, expiresAt, askEachRun)
 }
 

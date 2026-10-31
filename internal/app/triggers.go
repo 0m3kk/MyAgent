@@ -36,8 +36,14 @@ func (f *fileWatcher) Close() {
 	_ = f.w.Close()
 }
 
-func (a *App) CreateTriggerRecord(ctx context.Context, workflowID string, kind string, config, inputs map[string]any,
-	enabled bool, unattended, concurrency string) (model.Trigger, error) {
+func (a *App) CreateTriggerRecord(
+	ctx context.Context,
+	workflowID string,
+	kind string,
+	config, inputs map[string]any,
+	enabled bool,
+	unattended, concurrency string,
+) (model.Trigger, error) {
 	w, err := a.Store.GetWorkflowByID(ctx, workflowID)
 	if err != nil {
 		return model.Trigger{}, err
@@ -45,7 +51,8 @@ func (a *App) CreateTriggerRecord(ctx context.Context, workflowID string, kind s
 	if w.CurrentVersionID == "" {
 		return model.Trigger{}, errors.New("workflow has no version")
 	}
-	if v, err := a.Store.GetWorkflowVersion(ctx, w.CurrentVersionID); err != nil || v.Status != "approved" {
+	if v, err := a.Store.GetWorkflowVersion(ctx, w.CurrentVersionID); err != nil ||
+		v.Status != "approved" {
 		return model.Trigger{}, errors.New("approve the workflow before enabling a trigger")
 	}
 	switch kind {
@@ -78,20 +85,37 @@ func (a *App) CreateTriggerRecord(ctx context.Context, workflowID string, kind s
 	}
 	cfg, _ := json.Marshal(config)
 	inp, _ := json.Marshal(inputs)
-	t, err := a.Store.CreateTrigger(ctx, model.Trigger{WorkflowID: w.ID, Kind: kind, Config: cfg, Inputs: inp,
-		Enabled: enabled, Unattended: unattended, Concurrency: concurrency, ApprovedAt: ids.NowMS()})
+	t, err := a.Store.CreateTrigger(
+		ctx,
+		model.Trigger{
+			WorkflowID:  w.ID,
+			Kind:        kind,
+			Config:      cfg,
+			Inputs:      inp,
+			Enabled:     enabled,
+			Unattended:  unattended,
+			Concurrency: concurrency,
+			ApprovedAt:  ids.NowMS(),
+		},
+	)
 	if err != nil {
 		return t, err
 	}
 	a.Bus.EmitNoErr(model.Event{Stream: model.StreamSys, Type: "trigger.created",
-		Payload: a.mustPayload(map[string]any{"trigger_id": t.ID, "workflow": w.Name, "kind": kind})})
+		Payload: a.mustPayload(
+			map[string]any{"trigger_id": t.ID, "workflow": w.Name, "kind": kind},
+		)})
 	if enabled {
 		a.scheduleTrigger(t)
 	}
 	return t, nil
 }
 
-func (a *App) UpdateTriggerRecord(ctx context.Context, id string, patch map[string]any) (model.Trigger, error) {
+func (a *App) UpdateTriggerRecord(
+	ctx context.Context,
+	id string,
+	patch map[string]any,
+) (model.Trigger, error) {
 	t, err := a.Store.GetTrigger(ctx, id)
 	if err != nil {
 		return t, err
@@ -247,8 +271,15 @@ func (a *App) startFileWatcher(t model.Trigger) {
 				inputs := map[string]any{}
 				_ = json.Unmarshal(tr.Inputs, &inputs)
 				// Only expose the changed path when the workflow declares it.
-				if wf, werr := a.Store.GetWorkflowByID(context.Background(), tr.WorkflowID); werr == nil && wf.CurrentVersionID != "" {
-					if v, verr := a.Store.GetWorkflowVersion(context.Background(), wf.CurrentVersionID); verr == nil {
+				if wf, werr := a.Store.GetWorkflowByID(
+					context.Background(),
+					tr.WorkflowID,
+				); werr == nil &&
+					wf.CurrentVersionID != "" {
+					if v, verr := a.Store.GetWorkflowVersion(
+						context.Background(),
+						wf.CurrentVersionID,
+					); verr == nil {
 						if spec, perr := workflow.Parse([]byte(v.YAML)); perr == nil {
 							if _, ok := spec.Inputs["path"]; ok {
 								inputs["path"] = ev.Name
@@ -277,7 +308,9 @@ func (a *App) fireTriggerWithInputs(t model.Trigger, source string, inputs map[s
 	if t.Concurrency == "skip" {
 		if n, _ := a.Store.CountActiveRunsForTarget(ctx, t.WorkflowID); n > 0 {
 			a.Bus.EmitNoErr(model.Event{Stream: model.StreamSys, Type: "trigger.skipped",
-				Payload: a.mustPayload(map[string]any{"trigger_id": t.ID, "reason": "concurrency"})})
+				Payload: a.mustPayload(
+					map[string]any{"trigger_id": t.ID, "reason": "concurrency"},
+				)})
 			return
 		}
 	}
@@ -286,7 +319,9 @@ func (a *App) fireTriggerWithInputs(t model.Trigger, source string, inputs map[s
 		return
 	}
 	a.Bus.EmitNoErr(model.Event{Stream: model.StreamSys, Type: "trigger.fired",
-		Payload: a.mustPayload(map[string]any{"trigger_id": t.ID, "workflow": w.Name, "source": source})})
+		Payload: a.mustPayload(
+			map[string]any{"trigger_id": t.ID, "workflow": w.Name, "source": source},
+		)})
 	run, err := a.RunWorkflow(ctx, w.ID, "", inputs, source, "", false, t.Unattended, "")
 	if err != nil {
 		a.Bus.EmitNoErr(model.Event{Stream: model.StreamSys, Type: "trigger.skipped",
@@ -298,7 +333,11 @@ func (a *App) fireTriggerWithInputs(t model.Trigger, source string, inputs map[s
 	_ = run
 }
 
-func (a *App) TriggerWebhook(ctx context.Context, triggerID, token string, inputs map[string]any) (model.Run, error) {
+func (a *App) TriggerWebhook(
+	ctx context.Context,
+	triggerID, token string,
+	inputs map[string]any,
+) (model.Run, error) {
 	t, err := a.Store.GetTrigger(ctx, triggerID)
 	if err != nil {
 		return model.Run{}, err
@@ -326,11 +365,17 @@ func (a *App) TriggerWebhook(ctx context.Context, triggerID, token string, input
 		return model.Run{}, err
 	}
 	a.Bus.EmitNoErr(model.Event{Stream: model.StreamSys, Type: "trigger.fired",
-		Payload: a.mustPayload(map[string]any{"trigger_id": t.ID, "workflow": w.Name, "source": "webhook"})})
+		Payload: a.mustPayload(
+			map[string]any{"trigger_id": t.ID, "workflow": w.Name, "source": "webhook"},
+		)})
 	return a.RunWorkflow(ctx, w.ID, "", merged, "webhook", "", false, t.Unattended, "")
 }
 
-func (a *App) metaProposeTrigger(ctx context.Context, convID string, args map[string]any) (any, error) {
+func (a *App) metaProposeTrigger(
+	ctx context.Context,
+	convID string,
+	args map[string]any,
+) (any, error) {
 	w, err := a.Store.GetWorkflowByName(ctx, str(args, "workflow"))
 	if err != nil {
 		return nil, err
@@ -338,17 +383,26 @@ func (a *App) metaProposeTrigger(ctx context.Context, convID string, args map[st
 	if w.CurrentVersionID == "" {
 		return nil, errors.New("workflow has no version to trigger")
 	}
-	if v, verr := a.Store.GetWorkflowVersion(ctx, w.CurrentVersionID); verr != nil || v.Status != "approved" {
+	if v, verr := a.Store.GetWorkflowVersion(ctx, w.CurrentVersionID); verr != nil ||
+		v.Status != "approved" {
 		return nil, errors.New("the workflow must be approved before a trigger can be proposed")
 	}
 	kind := str(args, "kind")
 	config := object(args, "config")
 	inputs := object(args, "inputs")
-	payload := map[string]any{"workflow": w.Name, "trigger_kind": kind, "config": config, "inputs": inputs}
+	payload := map[string]any{
+		"workflow":     w.Name,
+		"trigger_kind": kind,
+		"config":       config,
+		"inputs":       inputs,
+	}
 	d, err := a.askApproval(ctx, workflow.ApprovalRequest{
-		ConversationID: convID, Kind: "trigger", Title: "Enable a trigger for " + w.Name + "?",
-		Description: "Kind: " + kind + ". Automated runs can use tools without you watching; approve only if you trust this schedule.",
-		Source:      "chat", ExpiresAt: time.Now().Add(2 * time.Hour),
+		ConversationID: convID,
+		Kind:           "trigger",
+		Title:          "Enable a trigger for " + w.Name + "?",
+		Description:    "Kind: " + kind + ". Automated runs can use tools without you watching; approve only if you trust this schedule.",
+		Source:         "chat",
+		ExpiresAt:      time.Now().Add(2 * time.Hour),
 	}, payload)
 	if err != nil {
 		return nil, err
@@ -360,7 +414,12 @@ func (a *App) metaProposeTrigger(ctx context.Context, convID string, args map[st
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"ok": true, "trigger_id": t.ID, "kind": t.Kind, "next_hint": "The trigger is enabled. You can disable it in the workflow's Triggers tab."}, nil
+	return map[string]any{
+		"ok":         true,
+		"trigger_id": t.ID,
+		"kind":       t.Kind,
+		"next_hint":  "The trigger is enabled. You can disable it in the workflow's Triggers tab.",
+	}, nil
 }
 
 func (a *App) sortedTriggers(ts []model.Trigger) []model.Trigger {

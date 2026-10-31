@@ -14,107 +14,107 @@ import (
 )
 
 type Spec struct {
-	Schema      int                  `yaml:"schema" json:"schema"`
-	Name        string               `yaml:"name" json:"name"`
+	Schema      int                  `yaml:"schema"                json:"schema"`
+	Name        string               `yaml:"name"                  json:"name"`
 	Description string               `yaml:"description,omitempty" json:"description,omitempty"`
-	Inputs      map[string]InputSpec `yaml:"inputs,omitempty" json:"inputs,omitempty"`
-	Outputs     map[string]string    `yaml:"outputs,omitempty" json:"outputs,omitempty"`
-	Settings    Settings             `yaml:"settings,omitempty" json:"settings,omitempty"`
-	Defaults    Defaults             `yaml:"defaults,omitempty" json:"defaults,omitempty"`
-	Steps       []Step               `yaml:"steps" json:"steps"`
+	Inputs      map[string]InputSpec `yaml:"inputs,omitempty"      json:"inputs,omitempty"`
+	Outputs     map[string]string    `yaml:"outputs,omitempty"     json:"outputs,omitempty"`
+	Settings    Settings             `yaml:"settings,omitempty"    json:"settings,omitempty"`
+	Defaults    Defaults             `yaml:"defaults,omitempty"    json:"defaults,omitempty"`
+	Steps       []Step               `yaml:"steps"                 json:"steps"`
 }
 
 type InputSpec struct {
-	Type        string `yaml:"type" json:"type"`
+	Type        string `yaml:"type"                  json:"type"`
 	Description string `yaml:"description,omitempty" json:"description,omitempty"`
-	Default     any    `yaml:"default,omitempty" json:"default,omitempty"`
-	Enum        []any  `yaml:"enum,omitempty" json:"enum,omitempty"`
-	Format      string `yaml:"format,omitempty" json:"format,omitempty"`
+	Default     any    `yaml:"default,omitempty"     json:"default,omitempty"`
+	Enum        []any  `yaml:"enum,omitempty"        json:"enum,omitempty"`
+	Format      string `yaml:"format,omitempty"      json:"format,omitempty"`
 }
 
 type Settings struct {
-	Unattended  string           `yaml:"unattended,omitempty" json:"unattended,omitempty"`
+	Unattended  string           `yaml:"unattended,omitempty"  json:"unattended,omitempty"`
 	Concurrency *ConcurrencySpec `yaml:"concurrency,omitempty" json:"concurrency,omitempty"`
-	Budget      *BudgetSpec      `yaml:"budget,omitempty" json:"budget,omitempty"`
-	Timeout     string           `yaml:"timeout,omitempty" json:"timeout,omitempty"`
+	Budget      *BudgetSpec      `yaml:"budget,omitempty"      json:"budget,omitempty"`
+	Timeout     string           `yaml:"timeout,omitempty"     json:"timeout,omitempty"`
 }
 
 type ConcurrencySpec struct {
-	Max    int    `yaml:"max,omitempty" json:"max,omitempty"`
+	Max    int    `yaml:"max,omitempty"    json:"max,omitempty"`
 	Policy string `yaml:"policy,omitempty" json:"policy,omitempty"`
 }
 
 type BudgetSpec struct {
 	MaxCostUSD float64 `yaml:"max_cost_usd,omitempty" json:"max_cost_usd,omitempty"`
-	MaxTokens  int     `yaml:"max_tokens,omitempty" json:"max_tokens,omitempty"`
+	MaxTokens  int     `yaml:"max_tokens,omitempty"   json:"max_tokens,omitempty"`
 }
 
 type Defaults struct {
 	Timeout string     `yaml:"timeout,omitempty" json:"timeout,omitempty"`
-	Retry   *RetrySpec `yaml:"retry,omitempty" json:"retry,omitempty"`
-	Role    string     `yaml:"role,omitempty" json:"role,omitempty"`
+	Retry   *RetrySpec `yaml:"retry,omitempty"   json:"retry,omitempty"`
+	Role    string     `yaml:"role,omitempty"    json:"role,omitempty"`
 }
 
 type RetrySpec struct {
-	Max     int    `yaml:"max" json:"max"`
+	Max     int    `yaml:"max"               json:"max"`
 	Backoff string `yaml:"backoff,omitempty" json:"backoff,omitempty"`
-	Delay   string `yaml:"delay,omitempty" json:"delay,omitempty"`
+	Delay   string `yaml:"delay,omitempty"   json:"delay,omitempty"`
 }
 
 type Step struct {
-	ID         string     `yaml:"id" json:"id"`
-	Name       string     `yaml:"name,omitempty" json:"name,omitempty"`
-	Needs      []string   `yaml:"needs,omitempty" json:"needs,omitempty"`
-	When       string     `yaml:"when,omitempty" json:"when,omitempty"`
-	Timeout    string     `yaml:"timeout,omitempty" json:"timeout,omitempty"`
-	Retry      *RetrySpec `yaml:"retry,omitempty" json:"retry,omitempty"`
-	OnError    string     `yaml:"on_error,omitempty" json:"on_error,omitempty"`
+	ID         string     `yaml:"id"                    json:"id"`
+	Name       string     `yaml:"name,omitempty"        json:"name,omitempty"`
+	Needs      []string   `yaml:"needs,omitempty"       json:"needs,omitempty"`
+	When       string     `yaml:"when,omitempty"        json:"when,omitempty"`
+	Timeout    string     `yaml:"timeout,omitempty"     json:"timeout,omitempty"`
+	Retry      *RetrySpec `yaml:"retry,omitempty"       json:"retry,omitempty"`
+	OnError    string     `yaml:"on_error,omitempty"    json:"on_error,omitempty"`
 	SideEffect string     `yaml:"side_effect,omitempty" json:"side_effect,omitempty"`
 
-	Tool     string         `yaml:"tool,omitempty" json:"tool,omitempty"`
-	With     map[string]any `yaml:"with,omitempty" json:"with,omitempty"`
-	LLM      *LLMSpec       `yaml:"llm,omitempty" json:"llm,omitempty"`
-	Agent    *AgentSpec     `yaml:"agent,omitempty" json:"agent,omitempty"`
-	Set      map[string]any `yaml:"set,omitempty" json:"set,omitempty"`
-	Branch   *BranchSpec    `yaml:"branch,omitempty" json:"branch,omitempty"`
-	Map      *MapSpec       `yaml:"map,omitempty" json:"map,omitempty"`
+	Tool     string         `yaml:"tool,omitempty"     json:"tool,omitempty"`
+	With     map[string]any `yaml:"with,omitempty"     json:"with,omitempty"`
+	LLM      *LLMSpec       `yaml:"llm,omitempty"      json:"llm,omitempty"`
+	Agent    *AgentSpec     `yaml:"agent,omitempty"    json:"agent,omitempty"`
+	Set      map[string]any `yaml:"set,omitempty"      json:"set,omitempty"`
+	Branch   *BranchSpec    `yaml:"branch,omitempty"   json:"branch,omitempty"`
+	Map      *MapSpec       `yaml:"map,omitempty"      json:"map,omitempty"`
 	Parallel *ParallelSpec  `yaml:"parallel,omitempty" json:"parallel,omitempty"`
 	Approval *ApprovalSpec  `yaml:"approval,omitempty" json:"approval,omitempty"`
 	Workflow string         `yaml:"workflow,omitempty" json:"workflow,omitempty"`
 }
 
 type LLMSpec struct {
-	Role         string         `yaml:"role,omitempty" json:"role,omitempty"`
-	Prompt       string         `yaml:"prompt" json:"prompt"`
-	System       string         `yaml:"system,omitempty" json:"system,omitempty"`
+	Role         string         `yaml:"role,omitempty"          json:"role,omitempty"`
+	Prompt       string         `yaml:"prompt"                  json:"prompt"`
+	System       string         `yaml:"system,omitempty"        json:"system,omitempty"`
 	OutputSchema map[string]any `yaml:"output_schema,omitempty" json:"output_schema,omitempty"`
-	MaxTokens    int            `yaml:"max_tokens,omitempty" json:"max_tokens,omitempty"`
-	Temperature  *float64       `yaml:"temperature,omitempty" json:"temperature,omitempty"`
+	MaxTokens    int            `yaml:"max_tokens,omitempty"    json:"max_tokens,omitempty"`
+	Temperature  *float64       `yaml:"temperature,omitempty"   json:"temperature,omitempty"`
 }
 
 type AgentSpec struct {
-	Role         string         `yaml:"role,omitempty" json:"role,omitempty"`
-	Goal         string         `yaml:"goal" json:"goal"`
-	System       string         `yaml:"system,omitempty" json:"system,omitempty"`
-	Tools        []string       `yaml:"tools,omitempty" json:"tools,omitempty"`
-	MaxSteps     int            `yaml:"max_steps,omitempty" json:"max_steps,omitempty"`
+	Role         string         `yaml:"role,omitempty"          json:"role,omitempty"`
+	Goal         string         `yaml:"goal"                    json:"goal"`
+	System       string         `yaml:"system,omitempty"        json:"system,omitempty"`
+	Tools        []string       `yaml:"tools,omitempty"         json:"tools,omitempty"`
+	MaxSteps     int            `yaml:"max_steps,omitempty"     json:"max_steps,omitempty"`
 	OutputSchema map[string]any `yaml:"output_schema,omitempty" json:"output_schema,omitempty"`
 }
 
 type BranchSpec struct {
 	Cases []BranchCase `yaml:"cases,omitempty" json:"cases,omitempty"`
-	Else  []Step       `yaml:"else,omitempty" json:"else,omitempty"`
+	Else  []Step       `yaml:"else,omitempty"  json:"else,omitempty"`
 }
 
 type BranchCase struct {
 	When string `yaml:"when,omitempty" json:"when"`
-	Do   []Step `yaml:"do,omitempty" json:"do"`
+	Do   []Step `yaml:"do,omitempty"   json:"do"`
 }
 
 type MapSpec struct {
-	Over        string `yaml:"over" json:"over"`
-	As          string `yaml:"as,omitempty" json:"as,omitempty"`
-	Do          []Step `yaml:"do" json:"do"`
+	Over        string `yaml:"over"                  json:"over"`
+	As          string `yaml:"as,omitempty"          json:"as,omitempty"`
+	Do          []Step `yaml:"do"                    json:"do"`
 	Concurrency int    `yaml:"concurrency,omitempty" json:"concurrency,omitempty"`
 }
 
@@ -123,8 +123,8 @@ type ParallelSpec struct {
 }
 
 type ApprovalSpec struct {
-	Message string `yaml:"message" json:"message"`
-	Show    string `yaml:"show,omitempty" json:"show,omitempty"`
+	Message string `yaml:"message"           json:"message"`
+	Show    string `yaml:"show,omitempty"    json:"show,omitempty"`
 	Timeout string `yaml:"timeout,omitempty" json:"timeout,omitempty"`
 }
 
@@ -229,7 +229,10 @@ func (s *Spec) InputSchema() (map[string]any, error) {
 	}
 	out := map[string]any{"type": "object", "properties": props, "additionalProperties": false}
 	if len(required) > 0 {
-		sort.Slice(required, func(i, j int) bool { return required[i].(string) < required[j].(string) })
+		sort.Slice(
+			required,
+			func(i, j int) bool { return required[i].(string) < required[j].(string) },
+		)
 		out["required"] = required
 	}
 	return out, nil
@@ -335,7 +338,10 @@ func (s *Spec) FlattenSteps() []FlatStep {
 			if top == "" {
 				top = st.ID
 			}
-			out = append(out, FlatStep{Path: path, TopLevelID: top, Step: st, Depth: depth, InMap: inMap})
+			out = append(
+				out,
+				FlatStep{Path: path, TopLevelID: top, Step: st, Depth: depth, InMap: inMap},
+			)
 			switch {
 			case st.Branch != nil:
 				for i := range st.Branch.Cases {

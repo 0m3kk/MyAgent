@@ -132,7 +132,11 @@ func (s *Server) handleEventsReplay(w http.ResponseWriter, r *http.Request) {
 	if len(events) > 0 {
 		last = events[len(events)-1].Seq
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"stream": stream, "events": events, "last_seq": last})
+	writeJSON(
+		w,
+		http.StatusOK,
+		map[string]any{"stream": stream, "events": events, "last_seq": last},
+	)
 }
 
 func parseInt64(s string, def int64) int64 {

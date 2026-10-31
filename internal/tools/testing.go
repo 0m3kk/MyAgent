@@ -20,7 +20,12 @@ type TestResult struct {
 	DurationMS int64    `json:"duration_ms"`
 }
 
-func (e *Executor) RunTests(ctx context.Context, m *Manifest, toolDir string, secrets map[string]string) []TestResult {
+func (e *Executor) RunTests(
+	ctx context.Context,
+	m *Manifest,
+	toolDir string,
+	secrets map[string]string,
+) []TestResult {
 	results := make([]TestResult, 0, len(m.Tests))
 	for i := range m.Tests {
 		tc := &m.Tests[i]
@@ -51,7 +56,12 @@ func (e *Executor) RunTests(ctx context.Context, m *Manifest, toolDir string, se
 			},
 		})
 		cancel()
-		res := TestResult{Name: tc.Name, DurationMS: time.Since(start).Milliseconds(), Logs: logs, Output: out}
+		res := TestResult{
+			Name:       tc.Name,
+			DurationMS: time.Since(start).Milliseconds(),
+			Logs:       logs,
+			Output:     out,
+		}
 		if tc.ExpectError != "" {
 			if err == nil {
 				res.Passed = false
@@ -72,7 +82,10 @@ func (e *Executor) RunTests(ctx context.Context, m *Manifest, toolDir string, se
 				env := &workflow.Env{
 					Inputs: map[string]any{},
 					Steps:  map[string]workflow.StepView{},
-					Vars:   map[string]any{"output": normalizeAny(out), "input": normalizeAny(tc.Input)},
+					Vars: map[string]any{
+						"output": normalizeAny(out),
+						"input":  normalizeAny(tc.Input),
+					},
 				}
 				ok, aerr := workflow.EvalExpression(assertion, env)
 				if aerr != nil {

@@ -31,11 +31,17 @@ type WorkflowDetail struct {
 	InputSchema map[string]any            `json:"input_schema,omitempty"`
 }
 
-func (a *App) ValidateWorkflowYAML(ctx context.Context, yamlText string, forRun bool) (*workflow.Spec, workflow.ValidationResult, error) {
+func (a *App) ValidateWorkflowYAML(
+	ctx context.Context,
+	yamlText string,
+	forRun bool,
+) (*workflow.Spec, workflow.ValidationResult, error) {
 	spec, err := workflow.Parse([]byte(yamlText))
 	if err != nil {
-		res := workflow.ValidationResult{Errors: []workflow.Diagnostic{{Code: "E001", Path: "", Message: err.Error(),
-			Hint: "Fix the YAML syntax and field names; unknown fields are rejected."}}}
+		res := workflow.ValidationResult{
+			Errors: []workflow.Diagnostic{{Code: "E001", Path: "", Message: err.Error(),
+				Hint: "Fix the YAML syntax and field names; unknown fields are rejected."}},
+		}
 		return nil, res, err
 	}
 	res := workflow.Validate(spec, a.validateOptions(ctx, forRun))
@@ -44,7 +50,11 @@ func (a *App) ValidateWorkflowYAML(ctx context.Context, yamlText string, forRun 
 	return spec, res, nil
 }
 
-func (a *App) SaveWorkflowDraft(ctx context.Context, yamlText, changeNote, createdBy string, baseVersion int) (SaveWorkflowResult, error) {
+func (a *App) SaveWorkflowDraft(
+	ctx context.Context,
+	yamlText, changeNote, createdBy string,
+	baseVersion int,
+) (SaveWorkflowResult, error) {
 	if createdBy == "" {
 		createdBy = "user"
 	}
@@ -64,15 +74,32 @@ func (a *App) SaveWorkflowDraft(ctx context.Context, yamlText, changeNote, creat
 		cur, err := a.Store.GetWorkflowVersion(ctx, w.CurrentVersionID)
 		if err == nil && baseVersion == 0 {
 			res.Errors = append(res.Errors, workflow.Diagnostic{Code: "E011", Path: "",
-				Message: fmt.Sprintf("base_version is required when editing an existing workflow (current v%d)", cur.Version),
-				Hint:    "Pass the version you started from so concurrent edits are not overwritten."})
-			return SaveWorkflowResult{Workflow: w, Validation: res}, errors.New("base_version is required")
+				Message: fmt.Sprintf(
+					"base_version is required when editing an existing workflow (current v%d)",
+					cur.Version,
+				),
+				Hint: "Pass the version you started from so concurrent edits are not overwritten."})
+			return SaveWorkflowResult{
+				Workflow:   w,
+				Validation: res,
+			}, errors.New(
+				"base_version is required",
+			)
 		}
 		if err == nil && cur.Version != baseVersion {
 			res.Errors = append(res.Errors, workflow.Diagnostic{Code: "E011", Path: "",
-				Message: fmt.Sprintf("base version %d is stale; current version is %d", baseVersion, cur.Version),
-				Hint:    "Reload the workflow and reapply the change."})
-			return SaveWorkflowResult{Workflow: w, Validation: res}, errors.New("stale base version")
+				Message: fmt.Sprintf(
+					"base version %d is stale; current version is %d",
+					baseVersion,
+					cur.Version,
+				),
+				Hint: "Reload the workflow and reapply the change."})
+			return SaveWorkflowResult{
+				Workflow:   w,
+				Validation: res,
+			}, errors.New(
+				"stale base version",
+			)
 		}
 	}
 	inputSchema, _ := spec.InputSchema()
@@ -85,8 +112,10 @@ func (a *App) SaveWorkflowDraft(ctx context.Context, yamlText, changeNote, creat
 		return SaveWorkflowResult{Validation: res}, err
 	}
 	a.Bus.EmitNoErr(model.Event{Stream: model.StreamSys, Type: "workflow.version.created",
-		Payload: a.mustPayload(map[string]any{"workflow_id": w.ID, "version_id": v.ID, "version": v.Version,
-			"name": spec.Name, "created_by": createdBy, "warnings": res.Warnings})})
+		Payload: a.mustPayload(
+			map[string]any{"workflow_id": w.ID, "version_id": v.ID, "version": v.Version,
+				"name": spec.Name, "created_by": createdBy, "warnings": res.Warnings},
+		)})
 	return SaveWorkflowResult{Workflow: w, Version: v, Validation: res}, nil
 }
 
@@ -110,7 +139,9 @@ func (a *App) ApproveWorkflowVersion(ctx context.Context, workflowID, versionID 
 		return err
 	}
 	a.Bus.EmitNoErr(model.Event{Stream: model.StreamSys, Type: "workflow.version.approved",
-		Payload: a.mustPayload(map[string]any{"workflow_id": w.ID, "version_id": v.ID, "version": v.Version})})
+		Payload: a.mustPayload(
+			map[string]any{"workflow_id": w.ID, "version_id": v.ID, "version": v.Version},
+		)})
 	return nil
 }
 
@@ -152,7 +183,10 @@ func (a *App) WorkflowDetail(ctx context.Context, id string) (WorkflowDetail, er
 	return detail, nil
 }
 
-func (a *App) ResolveWorkflowVersion(ctx context.Context, workflowID, versionID, source string) (model.Workflow, model.WorkflowVersion, *workflow.Spec, error) {
+func (a *App) ResolveWorkflowVersion(
+	ctx context.Context,
+	workflowID, versionID, source string,
+) (model.Workflow, model.WorkflowVersion, *workflow.Spec, error) {
 	w, err := a.Store.GetWorkflowByID(ctx, workflowID)
 	if err != nil {
 		w, err = a.Store.GetWorkflowByName(ctx, workflowID)
@@ -176,9 +210,12 @@ func (a *App) ResolveWorkflowVersion(ctx context.Context, workflowID, versionID,
 				return w, v, nil, err
 			}
 		}
-		if v.ID == "" || (v.Status != "approved" && source != "manual" && source != "chat" && source != "replay") {
+		if v.ID == "" ||
+			(v.Status != "approved" && source != "manual" && source != "chat" && source != "replay") {
 			var approvedID string
-			err = a.Store.DB().QueryRowContext(ctx, `SELECT id FROM workflow_versions WHERE workflow_id=? AND status='approved' ORDER BY version DESC LIMIT 1`, w.ID).Scan(&approvedID)
+			err = a.Store.DB().
+				QueryRowContext(ctx, `SELECT id FROM workflow_versions WHERE workflow_id=? AND status='approved' ORDER BY version DESC LIMIT 1`, w.ID).
+				Scan(&approvedID)
 			if err != nil {
 				if v.ID == "" {
 					return w, v, nil, errors.New("workflow has no approved version")
@@ -198,7 +235,10 @@ func (a *App) ResolveWorkflowVersion(ctx context.Context, workflowID, versionID,
 	return w, v, spec, nil
 }
 
-func (a *App) validateRunInputs(v model.WorkflowVersion, inputs map[string]any) (map[string]any, []schema.Issue, error) {
+func (a *App) validateRunInputs(
+	v model.WorkflowVersion,
+	inputs map[string]any,
+) (map[string]any, []schema.Issue, error) {
 	s, err := schema.Compile(v.InputSchema)
 	if err != nil {
 		return inputs, nil, err
@@ -211,14 +251,26 @@ func (a *App) validateRunInputs(v model.WorkflowVersion, inputs map[string]any) 
 	return m, s.Validate(normalized), nil
 }
 
-func (a *App) RunWorkflow(ctx context.Context, workflowID, versionID string, inputs map[string]any, source, conversationID string, dryRun bool, unattended string, parentRunID string) (model.Run, error) {
+func (a *App) RunWorkflow(
+	ctx context.Context,
+	workflowID, versionID string,
+	inputs map[string]any,
+	source, conversationID string,
+	dryRun bool,
+	unattended string,
+	parentRunID string,
+) (model.Run, error) {
 	w, v, spec, err := a.ResolveWorkflowVersion(ctx, workflowID, versionID, source)
 	if err != nil {
 		return model.Run{}, err
 	}
 	res := workflow.Validate(spec, a.validateOptions(ctx, true))
 	if !res.OK() {
-		return model.Run{}, fmt.Errorf("workflow validation failed: %s %s", res.Errors[0].Code, res.Errors[0].Message)
+		return model.Run{}, fmt.Errorf(
+			"workflow validation failed: %s %s",
+			res.Errors[0].Code,
+			res.Errors[0].Message,
+		)
 	}
 	clean, iss, err := a.validateRunInputs(v, inputs)
 	if err != nil {
@@ -259,12 +311,35 @@ func (a *App) RunWorkflow(ctx context.Context, workflowID, versionID string, inp
 	if err != nil {
 		return model.Run{}, err
 	}
-	return a.startWorkflowRun(ctx, w, v, spec, clean, bindings, source, conversationID, "", parentRunID, dryRun, unattended, nil)
+	return a.startWorkflowRun(
+		ctx,
+		w,
+		v,
+		spec,
+		clean,
+		bindings,
+		source,
+		conversationID,
+		"",
+		parentRunID,
+		dryRun,
+		unattended,
+		nil,
+	)
 }
 
-func (a *App) startWorkflowRun(ctx context.Context, w model.Workflow, v model.WorkflowVersion, spec *workflow.Spec,
-	inputs map[string]any, bindings map[string]workflow.ToolBinding, source, conversationID, triggerID, parentRunID string,
-	dryRun bool, unattended string, replay map[string]any) (model.Run, error) {
+func (a *App) startWorkflowRun(
+	ctx context.Context,
+	w model.Workflow,
+	v model.WorkflowVersion,
+	spec *workflow.Spec,
+	inputs map[string]any,
+	bindings map[string]workflow.ToolBinding,
+	source, conversationID, triggerID, parentRunID string,
+	dryRun bool,
+	unattended string,
+	replay map[string]any,
+) (model.Run, error) {
 	rawInputs, _ := json.Marshal(inputs)
 	run, err := a.Store.CreateRun(ctx, model.Run{
 		TargetKind: "workflow", TargetID: w.ID, TargetVer: v.ID, Source: source,
@@ -275,15 +350,39 @@ func (a *App) startWorkflowRun(ctx context.Context, w model.Workflow, v model.Wo
 		return run, err
 	}
 	a.Bus.EmitNoErr(model.Event{Stream: model.RunStream(run.ID), Type: "run.queued", RunID: run.ID,
-		Payload: a.mustPayload(map[string]any{"target": "workflow", "name": w.Name, "source": source, "inputs": inputs, "trigger_id": triggerID})})
+		Payload: a.mustPayload(
+			map[string]any{
+				"target":     "workflow",
+				"name":       w.Name,
+				"source":     source,
+				"inputs":     inputs,
+				"trigger_id": triggerID,
+			},
+		)})
 	runCtx, cancel := context.WithCancel(context.Background())
 	control := a.registerRun(run.ID, cancel)
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				_ = a.Store.FinishRun(context.Background(), run.ID, model.RunFailed, fmt.Sprintf("internal error: %v", r))
-				a.Bus.EmitNoErr(model.Event{Stream: model.RunStream(run.ID), Type: "run.finished", RunID: run.ID,
-					Payload: a.mustPayload(map[string]any{"status": model.RunFailed, "error": fmt.Sprintf("internal error: %v", r)})})
+				_ = a.Store.FinishRun(
+					context.Background(),
+					run.ID,
+					model.RunFailed,
+					fmt.Sprintf("internal error: %v", r),
+				)
+				a.Bus.EmitNoErr(
+					model.Event{
+						Stream: model.RunStream(run.ID),
+						Type:   "run.finished",
+						RunID:  run.ID,
+						Payload: a.mustPayload(
+							map[string]any{
+								"status": model.RunFailed,
+								"error":  fmt.Sprintf("internal error: %v", r),
+							},
+						),
+					},
+				)
 			}
 			a.unregisterRun(run.ID)
 			cancel()
@@ -292,12 +391,29 @@ func (a *App) startWorkflowRun(ctx context.Context, w model.Workflow, v model.Wo
 		case a.sem <- struct{}{}:
 			defer func() { <-a.sem }()
 		case <-runCtx.Done():
-			_ = a.Store.FinishRun(context.Background(), run.ID, model.RunCancelled, "cancelled before start")
-			a.Bus.EmitNoErr(model.Event{Stream: model.RunStream(run.ID), Type: "run.finished", RunID: run.ID,
-				Payload: a.mustPayload(map[string]any{"status": model.RunCancelled, "error": "cancelled before start"})})
+			_ = a.Store.FinishRun(
+				context.Background(),
+				run.ID,
+				model.RunCancelled,
+				"cancelled before start",
+			)
+			a.Bus.EmitNoErr(
+				model.Event{Stream: model.RunStream(run.ID), Type: "run.finished", RunID: run.ID,
+					Payload: a.mustPayload(
+						map[string]any{
+							"status": model.RunCancelled,
+							"error":  "cancelled before start",
+						},
+					)},
+			)
 			return
 		case <-a.closeCh:
-			_ = a.Store.FinishRun(context.Background(), run.ID, model.RunCancelled, "app shutting down")
+			_ = a.Store.FinishRun(
+				context.Background(),
+				run.ID,
+				model.RunCancelled,
+				"app shutting down",
+			)
 			return
 		}
 		a.Engine.Run(runCtx, spec, workflow.RunRequest{
@@ -309,7 +425,11 @@ func (a *App) startWorkflowRun(ctx context.Context, w model.Workflow, v model.Wo
 	return run, nil
 }
 
-func (a *App) resolveBindings(ctx context.Context, spec *workflow.Spec, depth int) (map[string]workflow.ToolBinding, error) {
+func (a *App) resolveBindings(
+	ctx context.Context,
+	spec *workflow.Spec,
+	depth int,
+) (map[string]workflow.ToolBinding, error) {
 	if depth > 4 {
 		return nil, errors.New("workflow nesting is too deep")
 	}
@@ -379,8 +499,10 @@ func (a *App) ResumeRun(ctx context.Context, runID string) error {
 	if c := a.runControl(runID); c != nil {
 		c.Resume()
 		_ = a.Store.SetRunStatus(ctx, runID, model.RunRunning, "")
-		a.Bus.EmitNoErr(model.Event{Stream: model.RunStream(runID), Type: "run.resumed", RunID: runID,
-			Payload: a.mustPayload(map[string]any{})})
+		a.Bus.EmitNoErr(
+			model.Event{Stream: model.RunStream(runID), Type: "run.resumed", RunID: runID,
+				Payload: a.mustPayload(map[string]any{})},
+		)
 		return nil
 	}
 	// Resume after restart: reload the pinned version and continue from the
@@ -470,7 +592,21 @@ func (a *App) Rerun(ctx context.Context, runID string) (model.Run, error) {
 	if err != nil {
 		return model.Run{}, err
 	}
-	return a.startWorkflowRun(ctx, w, v, spec, clean, bindings, "manual", "", "", r.ID, false, spec.Settings.Unattended, nil)
+	return a.startWorkflowRun(
+		ctx,
+		w,
+		v,
+		spec,
+		clean,
+		bindings,
+		"manual",
+		"",
+		"",
+		r.ID,
+		false,
+		spec.Settings.Unattended,
+		nil,
+	)
 }
 
 func (a *App) recoverInterrupted(ctx context.Context) {
@@ -478,7 +614,13 @@ func (a *App) recoverInterrupted(ctx context.Context) {
 	// so a resumed run creates a fresh, actionable approval.
 	if pending, err := a.Store.PendingApprovals(ctx); err == nil {
 		for _, ap := range pending {
-			_ = a.setApprovalStatus(ctx, ap.ID, "expired", "interrupted", "approval interrupted by app restart")
+			_ = a.setApprovalStatus(
+				ctx,
+				ap.ID,
+				"expired",
+				"interrupted",
+				"approval interrupted by app restart",
+			)
 		}
 	}
 	runs, err := a.Store.InterruptedRuns(ctx)
@@ -486,7 +628,12 @@ func (a *App) recoverInterrupted(ctx context.Context) {
 		return
 	}
 	for _, r := range runs {
-		_ = a.Store.SetRunStatus(ctx, r.ID, model.RunPaused, "interrupted by app restart; press Resume to continue")
+		_ = a.Store.SetRunStatus(
+			ctx,
+			r.ID,
+			model.RunPaused,
+			"interrupted by app restart; press Resume to continue",
+		)
 	}
 }
 

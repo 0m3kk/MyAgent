@@ -38,9 +38,17 @@ func NewExecutor(workspaceRoot, dataDir string) *Executor {
 	return &Executor{WorkspaceRoot: workspaceRoot, DataDir: dataDir, HTTP: SafeHTTPClient()}
 }
 
-func (e *Executor) Execute(ctx context.Context, m *Manifest, input map[string]any, opts ExecOptions) (any, error) {
+func (e *Executor) Execute(
+	ctx context.Context,
+	m *Manifest,
+	input map[string]any,
+	opts ExecOptions,
+) (any, error) {
 	if m == nil {
-		return nil, &workflow.ToolError{Kind: "invalid_manifest", Message: "tool manifest is missing"}
+		return nil, &workflow.ToolError{
+			Kind:    "invalid_manifest",
+			Message: "tool manifest is missing",
+		}
 	}
 	if opts.Manifest == nil {
 		opts.Manifest = m
@@ -78,7 +86,10 @@ func (e *Executor) Execute(ctx context.Context, m *Manifest, input map[string]an
 	case "script":
 		out, err = e.executeScript(ctx, m, input, opts)
 	case "mcp":
-		err = &workflow.ToolError{Kind: "unsupported", Message: "MCP tools are managed by the MCP client, not the local executor"}
+		err = &workflow.ToolError{
+			Kind:    "unsupported",
+			Message: "MCP tools are managed by the MCP client, not the local executor",
+		}
 	default:
 		err = &workflow.ToolError{Kind: "invalid_manifest", Message: "unknown tool kind " + m.Kind}
 	}
@@ -96,10 +107,21 @@ func (e *Executor) Execute(ctx context.Context, m *Manifest, input map[string]an
 	raw, _ := json.Marshal(out)
 	limit := m.Limits.OutputKB * 1024
 	if limit > 0 && len(raw) > limit {
-		return nil, &workflow.ToolError{Kind: "output_too_large", Message: fmt.Sprintf("tool output is %d bytes, limit is %d", len(raw), limit)}
+		return nil, &workflow.ToolError{
+			Kind:    "output_too_large",
+			Message: fmt.Sprintf("tool output is %d bytes, limit is %d", len(raw), limit),
+		}
 	}
 	if iss := ValidateOutput(m, out); len(iss) > 0 {
-		return nil, &workflow.ToolError{Kind: "invalid_output", Message: "tool output does not match output_schema: " + formatIssues(iss) + " (got " + truncate(string(raw), 300) + ")"}
+		return nil, &workflow.ToolError{
+			Kind: "invalid_output",
+			Message: "tool output does not match output_schema: " + formatIssues(
+				iss,
+			) + " (got " + truncate(
+				string(raw),
+				300,
+			) + ")",
+		}
 	}
 	return out, nil
 }
@@ -136,7 +158,10 @@ func (e *Executor) ResolveFilePath(inputPath string, forWrite bool) (string, err
 		realRoot = root
 	}
 	if real != realRoot && !strings.HasPrefix(real, realRoot+string(os.PathSeparator)) {
-		return "", &workflow.ToolError{Kind: "permission_denied", Message: "path is outside the workspace: " + p}
+		return "", &workflow.ToolError{
+			Kind:    "permission_denied",
+			Message: "path is outside the workspace: " + p,
+		}
 	}
 	_ = forWrite
 	return real, nil
@@ -214,11 +239,15 @@ func checkDomain(permissions []string, rawURL string) error {
 		host = host[:i]
 	}
 	for _, d := range permissions {
-		if strings.EqualFold(host, d) || strings.HasSuffix(strings.ToLower(host), "."+strings.ToLower(d)) {
+		if strings.EqualFold(host, d) ||
+			strings.HasSuffix(strings.ToLower(host), "."+strings.ToLower(d)) {
 			return nil
 		}
 	}
-	return &workflow.ToolError{Kind: "permission_denied", Message: "domain is not allowed by the manifest: " + host}
+	return &workflow.ToolError{
+		Kind:    "permission_denied",
+		Message: "domain is not allowed by the manifest: " + host,
+	}
 }
 
 func fileSecretEnv(decl SecretDecl, value, dir string) (string, error) {

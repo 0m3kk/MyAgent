@@ -34,7 +34,12 @@ type ToolExecOptions struct {
 
 type ToolRunner interface {
 	Resolve(ctx context.Context, ref string) (ToolBinding, error)
-	Execute(ctx context.Context, binding ToolBinding, input map[string]any, opts ToolExecOptions) (any, error)
+	Execute(
+		ctx context.Context,
+		binding ToolBinding,
+		input map[string]any,
+		opts ToolExecOptions,
+	) (any, error)
 }
 
 type ToolError struct {

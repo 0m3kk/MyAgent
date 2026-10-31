@@ -34,7 +34,8 @@ func (s *Server) Handler() http.Handler {
 func (s *Server) authMW(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		p := r.URL.Path
-		if p == "/api/health" || p == "/api/dev-token" || strings.HasPrefix(p, "/api/hooks/") || !strings.HasPrefix(p, "/api/") {
+		if p == "/api/health" || p == "/api/dev-token" || strings.HasPrefix(p, "/api/hooks/") ||
+			!strings.HasPrefix(p, "/api/") {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -158,7 +159,15 @@ func (s *Server) routes() {
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "version": s.app.Config().Version, "time": time.Now().UnixMilli()})
+	writeJSON(
+		w,
+		http.StatusOK,
+		map[string]any{
+			"ok":      true,
+			"version": s.app.Config().Version,
+			"time":    time.Now().UnixMilli(),
+		},
+	)
 }
 
 func (s *Server) handleDevToken(w http.ResponseWriter, r *http.Request) {
@@ -192,7 +201,8 @@ func (s *Server) serveUI(w http.ResponseWriter, r *http.Request) {
 		clean = "/index.html"
 	}
 	full := filepath.Join(s.uiDir, clean)
-	if !strings.HasPrefix(full, filepath.Clean(s.uiDir)+string(os.PathSeparator)) && full != filepath.Join(filepath.Clean(s.uiDir), "index.html") {
+	if !strings.HasPrefix(full, filepath.Clean(s.uiDir)+string(os.PathSeparator)) &&
+		full != filepath.Join(filepath.Clean(s.uiDir), "index.html") {
 		writeError(w, http.StatusBadRequest, "invalid path", nil)
 		return
 	}
@@ -202,12 +212,27 @@ func (s *Server) serveUI(w http.ResponseWriter, r *http.Request) {
 	}
 	index := filepath.Join(s.uiDir, "index.html")
 	if _, err := os.Stat(index); err != nil {
-		writeError(w, http.StatusNotFound, "UI is not built. Run `make ui` or use the Vite dev server.", nil)
+		writeError(
+			w,
+			http.StatusNotFound,
+			"UI is not built. Run `make ui` or use the Vite dev server.",
+			nil,
+		)
 		return
 	}
 	// The local UI gets a SameSite session cookie so reloads keep working. The
 	// token query parameter is still accepted for CLI tools and SSE clients.
-	http.SetCookie(w, &http.Cookie{Name: "myagent_session", Value: s.token, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode, MaxAge: 30 * 24 * 3600})
+	http.SetCookie(
+		w,
+		&http.Cookie{
+			Name:     "myagent_session",
+			Value:    s.token,
+			Path:     "/",
+			HttpOnly: true,
+			SameSite: http.SameSiteStrictMode,
+			MaxAge:   30 * 24 * 3600,
+		},
+	)
 	http.ServeFile(w, r, index)
 }
 

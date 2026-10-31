@@ -45,15 +45,29 @@ func (s *Server) handleSaveWorkflow(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := s.app.SaveWorkflowDraft(r.Context(), yamlText, changeNote, createdBy, base)
 	if err != nil && res.Version.ID == "" {
-		writeError(w, http.StatusUnprocessableEntity, err.Error(), map[string]any{"validation": res.Validation})
+		writeError(
+			w,
+			http.StatusUnprocessableEntity,
+			err.Error(),
+			map[string]any{"validation": res.Validation},
+		)
 		return
 	}
 	if res.Version.ID == "" {
-		writeError(w, http.StatusUnprocessableEntity, "workflow has validation errors", map[string]any{"validation": res.Validation})
+		writeError(
+			w,
+			http.StatusUnprocessableEntity,
+			"workflow has validation errors",
+			map[string]any{"validation": res.Validation},
+		)
 		return
 	}
 	if approve, _ := body["approve"].(bool); approve {
-		if err := s.app.ApproveWorkflowVersion(r.Context(), res.Workflow.ID, res.Version.ID); err != nil {
+		if err := s.app.ApproveWorkflowVersion(
+			r.Context(),
+			res.Workflow.ID,
+			res.Version.ID,
+		); err != nil {
 			writeError(w, http.StatusUnprocessableEntity, err.Error(), nil)
 			return
 		}
@@ -88,7 +102,11 @@ func (s *Server) handleDeleteWorkflow(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleApproveWorkflow(w http.ResponseWriter, r *http.Request) {
-	if err := s.app.ApproveWorkflowVersion(r.Context(), r.PathValue("id"), r.PathValue("vid")); err != nil {
+	if err := s.app.ApproveWorkflowVersion(
+		r.Context(),
+		r.PathValue("id"),
+		r.PathValue("vid"),
+	); err != nil {
 		writeError(w, http.StatusUnprocessableEntity, err.Error(), nil)
 		return
 	}
@@ -113,7 +131,17 @@ func (s *Server) handleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 		source = "manual"
 	}
 	unattended, _ := body["unattended"].(string)
-	run, err := s.app.RunWorkflow(r.Context(), r.PathValue("id"), versionID, inputs, source, "", false, unattended, "")
+	run, err := s.app.RunWorkflow(
+		r.Context(),
+		r.PathValue("id"),
+		versionID,
+		inputs,
+		source,
+		"",
+		false,
+		unattended,
+		"",
+	)
 	if err != nil {
 		if errors.Is(err, app.ErrConcurrency) {
 			writeError(w, http.StatusConflict, err.Error(), nil)
@@ -146,8 +174,16 @@ func (s *Server) handleCreateTrigger(w http.ResponseWriter, r *http.Request) {
 	}
 	unattended, _ := body["unattended"].(string)
 	concurrency, _ := body["concurrency"].(string)
-	tr, err := s.app.CreateTriggerRecord(r.Context(), r.PathValue("id"), kind, mapFrom(body["config"]),
-		mapFrom(body["inputs"]), enabled, unattended, concurrency)
+	tr, err := s.app.CreateTriggerRecord(
+		r.Context(),
+		r.PathValue("id"),
+		kind,
+		mapFrom(body["config"]),
+		mapFrom(body["inputs"]),
+		enabled,
+		unattended,
+		concurrency,
+	)
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, err.Error(), nil)
 		return

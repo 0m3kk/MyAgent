@@ -22,12 +22,23 @@ type fakeTools struct {
 }
 
 func (f *fakeTools) Resolve(ctx context.Context, ref string) (ToolBinding, error) {
-	return ToolBinding{Name: "test.echo", VersionID: "tv1", SideEffect: "read", InputSchema: map[string]any{
-		"type": "object", "properties": map[string]any{"value": map[string]any{"type": "number"}},
-	}}, nil
+	return ToolBinding{
+		Name:       "test.echo",
+		VersionID:  "tv1",
+		SideEffect: "read",
+		InputSchema: map[string]any{
+			"type":       "object",
+			"properties": map[string]any{"value": map[string]any{"type": "number"}},
+		},
+	}, nil
 }
 
-func (f *fakeTools) Execute(ctx context.Context, b ToolBinding, input map[string]any, opts ToolExecOptions) (any, error) {
+func (f *fakeTools) Execute(
+	ctx context.Context,
+	b ToolBinding,
+	input map[string]any,
+	opts ToolExecOptions,
+) (any, error) {
 	f.mu.Lock()
 	f.calls++
 	call := f.calls
@@ -41,7 +52,10 @@ func (f *fakeTools) Execute(ctx context.Context, b ToolBinding, input map[string
 
 type fakeApprovals struct{ approve bool }
 
-func (f *fakeApprovals) RequestApproval(ctx context.Context, req ApprovalRequest) (ApprovalDecision, error) {
+func (f *fakeApprovals) RequestApproval(
+	ctx context.Context,
+	req ApprovalRequest,
+) (ApprovalDecision, error) {
 	return ApprovalDecision{Approved: f.approve, Comment: "test"}, nil
 }
 
@@ -61,14 +75,25 @@ func newTestEngine(t *testing.T) (*Engine, *store.Store, *fakeTools) {
 	t.Cleanup(func() { st.Close() })
 	tools := &fakeTools{}
 	bus := eventbus.New(st)
-	eng := &Engine{Store: st, Bus: bus, Tools: tools, LLM: &fakeLLM{}, Approvals: &fakeApprovals{approve: true}, ArtifactDir: dir}
+	eng := &Engine{
+		Store:       st,
+		Bus:         bus,
+		Tools:       tools,
+		LLM:         &fakeLLM{},
+		Approvals:   &fakeApprovals{approve: true},
+		ArtifactDir: dir,
+	}
 	return eng, st, tools
 }
 
 func makeRun(t *testing.T, st *store.Store) model.Run {
 	t.Helper()
 	run, err := st.CreateRun(context.Background(), model.Run{
-		TargetKind: "workflow", TargetVer: "wv1", Source: "manual", Inputs: json.RawMessage(`{}`), Status: model.RunQueued,
+		TargetKind: "workflow",
+		TargetVer:  "wv1",
+		Source:     "manual",
+		Inputs:     json.RawMessage(`{}`),
+		Status:     model.RunQueued,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -105,7 +130,11 @@ func TestEngineSuccess(t *testing.T) {
 		t.Fatal(err)
 	}
 	run := makeRun(t, st)
-	res := eng.Run(context.Background(), spec, RunRequest{RunID: run.ID, Source: "manual", Inputs: map[string]any{}})
+	res := eng.Run(
+		context.Background(),
+		spec,
+		RunRequest{RunID: run.ID, Source: "manual", Inputs: map[string]any{}},
+	)
 	if res.Status != model.RunSucceeded {
 		t.Fatalf("status %s err %s", res.Status, res.Error)
 	}
@@ -136,7 +165,11 @@ func TestEngineApprovalRejectedSkipsDependents(t *testing.T) {
 	eng.Approvals = &fakeApprovals{approve: false}
 	spec, _ := Parse([]byte(engineYAML))
 	run := makeRun(t, st)
-	res := eng.Run(context.Background(), spec, RunRequest{RunID: run.ID, Source: "manual", Inputs: map[string]any{}})
+	res := eng.Run(
+		context.Background(),
+		spec,
+		RunRequest{RunID: run.ID, Source: "manual", Inputs: map[string]any{}},
+	)
 	if res.Status != model.RunSucceeded {
 		t.Fatalf("status %s err %s", res.Status, res.Error)
 	}
@@ -164,7 +197,11 @@ steps:
     with: {value: 7}
 `))
 	run := makeRun(t, st)
-	res := eng.Run(context.Background(), spec, RunRequest{RunID: run.ID, Source: "manual", Inputs: map[string]any{}})
+	res := eng.Run(
+		context.Background(),
+		spec,
+		RunRequest{RunID: run.ID, Source: "manual", Inputs: map[string]any{}},
+	)
 	if res.Status != model.RunSucceeded {
 		t.Fatalf("status %s err %s", res.Status, res.Error)
 	}
@@ -192,10 +229,20 @@ steps:
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := st.FinishStepRun(context.Background(), sr.ID, "succeeded", `{"n":9}`, ""); err != nil {
+	if err := st.FinishStepRun(
+		context.Background(),
+		sr.ID,
+		"succeeded",
+		`{"n":9}`,
+		"",
+	); err != nil {
 		t.Fatal(err)
 	}
-	res := eng.Run(context.Background(), spec, RunRequest{RunID: run.ID, Source: "manual", Inputs: map[string]any{}, Resume: true})
+	res := eng.Run(
+		context.Background(),
+		spec,
+		RunRequest{RunID: run.ID, Source: "manual", Inputs: map[string]any{}, Resume: true},
+	)
 	if res.Status != model.RunSucceeded {
 		t.Fatalf("status %s err %s", res.Status, res.Error)
 	}

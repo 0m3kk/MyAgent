@@ -26,7 +26,11 @@ type SaveToolResult struct {
 	Issues  []tools.Issue     `json:"issues"`
 }
 
-func (a *App) CreateToolDraft(ctx context.Context, manifestYAML, createdBy string, baseVersion int) (SaveToolResult, error) {
+func (a *App) CreateToolDraft(
+	ctx context.Context,
+	manifestYAML, createdBy string,
+	baseVersion int,
+) (SaveToolResult, error) {
 	if createdBy == "" {
 		createdBy = "user"
 	}
@@ -43,15 +47,37 @@ func (a *App) CreateToolDraft(ctx context.Context, manifestYAML, createdBy strin
 		return SaveToolResult{}, err
 	}
 	if t.CurrentVersionID != "" && baseVersion == 0 && createdBy == "agent" {
-		return SaveToolResult{Issues: []tools.Issue{{Path: "", Message: "base_version is required when the agent edits an existing tool"}}},
-			errors.New("base_version is required")
+		return SaveToolResult{
+				Issues: []tools.Issue{
+					{
+						Path:    "",
+						Message: "base_version is required when the agent edits an existing tool",
+					},
+				},
+			},
+			errors.New(
+				"base_version is required",
+			)
 	}
 	if baseVersion > 0 {
 		if t.CurrentVersionID != "" {
 			cur, err := a.Store.GetToolVersion(ctx, t.CurrentVersionID)
 			if err == nil && cur.Version != baseVersion {
-				return SaveToolResult{Issues: []tools.Issue{{Path: "", Message: fmt.Sprintf("base version %d is stale; current is %d", baseVersion, cur.Version)}}},
-					errors.New("stale base version")
+				return SaveToolResult{
+						Issues: []tools.Issue{
+							{
+								Path: "",
+								Message: fmt.Sprintf(
+									"base version %d is stale; current is %d",
+									baseVersion,
+									cur.Version,
+								),
+							},
+						},
+					},
+					errors.New(
+						"stale base version",
+					)
 			}
 		}
 	}
@@ -67,7 +93,11 @@ func (a *App) CreateToolDraft(ctx context.Context, manifestYAML, createdBy strin
 			copyTree(prev.CodePath, dir, 512*1024)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(dir, "manifest.yaml"), []byte(manifestYAML), 0o644); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(dir, "manifest.yaml"),
+		[]byte(manifestYAML),
+		0o644,
+	); err != nil {
 		return SaveToolResult{}, err
 	}
 	hash := hashToolDir(manifestYAML, dir)
@@ -79,12 +109,17 @@ func (a *App) CreateToolDraft(ctx context.Context, manifestYAML, createdBy strin
 		return SaveToolResult{}, err
 	}
 	a.Bus.EmitNoErr(model.Event{Stream: model.StreamSys, Type: "tool.version.created",
-		Payload: a.mustPayload(map[string]any{"tool_id": t.ID, "version_id": v.ID, "version": v.Version,
-			"name": t.Name, "created_by": createdBy})})
+		Payload: a.mustPayload(
+			map[string]any{"tool_id": t.ID, "version_id": v.ID, "version": v.Version,
+				"name": t.Name, "created_by": createdBy},
+		)})
 	return SaveToolResult{Tool: t, Version: v}, nil
 }
 
-func (a *App) WriteToolFile(ctx context.Context, toolID, versionID, relPath, content string) (model.ToolVersion, error) {
+func (a *App) WriteToolFile(
+	ctx context.Context,
+	toolID, versionID, relPath, content string,
+) (model.ToolVersion, error) {
 	tv, err := a.Store.GetToolVersion(ctx, versionID)
 	if err != nil {
 		return tv, err
@@ -174,7 +209,14 @@ func (a *App) ToolTest(ctx context.Context, toolID, versionID string) ([]tools.T
 		_ = a.Store.UpdateToolVersionStatus(ctx, tv.ID, next, 0)
 	}
 	a.Bus.EmitNoErr(model.Event{Stream: model.StreamSys, Type: "tool.test.finished",
-		Payload: a.mustPayload(map[string]any{"tool_id": toolID, "version_id": versionID, "passed": allOK, "tests": results})})
+		Payload: a.mustPayload(
+			map[string]any{
+				"tool_id":    toolID,
+				"version_id": versionID,
+				"passed":     allOK,
+				"tests":      results,
+			},
+		)})
 	return results, nil
 }
 
@@ -192,14 +234,21 @@ func (a *App) ApproveToolVersion(ctx context.Context, toolID, versionID string) 
 	if tv.Status == model.ToolDraft {
 		return errors.New("tool version is still a draft; run the tests before approval")
 	}
-	if err := a.Store.UpdateToolVersionStatus(ctx, tv.ID, model.ToolActive, ids.NowMS()); err != nil {
+	if err := a.Store.UpdateToolVersionStatus(
+		ctx,
+		tv.ID,
+		model.ToolActive,
+		ids.NowMS(),
+	); err != nil {
 		return err
 	}
 	if err := a.Store.SetToolCurrentVersion(ctx, toolID, tv.ID); err != nil {
 		return err
 	}
 	a.Bus.EmitNoErr(model.Event{Stream: model.StreamSys, Type: "tool.version.approved",
-		Payload: a.mustPayload(map[string]any{"tool_id": toolID, "version_id": versionID, "version": tv.Version})})
+		Payload: a.mustPayload(
+			map[string]any{"tool_id": toolID, "version_id": versionID, "version": tv.Version},
+		)})
 	return nil
 }
 
@@ -214,7 +263,11 @@ func (a *App) DeprecateTool(ctx context.Context, toolID string) error {
 	return a.Store.UpdateToolVersionStatus(ctx, t.CurrentVersionID, model.ToolDeprecated, 0)
 }
 
-func (a *App) RunToolDirect(ctx context.Context, toolID, versionID string, inputs map[string]any) (model.Run, error) {
+func (a *App) RunToolDirect(
+	ctx context.Context,
+	toolID, versionID string,
+	inputs map[string]any,
+) (model.Run, error) {
 	t, err := a.Store.GetToolByID(ctx, toolID)
 	if err != nil {
 		return model.Run{}, err
@@ -240,39 +293,96 @@ func (a *App) RunToolDirect(ctx context.Context, toolID, versionID string, input
 		return model.Run{}, errors.New("invalid inputs: " + formatSchemaIssues(iss))
 	}
 	raw, _ := json.Marshal(inputs)
-	run, err := a.Store.CreateRun(ctx, model.Run{TargetKind: "tool", TargetID: t.ID, TargetVer: tv.ID,
-		Source: "manual", Inputs: raw, Status: model.RunQueued})
+	run, err := a.Store.CreateRun(
+		ctx,
+		model.Run{TargetKind: "tool", TargetID: t.ID, TargetVer: tv.ID,
+			Source: "manual", Inputs: raw, Status: model.RunQueued},
+	)
 	if err != nil {
 		return model.Run{}, err
 	}
 	a.Bus.EmitNoErr(model.Event{Stream: model.RunStream(run.ID), Type: "run.queued", RunID: run.ID,
-		Payload: a.mustPayload(map[string]any{"target": "tool", "name": t.Name, "source": "manual", "inputs": inputs})})
+		Payload: a.mustPayload(
+			map[string]any{"target": "tool", "name": t.Name, "source": "manual", "inputs": inputs},
+		)})
 	go a.executeToolRun(run.ID, t, tv, m, inputs)
 	return run, nil
 }
 
-func (a *App) executeToolRun(runID string, t model.Tool, tv model.ToolVersion, m *tools.Manifest, inputs map[string]any) {
+func (a *App) executeToolRun(
+	runID string,
+	t model.Tool,
+	tv model.ToolVersion,
+	m *tools.Manifest,
+	inputs map[string]any,
+) {
 	ctx := context.Background()
 	start := ids.NowMS()
 	_ = a.Store.StartRun(ctx, runID)
 	a.Bus.EmitNoErr(model.Event{Stream: model.RunStream(runID), Type: "run.started", RunID: runID,
-		Payload: a.mustPayload(map[string]any{"target": "tool", "name": t.Name, "source": "manual", "inputs": inputs, "started_at": start})})
+		Payload: a.mustPayload(
+			map[string]any{
+				"target":     "tool",
+				"name":       t.Name,
+				"source":     "manual",
+				"inputs":     inputs,
+				"started_at": start,
+			},
+		)})
 	step, err := a.Store.StartStepRun(ctx, runID, "tool", 1, "", runID+":tool")
 	if err != nil {
 		_ = a.Store.FinishRun(ctx, runID, model.RunFailed, err.Error())
-		a.Bus.EmitNoErr(model.Event{Stream: model.RunStream(runID), Type: "run.finished", RunID: runID,
-			Payload: a.mustPayload(map[string]any{"status": model.RunFailed, "error": err.Error()})})
+		a.Bus.EmitNoErr(
+			model.Event{Stream: model.RunStream(runID), Type: "run.finished", RunID: runID,
+				Payload: a.mustPayload(
+					map[string]any{"status": model.RunFailed, "error": err.Error()},
+				)},
+		)
 		return
 	}
-	a.Bus.EmitNoErr(model.Event{Stream: model.RunStream(runID), Type: "step.started", RunID: runID, StepID: "tool",
-		Payload: a.mustPayload(map[string]any{"step_id": "tool", "attempt": 1, "kind": "tool"})})
-	a.Bus.EmitNoErr(model.Event{Stream: model.RunStream(runID), Type: "tool.call.started", RunID: runID, StepID: "tool",
-		Payload: a.mustPayload(map[string]any{"tool": t.Name, "tool_version_id": tv.ID, "args": inputs})})
+	a.Bus.EmitNoErr(
+		model.Event{
+			Stream: model.RunStream(runID),
+			Type:   "step.started",
+			RunID:  runID,
+			StepID: "tool",
+			Payload: a.mustPayload(
+				map[string]any{"step_id": "tool", "attempt": 1, "kind": "tool"},
+			),
+		},
+	)
+	a.Bus.EmitNoErr(
+		model.Event{
+			Stream: model.RunStream(runID),
+			Type:   "tool.call.started",
+			RunID:  runID,
+			StepID: "tool",
+			Payload: a.mustPayload(
+				map[string]any{"tool": t.Name, "tool_version_id": tv.ID, "args": inputs},
+			),
+		},
+	)
 	onLog := func(stream, text string) {
-		a.Bus.EmitNoErr(model.Event{Stream: model.RunStream(runID), Type: "step.log", RunID: runID, StepID: "tool",
-			Payload: a.mustPayload(map[string]any{"stream": stream, "text": text})})
+		a.Bus.EmitNoErr(
+			model.Event{
+				Stream:  model.RunStream(runID),
+				Type:    "step.log",
+				RunID:   runID,
+				StepID:  "tool",
+				Payload: a.mustPayload(map[string]any{"stream": stream, "text": text}),
+			},
+		)
 	}
-	secVals, err := a.resolveToolSecretsForVersion(ctx, t.ID, tv.ID, m, runID, "tool", step.ID, "manual")
+	secVals, err := a.resolveToolSecretsForVersion(
+		ctx,
+		t.ID,
+		tv.ID,
+		m,
+		runID,
+		"tool",
+		step.ID,
+		"manual",
+	)
 	if err == nil {
 		var out any
 		out, err = a.Executor.Execute(ctx, m, inputs, tools.ExecOptions{
@@ -282,27 +392,80 @@ func (a *App) executeToolRun(runID string, t model.Tool, tv model.ToolVersion, m
 		if err == nil {
 			raw, _ := json.Marshal(out)
 			_ = a.Store.FinishStepRun(ctx, step.ID, "succeeded", string(raw), "")
-			a.Bus.EmitNoErr(model.Event{Stream: model.RunStream(runID), Type: "step.finished", RunID: runID, StepID: "tool",
-				Payload: a.mustPayload(map[string]any{"step_id": "tool", "status": "succeeded", "output": out, "output_ref": string(raw)})})
-			a.Bus.EmitNoErr(model.Event{Stream: model.RunStream(runID), Type: "tool.call.finished", RunID: runID, StepID: "tool",
-				Payload: a.mustPayload(map[string]any{"tool": t.Name, "status": "succeeded", "result": out})})
+			a.Bus.EmitNoErr(
+				model.Event{
+					Stream: model.RunStream(runID),
+					Type:   "step.finished",
+					RunID:  runID,
+					StepID: "tool",
+					Payload: a.mustPayload(
+						map[string]any{
+							"step_id":    "tool",
+							"status":     "succeeded",
+							"output":     out,
+							"output_ref": string(raw),
+						},
+					),
+				},
+			)
+			a.Bus.EmitNoErr(
+				model.Event{
+					Stream: model.RunStream(runID),
+					Type:   "tool.call.finished",
+					RunID:  runID,
+					StepID: "tool",
+					Payload: a.mustPayload(
+						map[string]any{"tool": t.Name, "status": "succeeded", "result": out},
+					),
+				},
+			)
 			_ = a.Store.FinishRun(ctx, runID, model.RunSucceeded, "")
-			a.Bus.EmitNoErr(model.Event{Stream: model.RunStream(runID), Type: "run.finished", RunID: runID,
-				Payload: a.mustPayload(map[string]any{"status": model.RunSucceeded, "outputs": map[string]any{"result": out}})})
+			a.Bus.EmitNoErr(
+				model.Event{Stream: model.RunStream(runID), Type: "run.finished", RunID: runID,
+					Payload: a.mustPayload(
+						map[string]any{
+							"status":  model.RunSucceeded,
+							"outputs": map[string]any{"result": out},
+						},
+					)},
+			)
 			return
 		}
 	}
 	_ = a.Store.FinishStepRun(ctx, step.ID, "failed", "", err.Error())
-	a.Bus.EmitNoErr(model.Event{Stream: model.RunStream(runID), Type: "step.finished", RunID: runID, StepID: "tool",
-		Payload: a.mustPayload(map[string]any{"step_id": "tool", "status": "failed", "error": err.Error()})})
-	a.Bus.EmitNoErr(model.Event{Stream: model.RunStream(runID), Type: "tool.call.finished", RunID: runID, StepID: "tool",
-		Payload: a.mustPayload(map[string]any{"tool": t.Name, "status": "failed", "error": err.Error()})})
+	a.Bus.EmitNoErr(
+		model.Event{
+			Stream: model.RunStream(runID),
+			Type:   "step.finished",
+			RunID:  runID,
+			StepID: "tool",
+			Payload: a.mustPayload(
+				map[string]any{"step_id": "tool", "status": "failed", "error": err.Error()},
+			),
+		},
+	)
+	a.Bus.EmitNoErr(
+		model.Event{
+			Stream: model.RunStream(runID),
+			Type:   "tool.call.finished",
+			RunID:  runID,
+			StepID: "tool",
+			Payload: a.mustPayload(
+				map[string]any{"tool": t.Name, "status": "failed", "error": err.Error()},
+			),
+		},
+	)
 	_ = a.Store.FinishRun(ctx, runID, model.RunFailed, err.Error())
 	a.Bus.EmitNoErr(model.Event{Stream: model.RunStream(runID), Type: "run.finished", RunID: runID,
 		Payload: a.mustPayload(map[string]any{"status": model.RunFailed, "error": err.Error()})})
 }
 
-func (a *App) resolveToolSecretsForVersion(ctx context.Context, toolID, versionID string, m *tools.Manifest, runID, stepID, stepRunID, source string) (map[string]string, error) {
+func (a *App) resolveToolSecretsForVersion(
+	ctx context.Context,
+	toolID, versionID string,
+	m *tools.Manifest,
+	runID, stepID, stepRunID, source string,
+) (map[string]string, error) {
 	out := map[string]string{}
 	binds, _ := a.Store.SecretBindings(ctx, toolID)
 	byName := map[string]model.SecretBinding{}
@@ -313,31 +476,52 @@ func (a *App) resolveToolSecretsForVersion(ctx context.Context, toolID, versionI
 		b, ok := byName[d.Name]
 		if !ok {
 			if d.Required {
-				return nil, &workflow.ToolError{Kind: "missing_secret", Message: "secret " + d.Name + " is not bound to this tool"}
+				return nil, &workflow.ToolError{
+					Kind:    "missing_secret",
+					Message: "secret " + d.Name + " is not bound to this tool",
+				}
 			}
 			continue
 		}
 		val, rec, err := a.Secrets.Get(ctx, b.SecretID)
 		if err != nil {
 			if d.Required {
-				return nil, &workflow.ToolError{Kind: "missing_secret", Message: "secret " + d.Name + " is unavailable"}
+				return nil, &workflow.ToolError{
+					Kind:    "missing_secret",
+					Message: "secret " + d.Name + " is unavailable",
+				}
 			}
 			continue
 		}
 		if rec.AskEachRun && runID != "" {
 			dec, derr := a.RequestApproval(ctx, workflow.ApprovalRequest{
-				RunID: runID, StepID: stepID, StepRunID: stepRunID, Kind: "secret",
-				Title: "Use secret " + rec.Name + "?", Description: "Tool " + m.Name + " wants to access this secret.",
-				Source: source, ExpiresAt: time.Now().Add(30 * time.Minute),
+				RunID:       runID,
+				StepID:      stepID,
+				StepRunID:   stepRunID,
+				Kind:        "secret",
+				Title:       "Use secret " + rec.Name + "?",
+				Description: "Tool " + m.Name + " wants to access this secret.",
+				Source:      source,
+				ExpiresAt:   time.Now().Add(30 * time.Minute),
 			})
 			if derr != nil || !dec.Approved {
-				return nil, &workflow.ToolError{Kind: "approval_denied", Message: "secret access was denied"}
+				return nil, &workflow.ToolError{
+					Kind:    "approval_denied",
+					Message: "secret access was denied",
+				}
 			}
 		}
 		out[d.Name] = val
 		_ = a.Store.LogSecretAccess(ctx, b.SecretID, runID, versionID)
-		a.Bus.EmitNoErr(model.Event{Stream: model.RunStream(runID), Type: "secret.accessed", RunID: runID, StepID: stepID,
-			Payload: a.mustPayload(map[string]any{"secret_id": b.SecretID, "tool": m.Name})})
+		a.Bus.EmitNoErr(
+			model.Event{
+				Stream:  model.RunStream(runID),
+				Type:    "secret.accessed",
+				RunID:   runID,
+				StepID:  stepID,
+				Payload: a.mustPayload(map[string]any{"secret_id": b.SecretID, "tool": m.Name}),
+			},
+		)
 	}
 	return out, nil
 }

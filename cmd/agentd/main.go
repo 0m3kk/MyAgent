@@ -35,12 +35,24 @@ func main() {
 	// Keep the database, WAL, key files and tool artifacts private by default.
 	syscall.Umask(0o077)
 	var (
-		addr      = flag.String("addr", envOr("MYAGENT_ADDR", "127.0.0.1:8787"), "listen address (loopback only)")
+		addr = flag.String(
+			"addr",
+			envOr("MYAGENT_ADDR", "127.0.0.1:8787"),
+			"listen address (loopback only)",
+		)
 		dataDir   = flag.String("data", os.Getenv("MYAGENT_DATA_DIR"), "data directory")
-		workspace = flag.String("workspace", os.Getenv("MYAGENT_WORKSPACE"), "agent workspace directory")
+		workspace = flag.String(
+			"workspace",
+			os.Getenv("MYAGENT_WORKSPACE"),
+			"agent workspace directory",
+		)
 		uiDir     = flag.String("ui", envOr("MYAGENT_UI_DIR", "ui/dist"), "built UI directory")
 		openUI    = flag.Bool("open", true, "open the app in your browser")
-		parentPID = flag.Int("parent-pid", 0, "exit when this parent process disappears (used by the native shell)")
+		parentPID = flag.Int(
+			"parent-pid",
+			0,
+			"exit when this parent process disappears (used by the native shell)",
+		)
 	)
 	flag.Parse()
 
@@ -55,7 +67,10 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, err := app.New(ctx, app.Config{DataDir: *dataDir, WorkspaceRoot: *workspace, Address: *addr, Version: version})
+	a, err := app.New(
+		ctx,
+		app.Config{DataDir: *dataDir, WorkspaceRoot: *workspace, Address: *addr, Version: version},
+	)
 	if err != nil {
 		log.Fatalf("start app: %v", err)
 	}
@@ -78,7 +93,13 @@ func main() {
 	}
 
 	infoPath := filepath.Join(a.Config().DataDir, "api.json")
-	info := runtimeInfo{URL: url, Token: token, PID: os.Getpid(), Data: a.Config().DataDir, UI: *uiDir}
+	info := runtimeInfo{
+		URL:   url,
+		Token: token,
+		PID:   os.Getpid(),
+		Data:  a.Config().DataDir,
+		UI:    *uiDir,
+	}
 	raw, _ := json.MarshalIndent(info, "", "  ")
 	if err := os.MkdirAll(filepath.Dir(infoPath), 0o700); err != nil {
 		log.Fatal(err)

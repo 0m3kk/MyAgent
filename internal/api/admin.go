@@ -40,7 +40,15 @@ func (s *Server) handleListSecrets(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error(), nil)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"secrets": list, "key_kind": s.app.KeyKind(), "key_description": s.app.KeyDescription()})
+	writeJSON(
+		w,
+		http.StatusOK,
+		map[string]any{
+			"secrets":         list,
+			"key_kind":        s.app.KeyKind(),
+			"key_description": s.app.KeyDescription(),
+		},
+	)
 }
 
 func (s *Server) handlePutSecret(w http.ResponseWriter, r *http.Request) {
@@ -71,7 +79,11 @@ func (s *Server) handleDeleteSecret(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleKeyInfo(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"kind": s.app.KeyKind(), "description": s.app.KeyDescription()})
+	writeJSON(
+		w,
+		http.StatusOK,
+		map[string]any{"kind": s.app.KeyKind(), "description": s.app.KeyDescription()},
+	)
 }
 
 func (s *Server) handleListModels(w http.ResponseWriter, r *http.Request) {
@@ -111,8 +123,15 @@ func (s *Server) handleSaveModel(w http.ResponseWriter, r *http.Request) {
 		caps, _ = json.Marshal(c)
 	}
 	p, err := s.app.SaveModelProfile(r.Context(), model.ModelProfile{
-		ID: existing.ID, Name: name, BaseURL: baseURL, Model: modelName, Role: role,
-		Params: paramsRaw, Capabilities: caps, SecretID: existing.SecretID, CreatedAt: existing.CreatedAt,
+		ID:           existing.ID,
+		Name:         name,
+		BaseURL:      baseURL,
+		Model:        modelName,
+		Role:         role,
+		Params:       paramsRaw,
+		Capabilities: caps,
+		SecretID:     existing.SecretID,
+		CreatedAt:    existing.CreatedAt,
 	}, apiKey)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error(), nil)

@@ -13,8 +13,15 @@ func (s *Server) handleListTuning(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	suites, _ := s.app.EvalSuiteList(r.Context())
-	failed, _ := s.app.Store.ListRuns(r.Context(), model.RunFilter{Status: model.RunFailed, Limit: 20})
-	writeJSON(w, http.StatusOK, map[string]any{"proposals": proposals, "suites": suites, "failed_runs": failed})
+	failed, _ := s.app.Store.ListRuns(
+		r.Context(),
+		model.RunFilter{Status: model.RunFailed, Limit: 20},
+	)
+	writeJSON(
+		w,
+		http.StatusOK,
+		map[string]any{"proposals": proposals, "suites": suites, "failed_runs": failed},
+	)
 }
 
 func (s *Server) handleAnalyzeRun(w http.ResponseWriter, r *http.Request) {

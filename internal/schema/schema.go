@@ -130,7 +130,13 @@ func (s *Schema) validate(path string, v any, issues *[]Issue) {
 		}
 	}
 	if t, ok := s.raw["type"]; ok && !matchesType(t, v) {
-		*issues = append(*issues, Issue{Path: path, Message: fmt.Sprintf("expected %s, got %s", typeName(t), valueType(v))})
+		*issues = append(
+			*issues,
+			Issue{
+				Path:    path,
+				Message: fmt.Sprintf("expected %s, got %s", typeName(t), valueType(v)),
+			},
+		)
 		return
 	}
 	if enum, ok := s.raw["enum"].([]any); ok {
@@ -142,7 +148,10 @@ func (s *Schema) validate(path string, v any, issues *[]Issue) {
 			}
 		}
 		if !found {
-			*issues = append(*issues, Issue{Path: path, Message: "value is not one of the allowed enum values"})
+			*issues = append(
+				*issues,
+				Issue{Path: path, Message: "value is not one of the allowed enum values"},
+			)
 		}
 	}
 	switch val := v.(type) {
@@ -152,7 +161,10 @@ func (s *Schema) validate(path string, v any, issues *[]Issue) {
 			for _, r := range req {
 				name, _ := r.(string)
 				if _, exists := val[name]; !exists {
-					*issues = append(*issues, Issue{Path: join(path, name), Message: "required field is missing"})
+					*issues = append(
+						*issues,
+						Issue{Path: join(path, name), Message: "required field is missing"},
+					)
 				}
 			}
 		}
@@ -168,7 +180,10 @@ func (s *Schema) validate(path string, v any, issues *[]Issue) {
 				switch ap := s.raw["additionalProperties"].(type) {
 				case bool:
 					if !ap {
-						*issues = append(*issues, Issue{Path: join(path, name), Message: "unexpected field"})
+						*issues = append(
+							*issues,
+							Issue{Path: join(path, name), Message: "unexpected field"},
+						)
 					}
 				case map[string]any:
 					(&Schema{raw: ap}).validate(join(path, name), pv, issues)
@@ -182,21 +197,36 @@ func (s *Schema) validate(path string, v any, issues *[]Issue) {
 			}
 		}
 		if n, ok := number(s.raw["minItems"]); ok && float64(len(val)) < n {
-			*issues = append(*issues, Issue{Path: path, Message: fmt.Sprintf("must contain at least %v items", n)})
+			*issues = append(
+				*issues,
+				Issue{Path: path, Message: fmt.Sprintf("must contain at least %v items", n)},
+			)
 		}
 		if n, ok := number(s.raw["maxItems"]); ok && float64(len(val)) > n {
-			*issues = append(*issues, Issue{Path: path, Message: fmt.Sprintf("must contain at most %v items", n)})
+			*issues = append(
+				*issues,
+				Issue{Path: path, Message: fmt.Sprintf("must contain at most %v items", n)},
+			)
 		}
 	case string:
 		if n, ok := number(s.raw["minLength"]); ok && float64(len([]rune(val))) < n {
-			*issues = append(*issues, Issue{Path: path, Message: fmt.Sprintf("must be at least %v characters", n)})
+			*issues = append(
+				*issues,
+				Issue{Path: path, Message: fmt.Sprintf("must be at least %v characters", n)},
+			)
 		}
 		if n, ok := number(s.raw["maxLength"]); ok && float64(len([]rune(val))) > n {
-			*issues = append(*issues, Issue{Path: path, Message: fmt.Sprintf("must be at most %v characters", n)})
+			*issues = append(
+				*issues,
+				Issue{Path: path, Message: fmt.Sprintf("must be at most %v characters", n)},
+			)
 		}
 		if pat, ok := s.raw["pattern"].(string); ok {
 			if re, err := regexp.Compile(pat); err == nil && !re.MatchString(val) {
-				*issues = append(*issues, Issue{Path: path, Message: "does not match the required pattern"})
+				*issues = append(
+					*issues,
+					Issue{Path: path, Message: "does not match the required pattern"},
+				)
 			}
 		}
 	case float64:
@@ -217,7 +247,10 @@ func (s *Schema) validate(path string, v any, issues *[]Issue) {
 			}
 		}
 		if okCount != 1 {
-			*issues = append(*issues, Issue{Path: path, Message: "must match exactly one alternative"})
+			*issues = append(
+				*issues,
+				Issue{Path: path, Message: "must match exactly one alternative"},
+			)
 		}
 	}
 	if anyOf, ok := s.raw["anyOf"].([]any); ok {
@@ -230,7 +263,10 @@ func (s *Schema) validate(path string, v any, issues *[]Issue) {
 			}
 		}
 		if okCount == 0 {
-			*issues = append(*issues, Issue{Path: path, Message: "must match at least one alternative"})
+			*issues = append(
+				*issues,
+				Issue{Path: path, Message: "must match at least one alternative"},
+			)
 		}
 	}
 	if all, ok := s.raw["allOf"].([]any); ok {

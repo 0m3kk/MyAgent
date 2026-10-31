@@ -97,7 +97,12 @@ func (s *Server) handleSaveAsWorkflow(w http.ResponseWriter, r *http.Request) {
 	name, _ := body["name"].(string)
 	res, err := s.app.SaveChatAsWorkflow(r.Context(), r.PathValue("id"), name)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error(), map[string]any{"validation": res.Validation})
+		writeError(
+			w,
+			http.StatusBadRequest,
+			err.Error(),
+			map[string]any{"validation": res.Validation},
+		)
 		return
 	}
 	writeJSON(w, http.StatusOK, res)

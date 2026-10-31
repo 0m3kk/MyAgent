@@ -12,7 +12,12 @@ import (
 	"myagent/internal/workflow"
 )
 
-func (e *Executor) executeScript(ctx context.Context, m *Manifest, input map[string]any, opts ExecOptions) (any, error) {
+func (e *Executor) executeScript(
+	ctx context.Context,
+	m *Manifest,
+	input map[string]any,
+	opts ExecOptions,
+) (any, error) {
 	entry := m.Runtime.Entry
 	if entry == "" {
 		return nil, &workflow.ToolError{Kind: "invalid_tool", Message: "runtime.entry is required"}
@@ -22,9 +27,16 @@ func (e *Executor) executeScript(ctx context.Context, m *Manifest, input map[str
 		entryPath = filepath.Join(opts.ToolDir, entry)
 	}
 	if _, err := os.Stat(entryPath); err != nil {
-		return nil, &workflow.ToolError{Kind: "invalid_tool", Message: "entry file is missing: " + entry}
+		return nil, &workflow.ToolError{
+			Kind:    "invalid_tool",
+			Message: "entry file is missing: " + entry,
+		}
 	}
-	outDir := filepath.Join(e.DataDir, "tmp", fmt.Sprintf("%s-%d", strings.ReplaceAll(m.Name, ".", "_"), time.Now().UnixNano()))
+	outDir := filepath.Join(
+		e.DataDir,
+		"tmp",
+		fmt.Sprintf("%s-%d", strings.ReplaceAll(m.Name, ".", "_"), time.Now().UnixNano()),
+	)
 	secretsDir := filepath.Join(outDir, "secrets")
 	if err := os.MkdirAll(secretsDir, 0o700); err != nil {
 		return nil, &workflow.ToolError{Kind: "crashed", Message: err.Error()}
@@ -56,19 +68,35 @@ func (e *Executor) executeScript(ctx context.Context, m *Manifest, input map[str
 			}
 			env = append(env, decl.Name+"="+path)
 		case "header":
-			headerSecrets = append(headerSecrets, HeaderSecret{Name: decl.Name, Value: val, Header: decl.Header, Domains: decl.Scope.Domains})
+			headerSecrets = append(
+				headerSecrets,
+				HeaderSecret{
+					Name:    decl.Name,
+					Value:   val,
+					Header:  decl.Header,
+					Domains: decl.Scope.Domains,
+				},
+			)
 		}
 	}
 	if len(m.Permissions.Network.Domains) > 0 {
 		proxy, perr := StartProxy(m.Permissions.Network.Domains, headerSecrets, opts.Mocks)
 		if perr != nil {
-			return nil, &workflow.ToolError{Kind: "crashed", Message: "cannot start network proxy: " + perr.Error()}
+			return nil, &workflow.ToolError{
+				Kind:    "crashed",
+				Message: "cannot start network proxy: " + perr.Error(),
+			}
 		}
 		defer proxy.Close()
 		env = append(env, proxy.ProxyEnv()...)
 	}
 
-	ctxPayload := map[string]any{"run_id": opts.RunID, "idem_key": opts.IdemKey, "workspace": e.WorkspaceRoot, "out_dir": outDir}
+	ctxPayload := map[string]any{
+		"run_id":    opts.RunID,
+		"idem_key":  opts.IdemKey,
+		"workspace": e.WorkspaceRoot,
+		"out_dir":   outDir,
+	}
 	reqBody, _ := json.Marshal(map[string]any{"input": input, "ctx": ctxPayload})
 	var cmd string
 	var args []string
@@ -85,7 +113,10 @@ func (e *Executor) executeScript(ctx context.Context, m *Manifest, input map[str
 	case "binary":
 		cmd = entryPath
 	default:
-		return nil, &workflow.ToolError{Kind: "invalid_tool", Message: "unsupported script language " + m.Runtime.Language}
+		return nil, &workflow.ToolError{
+			Kind:    "invalid_tool",
+			Message: "unsupported script language " + m.Runtime.Language,
+		}
 	}
 	allowWrite := len(m.Permissions.FS.Write) > 0 || m.SideEffect == "write"
 	onLog := func(stream, text string) {
@@ -94,12 +125,26 @@ func (e *Executor) executeScript(ctx context.Context, m *Manifest, input map[str
 		}
 	}
 	res := RunSandboxed(ctx, SandboxSpec{
-		Command: cmd, Args: args, Dir: opts.ToolDir, Workspace: e.WorkspaceRoot, ToolDir: opts.ToolDir,
-		OutDir: outDir, AllowNet: len(m.Permissions.Network.Domains) > 0, AllowWrite: allowWrite,
-		AllowExec: m.Permissions.Exec, DenyRead: sandboxDenyPaths(e), Env: env, Stdin: string(reqBody), OnLog: onLog,
+		Command:    cmd,
+		Args:       args,
+		Dir:        opts.ToolDir,
+		Workspace:  e.WorkspaceRoot,
+		ToolDir:    opts.ToolDir,
+		OutDir:     outDir,
+		AllowNet:   len(m.Permissions.Network.Domains) > 0,
+		AllowWrite: allowWrite,
+		AllowExec:  m.Permissions.Exec,
+		DenyRead:   sandboxDenyPaths(e),
+		Env:        env,
+		Stdin:      string(reqBody),
+		OnLog:      onLog,
 	})
 	if res.TimedOut {
-		return nil, &workflow.ToolError{Kind: "timeout", Message: "script timed out", Retryable: true}
+		return nil, &workflow.ToolError{
+			Kind:      "timeout",
+			Message:   "script timed out",
+			Retryable: true,
+		}
 	}
 	if res.ExitCode != 0 {
 		msg := strings.TrimSpace(res.Stderr)
@@ -109,7 +154,10 @@ func (e *Executor) executeScript(ctx context.Context, m *Manifest, input map[str
 		if len(msg) > 1200 {
 			msg = msg[:1200]
 		}
-		return nil, &workflow.ToolError{Kind: "crashed", Message: fmt.Sprintf("script exited with code %d: %s", res.ExitCode, msg)}
+		return nil, &workflow.ToolError{
+			Kind:    "crashed",
+			Message: fmt.Sprintf("script exited with code %d: %s", res.ExitCode, msg),
+		}
 	}
 	raw := strings.TrimSpace(res.Stdout)
 	if raw == "" {
@@ -128,7 +176,10 @@ func (e *Executor) executeScript(ctx context.Context, m *Manifest, input map[str
 	}
 	var out any
 	if err := json.Unmarshal([]byte(raw), &out); err != nil {
-		return nil, &workflow.ToolError{Kind: "crashed", Message: "script stdout is not valid JSON: " + truncate(raw, 300)}
+		return nil, &workflow.ToolError{
+			Kind:    "crashed",
+			Message: "script stdout is not valid JSON: " + truncate(raw, 300),
+		}
 	}
 	if m, ok := out.(map[string]any); ok {
 		if e, ok := m["error"]; ok {

@@ -22,7 +22,10 @@ type toolCallRecord struct {
 // SaveChatAsWorkflow turns the successful tool chain from a conversation into a
 // validated draft workflow. It uses the planner when available and falls back
 // to a deterministic chain so the button still works offline.
-func (a *App) SaveChatAsWorkflow(ctx context.Context, convID, requestedName string) (SaveWorkflowResult, error) {
+func (a *App) SaveChatAsWorkflow(
+	ctx context.Context,
+	convID, requestedName string,
+) (SaveWorkflowResult, error) {
 	conv, err := a.Store.GetConversation(ctx, convID)
 	if err != nil {
 		return SaveWorkflowResult{}, err
@@ -67,7 +70,9 @@ func (a *App) SaveChatAsWorkflow(ctx context.Context, convID, requestedName stri
 		}
 	}
 	if len(calls) == 0 {
-		return SaveWorkflowResult{}, fmt.Errorf("there are no successful tool calls to turn into a workflow yet")
+		return SaveWorkflowResult{}, fmt.Errorf(
+			"there are no successful tool calls to turn into a workflow yet",
+		)
 	}
 	if requestedName == "" {
 		requestedName = slugify(firstNonEmpty(conv.Title, requestText, "chat-workflow"))
@@ -75,7 +80,13 @@ func (a *App) SaveChatAsWorkflow(ctx context.Context, convID, requestedName stri
 	// Try the planner first. It parameterizes and explains better than the
 	// offline fallback.
 	if profileOK, _ := a.hasPlanner(ctx); profileOK {
-		if res, err := a.llmAuthorWorkflow(ctx, conv.ID, requestedName, requestText, calls); err == nil {
+		if res, err := a.llmAuthorWorkflow(
+			ctx,
+			conv.ID,
+			requestedName,
+			requestText,
+			calls,
+		); err == nil {
 			return res, nil
 		}
 	}
@@ -90,7 +101,11 @@ func (a *App) hasPlanner(ctx context.Context) (bool, error) {
 	return p.BaseURL != "mock://demo" && p.Model != "demo", nil
 }
 
-func (a *App) llmAuthorWorkflow(ctx context.Context, sessionID, name, request string, calls []toolCallRecord) (SaveWorkflowResult, error) {
+func (a *App) llmAuthorWorkflow(
+	ctx context.Context,
+	sessionID, name, request string,
+	calls []toolCallRecord,
+) (SaveWorkflowResult, error) {
 	chain, _ := json.Marshal(calls)
 	system := `You are the workflow author mode of MyAgent. Turn one successful chat task into a small reusable workflow.
 Rules:
@@ -101,9 +116,17 @@ Rules:
 - Insert an approval step before any write or external step.
 - Prefer tool and set steps over llm steps unless the task itself requires language work.
 - The workflow must be valid and runnable.`
-	prompt := fmt.Sprintf("Name: %s\nOriginal request: %s\n\nSuccessful tool calls (in order):\n%s\n\nGenerate the workflow YAML. Keep it minimal.", name, request, string(chain))
+	prompt := fmt.Sprintf(
+		"Name: %s\nOriginal request: %s\n\nSuccessful tool calls (in order):\n%s\n\nGenerate the workflow YAML. Keep it minimal.",
+		name,
+		request,
+		string(chain),
+	)
 	res, err := a.ChatWithTools(ctx, workflow.LLMChatRequest{
-		SessionID: sessionID, Role: "planner", System: system, Messages: []llm.Message{{Role: "user", Content: prompt}},
+		SessionID: sessionID,
+		Role:      "planner",
+		System:    system,
+		Messages:  []llm.Message{{Role: "user", Content: prompt}},
 		OutputSchema: map[string]any{"type": "object", "required": []any{"yaml"},
 			"properties": map[string]any{"yaml": map[string]any{"type": "string"}}},
 	})
@@ -130,10 +153,17 @@ Rules:
 		return resSave, nil
 	}
 	diagnostics, _ := json.Marshal(resSave.Validation.Errors)
-	repair := fmt.Sprintf("The YAML failed validation. Diagnostics:\n%s\n\nReturn the corrected full YAML as JSON {\"yaml\":\"...\"}.", string(diagnostics))
+	repair := fmt.Sprintf(
+		"The YAML failed validation. Diagnostics:\n%s\n\nReturn the corrected full YAML as JSON {\"yaml\":\"...\"}.",
+		string(diagnostics),
+	)
 	res2, err := a.ChatWithTools(ctx, workflow.LLMChatRequest{
 		SessionID: sessionID, Role: "planner", System: system,
-		Messages: []llm.Message{{Role: "user", Content: prompt}, {Role: "assistant", Content: "```yaml\n" + yamlText + "\n```"}, {Role: "user", Content: repair}},
+		Messages: []llm.Message{
+			{Role: "user", Content: prompt},
+			{Role: "assistant", Content: "```yaml\n" + yamlText + "\n```"},
+			{Role: "user", Content: repair},
+		},
 		OutputSchema: map[string]any{"type": "object", "required": []any{"yaml"},
 			"properties": map[string]any{"yaml": map[string]any{"type": "string"}}},
 	})
@@ -151,7 +181,11 @@ Rules:
 	return a.SaveWorkflowDraft(ctx, fixed, "Saved from chat: "+request, "agent", 0)
 }
 
-func (a *App) heuristicWorkflow(ctx context.Context, name string, calls []toolCallRecord) (SaveWorkflowResult, error) {
+func (a *App) heuristicWorkflow(
+	ctx context.Context,
+	name string,
+	calls []toolCallRecord,
+) (SaveWorkflowResult, error) {
 	base := slugify(name)
 	unique := base
 	for i := 2; ; i++ {
@@ -160,10 +194,13 @@ func (a *App) heuristicWorkflow(ctx context.Context, name string, calls []toolCa
 		}
 		unique = fmt.Sprintf("%s-%d", base, i)
 	}
-	spec := &workflow.Spec{Schema: 1, Name: unique,
+	spec := &workflow.Spec{
+		Schema:      1,
+		Name:        unique,
 		Description: "Draft created from a chat session. Review inputs and approvals before enabling it.",
 		Settings:    workflow.Settings{Unattended: "ask"},
-		Steps:       []workflow.Step{}}
+		Steps:       []workflow.Step{},
+	}
 	prev := ""
 	approvalCount := 0
 	for i, call := range calls {
@@ -181,7 +218,10 @@ func (a *App) heuristicWorkflow(ctx context.Context, name string, calls []toolCa
 			approvalCount++
 			aid := fmt.Sprintf("approve_%d", approvalCount)
 			approval := workflow.Step{ID: aid, Needs: needs,
-				Approval: &workflow.ApprovalSpec{Message: "Allow " + call.Name + " to run?", Timeout: "24h"}}
+				Approval: &workflow.ApprovalSpec{
+					Message: "Allow " + call.Name + " to run?",
+					Timeout: "24h",
+				}}
 			if prev != "" {
 				approval.Approval.Show = "${steps." + prev + ".output}"
 			}

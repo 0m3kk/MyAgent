@@ -9,20 +9,33 @@ import (
 	"myagent/internal/model"
 )
 
-func (s *Store) CreateEvalSuite(ctx context.Context, suite model.EvalSuite) (model.EvalSuite, error) {
+func (s *Store) CreateEvalSuite(
+	ctx context.Context,
+	suite model.EvalSuite,
+) (model.EvalSuite, error) {
 	if suite.ID == "" {
 		suite.ID = ids.New()
 	}
 	if suite.CreatedAt == 0 {
 		suite.CreatedAt = ids.NowMS()
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO eval_suites (id,name,target_kind,target_id,created_at) VALUES (?,?,?,?,?)`,
-		suite.ID, suite.Name, suite.TargetKind, suite.TargetID, suite.CreatedAt)
+	_, err := s.db.ExecContext(
+		ctx,
+		`INSERT INTO eval_suites (id,name,target_kind,target_id,created_at) VALUES (?,?,?,?,?)`,
+		suite.ID,
+		suite.Name,
+		suite.TargetKind,
+		suite.TargetID,
+		suite.CreatedAt,
+	)
 	return suite, err
 }
 
 func (s *Store) ListEvalSuites(ctx context.Context) ([]model.EvalSuite, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,name,target_kind,target_id,created_at FROM eval_suites ORDER BY created_at DESC`)
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT id,name,target_kind,target_id,created_at FROM eval_suites ORDER BY created_at DESC`,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -79,15 +92,29 @@ func (s *Store) AddEvalCase(ctx context.Context, c model.EvalCase) (model.EvalCa
 	if c.Split == "" {
 		c.Split = "train"
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO eval_cases (id,suite_id,source_run_id,inputs,assertions,recorded_io_ref,split,created_at)
+	_, err := s.db.ExecContext(
+		ctx,
+		`INSERT INTO eval_cases (id,suite_id,source_run_id,inputs,assertions,recorded_io_ref,split,created_at)
 		VALUES (?,?,?,?,?,?,?,?)`,
-		c.ID, c.SuiteID, nullString(c.SourceRunID), string(c.Inputs), string(c.Assertions), nullString(c.RecordedIORef), c.Split, c.CreatedAt)
+		c.ID,
+		c.SuiteID,
+		nullString(c.SourceRunID),
+		string(c.Inputs),
+		string(c.Assertions),
+		nullString(c.RecordedIORef),
+		c.Split,
+		c.CreatedAt,
+	)
 	return c, err
 }
 
 func (s *Store) EvalCases(ctx context.Context, suiteID string) ([]model.EvalCase, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,suite_id,COALESCE(source_run_id,''),inputs,assertions,COALESCE(recorded_io_ref,''),split,created_at
-		FROM eval_cases WHERE suite_id=? ORDER BY created_at`, suiteID)
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT id,suite_id,COALESCE(source_run_id,''),inputs,assertions,COALESCE(recorded_io_ref,''),split,created_at
+		FROM eval_cases WHERE suite_id=? ORDER BY created_at`,
+		suiteID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +123,16 @@ func (s *Store) EvalCases(ctx context.Context, suiteID string) ([]model.EvalCase
 	for rows.Next() {
 		var c model.EvalCase
 		var inputs, assertions string
-		if err := rows.Scan(&c.ID, &c.SuiteID, &c.SourceRunID, &inputs, &assertions, &c.RecordedIORef, &c.Split, &c.CreatedAt); err != nil {
+		if err := rows.Scan(
+			&c.ID,
+			&c.SuiteID,
+			&c.SourceRunID,
+			&inputs,
+			&assertions,
+			&c.RecordedIORef,
+			&c.Split,
+			&c.CreatedAt,
+		); err != nil {
 			return nil, err
 		}
 		c.Inputs = json.RawMessage(mustJSON(inputs))
@@ -124,13 +160,26 @@ func (s *Store) CreateEvalRun(ctx context.Context, r model.EvalRun) (model.EvalR
 	if r.StartedAt == 0 {
 		r.StartedAt = ids.NowMS()
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO eval_runs (id,suite_id,target_ver,status,started_at) VALUES (?,?,?,?,?)`,
-		r.ID, r.SuiteID, r.TargetVer, r.Status, r.StartedAt)
+	_, err := s.db.ExecContext(
+		ctx,
+		`INSERT INTO eval_runs (id,suite_id,target_ver,status,started_at) VALUES (?,?,?,?,?)`,
+		r.ID,
+		r.SuiteID,
+		r.TargetVer,
+		r.Status,
+		r.StartedAt,
+	)
 	return r, err
 }
 
 func (s *Store) FinishEvalRun(ctx context.Context, id, status string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE eval_runs SET status=?, finished_at=? WHERE id=?`, status, ids.NowMS(), id)
+	_, err := s.db.ExecContext(
+		ctx,
+		`UPDATE eval_runs SET status=?, finished_at=? WHERE id=?`,
+		status,
+		ids.NowMS(),
+		id,
+	)
 	return err
 }
 
@@ -144,9 +193,23 @@ func (s *Store) AddEvalResult(ctx context.Context, r model.EvalResult) (model.Ev
 	if len(r.Output) == 0 {
 		r.Output = json.RawMessage(`{}`)
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO eval_results (id,eval_run_id,case_id,target_ver,passed,score,judge,cost_micro,latency_ms,output,error,created_at)
+	_, err := s.db.ExecContext(
+		ctx,
+		`INSERT INTO eval_results (id,eval_run_id,case_id,target_ver,passed,score,judge,cost_micro,latency_ms,output,error,created_at)
 		VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-		r.ID, r.EvalRunID, r.CaseID, r.TargetVer, boolInt(r.Passed), r.Score, r.Judge, r.CostMicro, r.LatencyMS, string(r.Output), r.Error, r.CreatedAt)
+		r.ID,
+		r.EvalRunID,
+		r.CaseID,
+		r.TargetVer,
+		boolInt(r.Passed),
+		r.Score,
+		r.Judge,
+		r.CostMicro,
+		r.LatencyMS,
+		string(r.Output),
+		r.Error,
+		r.CreatedAt,
+	)
 	return r, err
 }
 
@@ -159,8 +222,12 @@ func (s *Store) GetEvalRun(ctx context.Context, id string) (model.EvalRun, error
 	if err != nil {
 		return r, fmtErr("eval run", err)
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id,eval_run_id,case_id,target_ver,passed,score,judge,cost_micro,latency_ms,output,error,created_at
-		FROM eval_results WHERE eval_run_id=? ORDER BY created_at`, id)
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT id,eval_run_id,case_id,target_ver,passed,score,judge,cost_micro,latency_ms,output,error,created_at
+		FROM eval_results WHERE eval_run_id=? ORDER BY created_at`,
+		id,
+	)
 	if err != nil {
 		return r, err
 	}
@@ -169,7 +236,20 @@ func (s *Store) GetEvalRun(ctx context.Context, id string) (model.EvalRun, error
 		var x model.EvalResult
 		var passed int
 		var output string
-		if err := rows.Scan(&x.ID, &x.EvalRunID, &x.CaseID, &x.TargetVer, &passed, &x.Score, &x.Judge, &x.CostMicro, &x.LatencyMS, &output, &x.Error, &x.CreatedAt); err != nil {
+		if err := rows.Scan(
+			&x.ID,
+			&x.EvalRunID,
+			&x.CaseID,
+			&x.TargetVer,
+			&passed,
+			&x.Score,
+			&x.Judge,
+			&x.CostMicro,
+			&x.LatencyMS,
+			&output,
+			&x.Error,
+			&x.CreatedAt,
+		); err != nil {
 			return r, err
 		}
 		x.Passed = passed == 1
@@ -179,7 +259,10 @@ func (s *Store) GetEvalRun(ctx context.Context, id string) (model.EvalRun, error
 	return r, rows.Err()
 }
 
-func (s *Store) CreateTuningProposal(ctx context.Context, p model.TuningProposal) (model.TuningProposal, error) {
+func (s *Store) CreateTuningProposal(
+	ctx context.Context,
+	p model.TuningProposal,
+) (model.TuningProposal, error) {
 	if p.ID == "" {
 		p.ID = ids.New()
 	}
@@ -195,16 +278,31 @@ func (s *Store) CreateTuningProposal(ctx context.Context, p model.TuningProposal
 	if len(p.EvalAfter) == 0 {
 		p.EvalAfter = json.RawMessage(`{}`)
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO tuning_proposals (id,target_kind,target_id,base_version_id,diagnosis,patch,proposed_yaml,status,eval_before,eval_after,created_at)
+	_, err := s.db.ExecContext(
+		ctx,
+		`INSERT INTO tuning_proposals (id,target_kind,target_id,base_version_id,diagnosis,patch,proposed_yaml,status,eval_before,eval_after,created_at)
 		VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-		p.ID, p.TargetKind, p.TargetID, p.BaseVersionID, p.Diagnosis, p.Patch, p.ProposedYAML, p.Status,
-		string(p.EvalBefore), string(p.EvalAfter), p.CreatedAt)
+		p.ID,
+		p.TargetKind,
+		p.TargetID,
+		p.BaseVersionID,
+		p.Diagnosis,
+		p.Patch,
+		p.ProposedYAML,
+		p.Status,
+		string(p.EvalBefore),
+		string(p.EvalAfter),
+		p.CreatedAt,
+	)
 	return p, err
 }
 
 func (s *Store) ListTuningProposals(ctx context.Context) ([]model.TuningProposal, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,target_kind,target_id,base_version_id,diagnosis,patch,proposed_yaml,status,eval_before,eval_after,created_at
-		FROM tuning_proposals ORDER BY created_at DESC`)
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT id,target_kind,target_id,base_version_id,diagnosis,patch,proposed_yaml,status,eval_before,eval_after,created_at
+		FROM tuning_proposals ORDER BY created_at DESC`,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +311,19 @@ func (s *Store) ListTuningProposals(ctx context.Context) ([]model.TuningProposal
 	for rows.Next() {
 		var p model.TuningProposal
 		var before, after string
-		if err := rows.Scan(&p.ID, &p.TargetKind, &p.TargetID, &p.BaseVersionID, &p.Diagnosis, &p.Patch, &p.ProposedYAML, &p.Status, &before, &after, &p.CreatedAt); err != nil {
+		if err := rows.Scan(
+			&p.ID,
+			&p.TargetKind,
+			&p.TargetID,
+			&p.BaseVersionID,
+			&p.Diagnosis,
+			&p.Patch,
+			&p.ProposedYAML,
+			&p.Status,
+			&before,
+			&after,
+			&p.CreatedAt,
+		); err != nil {
 			return nil, err
 		}
 		p.EvalBefore = json.RawMessage(mustJSON(before))
@@ -234,17 +344,33 @@ func (s *Store) GetTuningProposal(ctx context.Context, id string) (model.TuningP
 	return p, fmtErr("tuning proposal", err)
 }
 
-func (s *Store) SetTuningStatus(ctx context.Context, id, status string, after json.RawMessage) error {
+func (s *Store) SetTuningStatus(
+	ctx context.Context,
+	id, status string,
+	after json.RawMessage,
+) error {
 	if len(after) == 0 {
 		after = json.RawMessage(`{}`)
 	}
-	_, err := s.db.ExecContext(ctx, `UPDATE tuning_proposals SET status=?, eval_after=? WHERE id=?`, status, string(after), id)
+	_, err := s.db.ExecContext(
+		ctx,
+		`UPDATE tuning_proposals SET status=?, eval_after=? WHERE id=?`,
+		status,
+		string(after),
+		id,
+	)
 	return err
 }
 
 func (s *Store) AddNote(ctx context.Context, workspaceID, note string) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO workspace_notes (id,workspace_id,note,created_at) VALUES (?,?,?,?)`,
-		ids.New(), workspaceID, note, ids.NowMS())
+	_, err := s.db.ExecContext(
+		ctx,
+		`INSERT INTO workspace_notes (id,workspace_id,note,created_at) VALUES (?,?,?,?)`,
+		ids.New(),
+		workspaceID,
+		note,
+		ids.NowMS(),
+	)
 	return err
 }
 
@@ -252,7 +378,12 @@ func (s *Store) Notes(ctx context.Context, workspaceID string, limit int) ([]str
 	if limit <= 0 {
 		limit = 50
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT note FROM workspace_notes WHERE workspace_id=? ORDER BY created_at DESC LIMIT ?`, workspaceID, limit)
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT note FROM workspace_notes WHERE workspace_id=? ORDER BY created_at DESC LIMIT ?`,
+		workspaceID,
+		limit,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -268,18 +399,35 @@ func (s *Store) Notes(ctx context.Context, workspaceID string, limit int) ([]str
 	return out, rows.Err()
 }
 
-func (s *Store) UpsertPreset(ctx context.Context, kind, targetID, name string, inputs json.RawMessage) error {
+func (s *Store) UpsertPreset(
+	ctx context.Context,
+	kind, targetID, name string,
+	inputs json.RawMessage,
+) error {
 	if len(inputs) == 0 {
 		inputs = json.RawMessage(`{}`)
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO presets (id,target_kind,target_id,name,inputs,created_at) VALUES (?,?,?,?,?,?)
+	_, err := s.db.ExecContext(
+		ctx,
+		`INSERT INTO presets (id,target_kind,target_id,name,inputs,created_at) VALUES (?,?,?,?,?,?)
 		ON CONFLICT(target_kind,target_id,name) DO UPDATE SET inputs=excluded.inputs, created_at=excluded.created_at`,
-		ids.New(), kind, targetID, name, string(inputs), ids.NowMS())
+		ids.New(),
+		kind,
+		targetID,
+		name,
+		string(inputs),
+		ids.NowMS(),
+	)
 	return err
 }
 
 func (s *Store) Presets(ctx context.Context, kind, targetID string) ([]map[string]any, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,name,inputs,created_at FROM presets WHERE target_kind=? AND target_id=? ORDER BY created_at DESC`, kind, targetID)
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT id,name,inputs,created_at FROM presets WHERE target_kind=? AND target_id=? ORDER BY created_at DESC`,
+		kind,
+		targetID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -293,7 +441,10 @@ func (s *Store) Presets(ctx context.Context, kind, targetID string) ([]map[strin
 		}
 		var val any
 		_ = json.Unmarshal([]byte(mustJSON(inputs)), &val)
-		out = append(out, map[string]any{"id": id, "name": name, "inputs": val, "created_at": created})
+		out = append(
+			out,
+			map[string]any{"id": id, "name": name, "inputs": val, "created_at": created},
+		)
 	}
 	return out, rows.Err()
 }

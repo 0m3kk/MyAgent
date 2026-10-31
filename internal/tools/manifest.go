@@ -14,33 +14,33 @@ import (
 )
 
 type Manifest struct {
-	Schema       int            `yaml:"schema" json:"schema"`
-	Name         string         `yaml:"name" json:"name"`
-	Description  string         `yaml:"description" json:"description"`
-	Kind         string         `yaml:"kind" json:"kind"`
-	Runtime      Runtime        `yaml:"runtime" json:"runtime"`
-	SideEffect   string         `yaml:"side_effect" json:"side_effect"`
-	InputSchema  map[string]any `yaml:"input_schema" json:"input_schema"`
+	Schema       int            `yaml:"schema"        json:"schema"`
+	Name         string         `yaml:"name"          json:"name"`
+	Description  string         `yaml:"description"   json:"description"`
+	Kind         string         `yaml:"kind"          json:"kind"`
+	Runtime      Runtime        `yaml:"runtime"       json:"runtime"`
+	SideEffect   string         `yaml:"side_effect"   json:"side_effect"`
+	InputSchema  map[string]any `yaml:"input_schema"  json:"input_schema"`
 	OutputSchema map[string]any `yaml:"output_schema" json:"output_schema"`
-	Permissions  Permissions    `yaml:"permissions" json:"permissions"`
-	Secrets      []SecretDecl   `yaml:"secrets" json:"secrets"`
-	Limits       Limits         `yaml:"limits" json:"limits"`
-	Tests        []TestCase     `yaml:"tests" json:"tests"`
-	Metadata     map[string]any `yaml:"metadata" json:"metadata,omitempty"`
+	Permissions  Permissions    `yaml:"permissions"   json:"permissions"`
+	Secrets      []SecretDecl   `yaml:"secrets"       json:"secrets"`
+	Limits       Limits         `yaml:"limits"        json:"limits"`
+	Tests        []TestCase     `yaml:"tests"         json:"tests"`
+	Metadata     map[string]any `yaml:"metadata"      json:"metadata,omitempty"`
 }
 
 type Runtime struct {
 	Language string `yaml:"language" json:"language,omitempty"`
-	Version  string `yaml:"version" json:"version,omitempty"`
-	Entry    string `yaml:"entry" json:"entry,omitempty"`
-	Deps     string `yaml:"deps" json:"deps,omitempty"`
-	Builtin  string `yaml:"builtin" json:"builtin,omitempty"`
+	Version  string `yaml:"version"  json:"version,omitempty"`
+	Entry    string `yaml:"entry"    json:"entry,omitempty"`
+	Deps     string `yaml:"deps"     json:"deps,omitempty"`
+	Builtin  string `yaml:"builtin"  json:"builtin,omitempty"`
 }
 
 type Permissions struct {
 	Network NetworkPermissions `yaml:"network" json:"network"`
-	FS      FSPermissions      `yaml:"fs" json:"fs"`
-	Exec    []string           `yaml:"exec" json:"exec"`
+	FS      FSPermissions      `yaml:"fs"      json:"fs"`
+	Exec    []string           `yaml:"exec"    json:"exec"`
 }
 
 type NetworkPermissions struct {
@@ -48,17 +48,17 @@ type NetworkPermissions struct {
 }
 
 type FSPermissions struct {
-	Read  []string `yaml:"read" json:"read"`
+	Read  []string `yaml:"read"  json:"read"`
 	Write []string `yaml:"write" json:"write"`
 }
 
 type SecretDecl struct {
-	Name        string      `yaml:"name" json:"name"`
+	Name        string      `yaml:"name"        json:"name"`
 	Description string      `yaml:"description" json:"description"`
-	Inject      string      `yaml:"inject" json:"inject"`
-	Header      string      `yaml:"header" json:"header,omitempty"`
-	Scope       SecretScope `yaml:"scope" json:"scope"`
-	Required    bool        `yaml:"required" json:"required"`
+	Inject      string      `yaml:"inject"      json:"inject"`
+	Header      string      `yaml:"header"      json:"header,omitempty"`
+	Scope       SecretScope `yaml:"scope"       json:"scope"`
+	Required    bool        `yaml:"required"    json:"required"`
 }
 
 type SecretScope struct {
@@ -72,15 +72,15 @@ type Limits struct {
 }
 
 type TestCase struct {
-	Name        string         `yaml:"name" json:"name"`
-	Input       map[string]any `yaml:"input" json:"input"`
-	Mocks       []Mock         `yaml:"mocks" json:"mocks,omitempty"`
-	Expect      []string       `yaml:"expect" json:"expect,omitempty"`
+	Name        string         `yaml:"name"         json:"name"`
+	Input       map[string]any `yaml:"input"        json:"input"`
+	Mocks       []Mock         `yaml:"mocks"        json:"mocks,omitempty"`
+	Expect      []string       `yaml:"expect"       json:"expect,omitempty"`
 	ExpectError string         `yaml:"expect_error" json:"expect_error,omitempty"`
 }
 
 type Mock struct {
-	Match   string         `yaml:"match" json:"match"`
+	Match   string         `yaml:"match"   json:"match"`
 	Respond map[string]any `yaml:"respond" json:"respond"`
 }
 
@@ -181,7 +181,10 @@ func ValidateManifest(m *Manifest) []Issue {
 		add("input_schema", err.Error())
 	} else {
 		if ap, ok := m.InputSchema["additionalProperties"].(bool); !ok || ap {
-			add("input_schema.additionalProperties", "input_schema must set additionalProperties: false")
+			add(
+				"input_schema.additionalProperties",
+				"input_schema must set additionalProperties: false",
+			)
 		}
 		props, _ := m.InputSchema["properties"].(map[string]any)
 		for name, raw := range props {
@@ -190,7 +193,10 @@ func ValidateManifest(m *Manifest) []Issue {
 				continue
 			}
 			if d, _ := pm["description"].(string); strings.TrimSpace(d) == "" {
-				add("input_schema.properties."+name+".description", "every input field needs a description")
+				add(
+					"input_schema.properties."+name+".description",
+					"every input field needs a description",
+				)
 			}
 		}
 	}
@@ -201,7 +207,10 @@ func ValidateManifest(m *Manifest) []Issue {
 	}
 	for i, d := range m.Permissions.Network.Domains {
 		if d == "*" || strings.Contains(d, "*") {
-			add(fmt.Sprintf("permissions.network.domains[%d]", i), "wildcard domains are not allowed; list explicit domains")
+			add(
+				fmt.Sprintf("permissions.network.domains[%d]", i),
+				"wildcard domains are not allowed; list explicit domains",
+			)
 		}
 	}
 	if m.Kind == "script" {
@@ -235,7 +244,10 @@ func ValidateManifest(m *Manifest) []Issue {
 			}
 			for _, d := range s.Scope.Domains {
 				if !containsString(m.Permissions.Network.Domains, d) {
-					add(path+".scope.domains", "secret domain "+d+" must be declared in permissions.network.domains")
+					add(
+						path+".scope.domains",
+						"secret domain "+d+" must be declared in permissions.network.domains",
+					)
 				}
 			}
 		}

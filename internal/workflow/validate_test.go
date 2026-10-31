@@ -33,10 +33,18 @@ func toolMap() map[string]ToolInfo {
 		"fs.list": {Name: "fs.list", VersionID: "v1", Status: "active", SideEffect: "read",
 			InputSchema: map[string]any{"type": "object", "additionalProperties": false,
 				"properties": map[string]any{"path": map[string]any{"type": "string"}}}},
-		"fs.write_text": {Name: "fs.write_text", VersionID: "v2", Status: "active", SideEffect: "write",
+		"fs.write_text": {
+			Name:       "fs.write_text",
+			VersionID:  "v2",
+			Status:     "active",
+			SideEffect: "write",
 			InputSchema: map[string]any{"type": "object", "additionalProperties": false,
-				"required":   []any{"path", "content"},
-				"properties": map[string]any{"path": map[string]any{"type": "string"}, "content": map[string]any{"type": "string"}}}},
+				"required": []any{"path", "content"},
+				"properties": map[string]any{
+					"path":    map[string]any{"type": "string"},
+					"content": map[string]any{"type": "string"},
+				}},
+		},
 	}
 }
 

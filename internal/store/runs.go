@@ -23,9 +23,26 @@ const runSelect = `SELECT r.id,r.target_kind,COALESCE(r.target_id,''),r.target_v
 func scanRun(scan func(dest ...any) error) (model.Run, error) {
 	var r model.Run
 	var inputs string
-	err := scan(&r.ID, &r.TargetKind, &r.TargetID, &r.TargetVer, &r.TargetName, &r.Source, &r.TriggerID,
-		&r.ConversationID, &r.ParentRunID, &inputs, &r.Status, &r.StartedAt, &r.FinishedAt,
-		&r.TokensIn, &r.TokensOut, &r.CostMicro, &r.Error, &r.CreatedAt)
+	err := scan(
+		&r.ID,
+		&r.TargetKind,
+		&r.TargetID,
+		&r.TargetVer,
+		&r.TargetName,
+		&r.Source,
+		&r.TriggerID,
+		&r.ConversationID,
+		&r.ParentRunID,
+		&inputs,
+		&r.Status,
+		&r.StartedAt,
+		&r.FinishedAt,
+		&r.TokensIn,
+		&r.TokensOut,
+		&r.CostMicro,
+		&r.Error,
+		&r.CreatedAt,
+	)
 	r.Inputs = json.RawMessage(mustJSON(inputs))
 	return r, err
 }
@@ -43,11 +60,30 @@ func (s *Store) CreateRun(ctx context.Context, r model.Run) (model.Run, error) {
 	if r.Status == "" {
 		r.Status = model.RunQueued
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO runs (id,target_kind,target_id,target_ver,source,trigger_id,conversation_id,parent_run_id,inputs,status,started_at,finished_at,tokens_in,tokens_out,cost_micro,error,created_at)
+	_, err := s.db.ExecContext(
+		ctx,
+		`INSERT INTO runs (id,target_kind,target_id,target_ver,source,trigger_id,conversation_id,parent_run_id,inputs,status,started_at,finished_at,tokens_in,tokens_out,cost_micro,error,created_at)
 		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		r.ID, r.TargetKind, nullString(r.TargetID), r.TargetVer, r.Source, nullString(r.TriggerID),
-		nullString(r.ConversationID), nullString(r.ParentRunID), string(r.Inputs), r.Status,
-		nullInt(r.StartedAt), nullInt(r.FinishedAt), r.TokensIn, r.TokensOut, r.CostMicro, nullString(r.Error), r.CreatedAt)
+		r.ID,
+		r.TargetKind,
+		nullString(r.TargetID),
+		r.TargetVer,
+		r.Source,
+		nullString(r.TriggerID),
+		nullString(r.ConversationID),
+		nullString(r.ParentRunID),
+		string(r.Inputs),
+		r.Status,
+		nullInt(
+			r.StartedAt,
+		),
+		nullInt(r.FinishedAt),
+		r.TokensIn,
+		r.TokensOut,
+		r.CostMicro,
+		nullString(r.Error),
+		r.CreatedAt,
+	)
 	return r, err
 }
 
@@ -101,12 +137,24 @@ func (s *Store) ListRuns(ctx context.Context, f model.RunFilter) ([]model.Run, e
 }
 
 func (s *Store) StartRun(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE runs SET status=?, started_at=? WHERE id=?`, model.RunRunning, ids.NowMS(), id)
+	_, err := s.db.ExecContext(
+		ctx,
+		`UPDATE runs SET status=?, started_at=? WHERE id=?`,
+		model.RunRunning,
+		ids.NowMS(),
+		id,
+	)
 	return err
 }
 
 func (s *Store) SetRunStatus(ctx context.Context, id, status, errText string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE runs SET status=?, error=? WHERE id=?`, status, nullString(errText), id)
+	_, err := s.db.ExecContext(
+		ctx,
+		`UPDATE runs SET status=?, error=? WHERE id=?`,
+		status,
+		nullString(errText),
+		id,
+	)
 	return err
 }
 
@@ -116,26 +164,43 @@ func (s *Store) FinishRun(ctx context.Context, id, status, errText string) error
 	return err
 }
 
-func (s *Store) AddRunUsage(ctx context.Context, id string, tokensIn, tokensOut int, costMicro int64) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE runs SET tokens_in=tokens_in+?, tokens_out=tokens_out+?, cost_micro=cost_micro+? WHERE id=?`,
-		tokensIn, tokensOut, costMicro, id)
+func (s *Store) AddRunUsage(
+	ctx context.Context,
+	id string,
+	tokensIn, tokensOut int,
+	costMicro int64,
+) error {
+	_, err := s.db.ExecContext(
+		ctx,
+		`UPDATE runs SET tokens_in=tokens_in+?, tokens_out=tokens_out+?, cost_micro=cost_micro+? WHERE id=?`,
+		tokensIn,
+		tokensOut,
+		costMicro,
+		id,
+	)
 	return err
 }
 
 func (s *Store) CountActiveRuns(ctx context.Context) (int, error) {
 	var n int
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM runs WHERE status IN ('queued','running','paused','waiting_approval','waiting_secret')`).Scan(&n)
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM runs WHERE status IN ('queued','running','paused','waiting_approval','waiting_secret')`).
+		Scan(&n)
 	return n, err
 }
 
 func (s *Store) CountActiveRunsForTarget(ctx context.Context, targetID string) (int, error) {
 	var n int
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM runs WHERE target_id=? AND status IN ('queued','running','paused','waiting_approval','waiting_secret')`, targetID).Scan(&n)
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM runs WHERE target_id=? AND status IN ('queued','running','paused','waiting_approval','waiting_secret')`, targetID).
+		Scan(&n)
 	return n, err
 }
 
 func (s *Store) ActiveRunsForTarget(ctx context.Context, targetID string) ([]model.Run, error) {
-	rows, err := s.db.QueryContext(ctx, runSelect+` WHERE r.target_id=? AND r.status IN ('queued','running','paused','waiting_approval','waiting_secret') ORDER BY r.created_at`, targetID)
+	rows, err := s.db.QueryContext(
+		ctx,
+		runSelect+` WHERE r.target_id=? AND r.status IN ('queued','running','paused','waiting_approval','waiting_secret') ORDER BY r.created_at`,
+		targetID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +217,10 @@ func (s *Store) ActiveRunsForTarget(ctx context.Context, targetID string) ([]mod
 }
 
 func (s *Store) InterruptedRuns(ctx context.Context) ([]model.Run, error) {
-	rows, err := s.db.QueryContext(ctx, runSelect+` WHERE r.status IN ('running','waiting_approval','waiting_secret') ORDER BY r.created_at`)
+	rows, err := s.db.QueryContext(
+		ctx,
+		runSelect+` WHERE r.status IN ('running','waiting_approval','waiting_secret') ORDER BY r.created_at`,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -170,18 +238,33 @@ func (s *Store) InterruptedRuns(ctx context.Context) ([]model.Run, error) {
 
 // ---- step runs ----
 
-func (s *Store) StartStepRun(ctx context.Context, runID, stepID string, attempt int, inputRef, idemKey string) (model.StepRun, error) {
+func (s *Store) StartStepRun(
+	ctx context.Context,
+	runID, stepID string,
+	attempt int,
+	inputRef, idemKey string,
+) (model.StepRun, error) {
 	if attempt <= 0 {
 		attempt = 1
 	}
 	now := ids.NowMS()
 	sr := model.StepRun{ID: ids.New(), RunID: runID, StepID: stepID, Attempt: attempt,
 		Status: "running", InputRef: inputRef, IdemKey: idemKey, StartedAt: now}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO step_runs (id,run_id,step_id,attempt,status,input_ref,idem_key,started_at)
+	_, err := s.db.ExecContext(
+		ctx,
+		`INSERT INTO step_runs (id,run_id,step_id,attempt,status,input_ref,idem_key,started_at)
 		VALUES (?,?,?,?,?,?,?,?)
 		ON CONFLICT(run_id,step_id,attempt) DO UPDATE SET status='running', input_ref=excluded.input_ref,
 			idem_key=excluded.idem_key, started_at=excluded.started_at, finished_at=NULL, output_ref=NULL, error=NULL`,
-		sr.ID, sr.RunID, sr.StepID, sr.Attempt, sr.Status, nullString(sr.InputRef), nullString(sr.IdemKey), sr.StartedAt)
+		sr.ID,
+		sr.RunID,
+		sr.StepID,
+		sr.Attempt,
+		sr.Status,
+		nullString(sr.InputRef),
+		nullString(sr.IdemKey),
+		sr.StartedAt,
+	)
 	if err != nil {
 		return sr, err
 	}
@@ -190,12 +273,23 @@ func (s *Store) StartStepRun(ctx context.Context, runID, stepID string, attempt 
 }
 
 func (s *Store) FinishStepRun(ctx context.Context, id, status, outputRef, errText string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE step_runs SET status=?, output_ref=?, error=?, finished_at=? WHERE id=?`,
-		status, nullString(outputRef), nullString(errText), ids.NowMS(), id)
+	_, err := s.db.ExecContext(
+		ctx,
+		`UPDATE step_runs SET status=?, output_ref=?, error=?, finished_at=? WHERE id=?`,
+		status,
+		nullString(outputRef),
+		nullString(errText),
+		ids.NowMS(),
+		id,
+	)
 	return err
 }
 
-func (s *Store) GetStepRunAttempt(ctx context.Context, runID, stepID string, attempt int) (model.StepRun, error) {
+func (s *Store) GetStepRunAttempt(
+	ctx context.Context,
+	runID, stepID string,
+	attempt int,
+) (model.StepRun, error) {
 	var sr model.StepRun
 	var input, output, errText, idem sql.NullString
 	var started, finished sql.NullInt64
@@ -209,11 +303,15 @@ func (s *Store) GetStepRunAttempt(ctx context.Context, runID, stepID string, att
 
 func (s *Store) LatestStepAttempt(ctx context.Context, runID, stepID string) (int, error) {
 	var n int
-	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(MAX(attempt),0) FROM step_runs WHERE run_id=? AND step_id=?`, runID, stepID).Scan(&n)
+	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(MAX(attempt),0) FROM step_runs WHERE run_id=? AND step_id=?`, runID, stepID).
+		Scan(&n)
 	return n, err
 }
 
-func (s *Store) SucceededStepAttempt(ctx context.Context, runID, stepID string) (model.StepRun, bool, error) {
+func (s *Store) SucceededStepAttempt(
+	ctx context.Context,
+	runID, stepID string,
+) (model.StepRun, bool, error) {
 	var sr model.StepRun
 	var output sql.NullString
 	err := s.db.QueryRowContext(ctx, `SELECT id,run_id,step_id,attempt,status,COALESCE(input_ref,''),COALESCE(output_ref,''),COALESCE(error,''),COALESCE(idem_key,''),COALESCE(started_at,0),COALESCE(finished_at,0)
@@ -227,8 +325,12 @@ func (s *Store) SucceededStepAttempt(ctx context.Context, runID, stepID string) 
 }
 
 func (s *Store) ListStepRuns(ctx context.Context, runID string) ([]model.StepRun, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,run_id,step_id,attempt,status,COALESCE(input_ref,''),COALESCE(output_ref,''),COALESCE(error,''),COALESCE(idem_key,''),COALESCE(started_at,0),COALESCE(finished_at,0)
-		FROM step_runs WHERE run_id=? ORDER BY started_at, step_id`, runID)
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT id,run_id,step_id,attempt,status,COALESCE(input_ref,''),COALESCE(output_ref,''),COALESCE(error,''),COALESCE(idem_key,''),COALESCE(started_at,0),COALESCE(finished_at,0)
+		FROM step_runs WHERE run_id=? ORDER BY started_at, step_id`,
+		runID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -236,7 +338,19 @@ func (s *Store) ListStepRuns(ctx context.Context, runID string) ([]model.StepRun
 	out := []model.StepRun{}
 	for rows.Next() {
 		var sr model.StepRun
-		if err := rows.Scan(&sr.ID, &sr.RunID, &sr.StepID, &sr.Attempt, &sr.Status, &sr.InputRef, &sr.OutputRef, &sr.Error, &sr.IdemKey, &sr.StartedAt, &sr.FinishedAt); err != nil {
+		if err := rows.Scan(
+			&sr.ID,
+			&sr.RunID,
+			&sr.StepID,
+			&sr.Attempt,
+			&sr.Status,
+			&sr.InputRef,
+			&sr.OutputRef,
+			&sr.Error,
+			&sr.IdemKey,
+			&sr.StartedAt,
+			&sr.FinishedAt,
+		); err != nil {
 			return nil, err
 		}
 		out = append(out, sr)
@@ -245,14 +359,25 @@ func (s *Store) ListStepRuns(ctx context.Context, runID string) ([]model.StepRun
 }
 
 func (s *Store) AddRunBinding(ctx context.Context, runID, kind, ref, versionID, hash string) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO run_bindings (run_id,kind,ref,version_id,content_hash) VALUES (?,?,?,?,?)
+	_, err := s.db.ExecContext(
+		ctx,
+		`INSERT INTO run_bindings (run_id,kind,ref,version_id,content_hash) VALUES (?,?,?,?,?)
 		ON CONFLICT(run_id,kind,ref) DO UPDATE SET version_id=excluded.version_id, content_hash=excluded.content_hash`,
-		runID, kind, ref, versionID, hash)
+		runID,
+		kind,
+		ref,
+		versionID,
+		hash,
+	)
 	return err
 }
 
 func (s *Store) RunBindings(ctx context.Context, runID string) (map[string]string, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT kind,ref,version_id FROM run_bindings WHERE run_id=?`, runID)
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT kind,ref,version_id FROM run_bindings WHERE run_id=?`,
+		runID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -283,10 +408,23 @@ func (s *Store) CreateApproval(ctx context.Context, a model.Approval) (model.App
 	if len(a.Request) == 0 {
 		a.Request = json.RawMessage(`{}`)
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO approvals (id,run_id,step_run_id,conversation_id,kind,request,status,decision,comment,expires_at,decided_at,created_at)
+	_, err := s.db.ExecContext(
+		ctx,
+		`INSERT INTO approvals (id,run_id,step_run_id,conversation_id,kind,request,status,decision,comment,expires_at,decided_at,created_at)
 		VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-		a.ID, nullString(a.RunID), nullString(a.StepRunID), nullString(a.ConversationID), a.Kind, string(a.Request),
-		a.Status, nullString(a.Decision), nullString(a.Comment), nullInt(a.ExpiresAt), nullInt(a.DecidedAt), a.CreatedAt)
+		a.ID,
+		nullString(a.RunID),
+		nullString(a.StepRunID),
+		nullString(a.ConversationID),
+		a.Kind,
+		string(a.Request),
+		a.Status,
+		nullString(a.Decision),
+		nullString(a.Comment),
+		nullInt(a.ExpiresAt),
+		nullInt(a.DecidedAt),
+		a.CreatedAt,
+	)
 	return a, err
 }
 
@@ -308,14 +446,24 @@ func (s *Store) ResolveApproval(ctx context.Context, id, decision, comment strin
 	if decision == "reject" || decision == "deny" {
 		status = "rejected"
 	}
-	_, err := s.db.ExecContext(ctx, `UPDATE approvals SET status=?, decision=?, comment=?, decided_at=? WHERE id=? AND status='pending'`,
-		status, decision, comment, ids.NowMS(), id)
+	_, err := s.db.ExecContext(
+		ctx,
+		`UPDATE approvals SET status=?, decision=?, comment=?, decided_at=? WHERE id=? AND status='pending'`,
+		status,
+		decision,
+		comment,
+		ids.NowMS(),
+		id,
+	)
 	return err
 }
 
 func (s *Store) PendingApprovals(ctx context.Context) ([]model.Approval, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,COALESCE(run_id,''),COALESCE(step_run_id,''),COALESCE(conversation_id,''),kind,request,status,COALESCE(decision,''),COALESCE(comment,''),COALESCE(expires_at,0),COALESCE(decided_at,0),created_at
-		FROM approvals WHERE status='pending' ORDER BY created_at`)
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT id,COALESCE(run_id,''),COALESCE(step_run_id,''),COALESCE(conversation_id,''),kind,request,status,COALESCE(decision,''),COALESCE(comment,''),COALESCE(expires_at,0),COALESCE(decided_at,0),created_at
+		FROM approvals WHERE status='pending' ORDER BY created_at`,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -324,7 +472,20 @@ func (s *Store) PendingApprovals(ctx context.Context) ([]model.Approval, error) 
 	for rows.Next() {
 		var a model.Approval
 		var request string
-		if err := rows.Scan(&a.ID, &a.RunID, &a.StepRunID, &a.ConversationID, &a.Kind, &request, &a.Status, &a.Decision, &a.Comment, &a.ExpiresAt, &a.DecidedAt, &a.CreatedAt); err != nil {
+		if err := rows.Scan(
+			&a.ID,
+			&a.RunID,
+			&a.StepRunID,
+			&a.ConversationID,
+			&a.Kind,
+			&request,
+			&a.Status,
+			&a.Decision,
+			&a.Comment,
+			&a.ExpiresAt,
+			&a.DecidedAt,
+			&a.CreatedAt,
+		); err != nil {
 			return nil, err
 		}
 		a.Request = json.RawMessage(mustJSON(request))
@@ -334,8 +495,12 @@ func (s *Store) PendingApprovals(ctx context.Context) ([]model.Approval, error) 
 }
 
 func (s *Store) ApprovalsForRun(ctx context.Context, runID string) ([]model.Approval, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,COALESCE(run_id,''),COALESCE(step_run_id,''),COALESCE(conversation_id,''),kind,request,status,COALESCE(decision,''),COALESCE(comment,''),COALESCE(expires_at,0),COALESCE(decided_at,0),created_at
-		FROM approvals WHERE run_id=? ORDER BY created_at`, runID)
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT id,COALESCE(run_id,''),COALESCE(step_run_id,''),COALESCE(conversation_id,''),kind,request,status,COALESCE(decision,''),COALESCE(comment,''),COALESCE(expires_at,0),COALESCE(decided_at,0),created_at
+		FROM approvals WHERE run_id=? ORDER BY created_at`,
+		runID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -344,7 +509,20 @@ func (s *Store) ApprovalsForRun(ctx context.Context, runID string) ([]model.Appr
 	for rows.Next() {
 		var a model.Approval
 		var request string
-		if err := rows.Scan(&a.ID, &a.RunID, &a.StepRunID, &a.ConversationID, &a.Kind, &request, &a.Status, &a.Decision, &a.Comment, &a.ExpiresAt, &a.DecidedAt, &a.CreatedAt); err != nil {
+		if err := rows.Scan(
+			&a.ID,
+			&a.RunID,
+			&a.StepRunID,
+			&a.ConversationID,
+			&a.Kind,
+			&request,
+			&a.Status,
+			&a.Decision,
+			&a.Comment,
+			&a.ExpiresAt,
+			&a.DecidedAt,
+			&a.CreatedAt,
+		); err != nil {
 			return nil, err
 		}
 		a.Request = json.RawMessage(mustJSON(request))
@@ -354,8 +532,13 @@ func (s *Store) ApprovalsForRun(ctx context.Context, runID string) ([]model.Appr
 }
 
 func (s *Store) ExpireApprovalsForRun(ctx context.Context, runID, reason string) (int, error) {
-	res, err := s.db.ExecContext(ctx, `UPDATE approvals SET status='expired', decision='interrupted', comment=?, decided_at=? WHERE run_id=? AND status='pending'`,
-		reason, ids.NowMS(), runID)
+	res, err := s.db.ExecContext(
+		ctx,
+		`UPDATE approvals SET status='expired', decision='interrupted', comment=?, decided_at=? WHERE run_id=? AND status='pending'`,
+		reason,
+		ids.NowMS(),
+		runID,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -364,7 +547,12 @@ func (s *Store) ExpireApprovalsForRun(ctx context.Context, runID, reason string)
 }
 
 func (s *Store) ExpireApprovals(ctx context.Context, now int64) (int, error) {
-	res, err := s.db.ExecContext(ctx, `UPDATE approvals SET status='expired', decided_at=? WHERE status='pending' AND expires_at IS NOT NULL AND expires_at <= ?`, now, now)
+	res, err := s.db.ExecContext(
+		ctx,
+		`UPDATE approvals SET status='expired', decided_at=? WHERE status='pending' AND expires_at IS NOT NULL AND expires_at <= ?`,
+		now,
+		now,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -381,8 +569,18 @@ func (s *Store) AddArtifact(ctx context.Context, a model.Artifact) (model.Artifa
 	if a.CreatedAt == 0 {
 		a.CreatedAt = ids.NowMS()
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO artifacts (id,run_id,step_run_id,path,sha256,size,mime,created_at) VALUES (?,?,?,?,?,?,?,?)`,
-		a.ID, nullString(a.RunID), nullString(a.StepRunID), a.Path, a.SHA256, a.Size, a.Mime, a.CreatedAt)
+	_, err := s.db.ExecContext(
+		ctx,
+		`INSERT INTO artifacts (id,run_id,step_run_id,path,sha256,size,mime,created_at) VALUES (?,?,?,?,?,?,?,?)`,
+		a.ID,
+		nullString(a.RunID),
+		nullString(a.StepRunID),
+		a.Path,
+		a.SHA256,
+		a.Size,
+		a.Mime,
+		a.CreatedAt,
+	)
 	return a, err
 }
 
@@ -402,10 +600,18 @@ func (s *Store) UpsertFeedback(ctx context.Context, f model.Feedback) (model.Fee
 	if f.CreatedAt == 0 {
 		f.CreatedAt = ids.NowMS()
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO feedback (id,target_kind,target_id,rating,note,created_at)
+	_, err := s.db.ExecContext(
+		ctx,
+		`INSERT INTO feedback (id,target_kind,target_id,rating,note,created_at)
 		VALUES (?,?,?,?,?,?)
 		ON CONFLICT(target_kind,target_id) DO UPDATE SET rating=excluded.rating, note=excluded.note, created_at=excluded.created_at`,
-		f.ID, f.TargetKind, f.TargetID, f.Rating, f.Note, f.CreatedAt)
+		f.ID,
+		f.TargetKind,
+		f.TargetID,
+		f.Rating,
+		f.Note,
+		f.CreatedAt,
+	)
 	if err != nil {
 		return f, err
 	}

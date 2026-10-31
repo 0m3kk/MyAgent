@@ -40,7 +40,11 @@ func (s *Server) handleGetRun(w http.ResponseWriter, r *http.Request) {
 	outputs, _ := s.app.RunOutputs(r.Context(), run.ID)
 	stepOutputs := s.app.StepOutputs(r.Context(), run.ID)
 	resp := map[string]any{
-		"run": run, "events": events, "approvals": approvals, "outputs": outputs, "step_outputs": stepOutputs,
+		"run":          run,
+		"events":       events,
+		"approvals":    approvals,
+		"outputs":      outputs,
+		"step_outputs": stepOutputs,
 	}
 	if f, err := s.app.Store.GetFeedback(r.Context(), "run", run.ID); err == nil {
 		resp["feedback"] = f

@@ -212,15 +212,24 @@ func (a *App) seedTool(ctx context.Context, manifestYAML, code string) error {
 		if err := os.WriteFile(filepath.Join(dir, entry), []byte(code), 0o644); err != nil {
 			return err
 		}
-		if err := os.WriteFile(filepath.Join(dir, "manifest.yaml"), []byte(manifestYAML), 0o644); err != nil {
+		if err := os.WriteFile(
+			filepath.Join(dir, "manifest.yaml"),
+			[]byte(manifestYAML),
+			0o644,
+		); err != nil {
 			return err
 		}
 		codePath = dir
 	}
 	sum := sha256.Sum256([]byte(hashInput))
 	_, err = a.Store.AddToolVersion(ctx, model.ToolVersion{
-		ToolID: t.ID, Manifest: manifestYAML, CodePath: codePath, ContentHash: hex.EncodeToString(sum[:]),
-		Status: model.ToolActive, CreatedBy: "user", ApprovedAt: ids.NowMS(),
+		ToolID:      t.ID,
+		Manifest:    manifestYAML,
+		CodePath:    codePath,
+		ContentHash: hex.EncodeToString(sum[:]),
+		Status:      model.ToolActive,
+		CreatedBy:   "user",
+		ApprovedAt:  ids.NowMS(),
 	})
 	return err
 }
@@ -236,9 +245,15 @@ func (a *App) validateOptions(ctx context.Context, forRun bool) workflow.Validat
 		if err != nil {
 			continue
 		}
-		info := workflow.ToolInfo{Name: t.Name, VersionID: t.Version.ID, Status: t.Version.Status,
-			InputSchema: m.InputSchema, SideEffect: m.SideEffect, Network: len(m.Permissions.Network.Domains) > 0,
-			SecretNames: secretNames(m.Secrets)}
+		info := workflow.ToolInfo{
+			Name:        t.Name,
+			VersionID:   t.Version.ID,
+			Status:      t.Version.Status,
+			InputSchema: m.InputSchema,
+			SideEffect:  m.SideEffect,
+			Network:     len(m.Permissions.Network.Domains) > 0,
+			SecretNames: secretNames(m.Secrets),
+		}
 		// Missing secret bindings.
 		binds, _ := a.Store.SecretBindings(ctx, t.ID)
 		byName := map[string]bool{}

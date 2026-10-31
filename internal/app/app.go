@@ -253,7 +253,9 @@ func New(ctx context.Context, cfg Config) (*App, error) {
 	a.reloadTriggers(ctx)
 	a.recoverInterrupted(ctx)
 	_, _ = a.Bus.EmitSimple(ctx, model.Event{Stream: model.StreamSys, Type: "app.started",
-		Payload: json.RawMessage(fmt.Sprintf(`{"version":%q,"workspace":%q}`, cfg.Version, ws.RootPath))})
+		Payload: json.RawMessage(
+			fmt.Sprintf(`{"version":%q,"workspace":%q}`, cfg.Version, ws.RootPath),
+		)})
 	return a, nil
 }
 
@@ -373,7 +375,11 @@ func (a *App) notify(title, message string) {
 	if len(message) > 400 {
 		message = message[:400]
 	}
-	script := fmt.Sprintf(`display notification %s with title %s`, quoteAppleScript(message), quoteAppleScript(title))
+	script := fmt.Sprintf(
+		`display notification %s with title %s`,
+		quoteAppleScript(message),
+		quoteAppleScript(title),
+	)
 	go func() {
 		_ = exec.Command("/usr/bin/osascript", "-e", script).Run()
 	}()
@@ -440,7 +446,10 @@ func profileParams(p model.ModelProfile) map[string]any {
 	return params
 }
 
-func (a *App) ModelProfileForRole(ctx context.Context, role string) (model.ModelProfile, llm.Profile, error) {
+func (a *App) ModelProfileForRole(
+	ctx context.Context,
+	role string,
+) (model.ModelProfile, llm.Profile, error) {
 	profiles, err := a.Store.ListModelProfiles(ctx)
 	if err != nil {
 		return model.ModelProfile{}, llm.Profile{}, err
@@ -480,7 +489,11 @@ func (a *App) ModelProfileForRole(ctx context.Context, role string) (model.Model
 	if p.SecretID != "" {
 		val, _, err := a.Secrets.Get(ctx, p.SecretID)
 		if err != nil {
-			return p, llm.Profile{}, fmt.Errorf("API key secret for %s is unavailable: %w", p.Name, err)
+			return p, llm.Profile{}, fmt.Errorf(
+				"API key secret for %s is unavailable: %w",
+				p.Name,
+				err,
+			)
 		}
 		apiKey = val
 	}
@@ -490,7 +503,10 @@ func (a *App) ModelProfileForRole(ctx context.Context, role string) (model.Model
 	}, nil
 }
 
-func (a *App) ChatWithTools(ctx context.Context, req workflow.LLMChatRequest) (workflow.LLMChatResult, error) {
+func (a *App) ChatWithTools(
+	ctx context.Context,
+	req workflow.LLMChatRequest,
+) (workflow.LLMChatResult, error) {
 	_, prof, err := a.ModelProfileForRole(ctx, req.Role)
 	if err != nil {
 		return workflow.LLMChatResult{}, err
@@ -525,8 +541,13 @@ func (a *App) ChatWithTools(ctx context.Context, req workflow.LLMChatRequest) (w
 	usage := res.Usage
 	cost := llm.CostMicro(prof, usage)
 	out := workflow.LLMChatResult{
-		Message: res.Message, Text: res.Message.Content, TokensIn: usage.PromptTokens,
-		TokensOut: usage.CompletionTokens, CostMicro: cost, Model: res.Model, Finish: res.FinishReason,
+		Message:   res.Message,
+		Text:      res.Message.Content,
+		TokensIn:  usage.PromptTokens,
+		TokensOut: usage.CompletionTokens,
+		CostMicro: cost,
+		Model:     res.Model,
+		Finish:    res.FinishReason,
 	}
 	if req.OutputSchema != nil {
 		var parsed any
@@ -579,8 +600,14 @@ func (a *App) Resolve(ctx context.Context, ref string) (workflow.ToolBinding, er
 	if err != nil {
 		return workflow.ToolBinding{}, err
 	}
-	if tv.Status != model.ToolActive && tv.Status != model.ToolApproved && tv.Status != model.ToolDeprecated {
-		return workflow.ToolBinding{}, fmt.Errorf("tool %s version %d is %s, not approved", name, tv.Version, tv.Status)
+	if tv.Status != model.ToolActive && tv.Status != model.ToolApproved &&
+		tv.Status != model.ToolDeprecated {
+		return workflow.ToolBinding{}, fmt.Errorf(
+			"tool %s version %d is %s, not approved",
+			name,
+			tv.Version,
+			tv.Status,
+		)
 	}
 	m, err := tools.ParseManifest(tv.Manifest)
 	if err != nil {
@@ -601,7 +628,12 @@ func secretNames(decls []tools.SecretDecl) []string {
 	return out
 }
 
-func (a *App) Execute(ctx context.Context, binding workflow.ToolBinding, input map[string]any, opts workflow.ToolExecOptions) (any, error) {
+func (a *App) Execute(
+	ctx context.Context,
+	binding workflow.ToolBinding,
+	input map[string]any,
+	opts workflow.ToolExecOptions,
+) (any, error) {
 	tv, err := a.Store.GetToolVersion(ctx, binding.VersionID)
 	if err != nil {
 		return nil, err
@@ -614,13 +646,29 @@ func (a *App) Execute(ctx context.Context, binding workflow.ToolBinding, input m
 	if err != nil {
 		return nil, err
 	}
-	secVals, err := a.resolveToolSecretsForVersion(ctx, t.ID, tv.ID, m, opts.RunID, opts.StepID, opts.StepRunID, opts.Source)
+	secVals, err := a.resolveToolSecretsForVersion(
+		ctx,
+		t.ID,
+		tv.ID,
+		m,
+		opts.RunID,
+		opts.StepID,
+		opts.StepRunID,
+		opts.Source,
+	)
 	if err != nil {
 		return nil, err
 	}
 	out, err := a.Executor.Execute(ctx, m, input, tools.ExecOptions{
-		ToolDir: tv.CodePath, ToolName: m.Name, Manifest: m, Secrets: secVals,
-		RunID: opts.RunID, IdemKey: opts.IdemKey, OnLog: opts.OnLog, DryRun: opts.DryRun, Source: opts.Source,
+		ToolDir:  tv.CodePath,
+		ToolName: m.Name,
+		Manifest: m,
+		Secrets:  secVals,
+		RunID:    opts.RunID,
+		IdemKey:  opts.IdemKey,
+		OnLog:    opts.OnLog,
+		DryRun:   opts.DryRun,
+		Source:   opts.Source,
 	})
 	if err != nil {
 		return nil, err

@@ -51,8 +51,14 @@ func (e *Engine) Run(ctx context.Context, spec *Spec, req RunRequest) RunResult 
 				"status": model.RunFailed,
 				"error":  fmt.Sprintf("internal error: %v", r),
 			}, func(tx *sql.Tx) error {
-				_, err := tx.ExecContext(context.Background(), `UPDATE runs SET status=?, finished_at=?, error=? WHERE id=?`,
-					model.RunFailed, ids.NowMS(), fmt.Sprintf("internal error: %v", r), req.RunID)
+				_, err := tx.ExecContext(
+					context.Background(),
+					`UPDATE runs SET status=?, finished_at=?, error=? WHERE id=?`,
+					model.RunFailed,
+					ids.NowMS(),
+					fmt.Sprintf("internal error: %v", r),
+					req.RunID,
+				)
 				return err
 			})
 			panic(r)
@@ -74,7 +80,12 @@ func (e *Engine) Run(ctx context.Context, spec *Spec, req RunRequest) RunResult 
 		"unattended": req.Unattended,
 	}
 	start := ex.emit(ctx, "run.started", "", startPayload, func(tx *sql.Tx) error {
-		_, err := tx.ExecContext(context.Background(), `UPDATE runs SET status='running', started_at=?, finished_at=NULL WHERE id=?`, ids.NowMS(), req.RunID)
+		_, err := tx.ExecContext(
+			context.Background(),
+			`UPDATE runs SET status='running', started_at=?, finished_at=NULL WHERE id=?`,
+			ids.NowMS(),
+			req.RunID,
+		)
 		return err
 	})
 	_ = start
@@ -145,8 +156,17 @@ func (e *Engine) Run(ctx context.Context, spec *Spec, req RunRequest) RunResult 
 		"warnings":   ex.continuedFailures(statuses),
 	}
 	ex.emit(context.Background(), "run.finished", "", endPayload, func(tx *sql.Tx) error {
-		_, err := tx.ExecContext(context.Background(), `UPDATE runs SET status=?, finished_at=?, error=?, tokens_in=?, tokens_out=?, cost_micro=? WHERE id=?`,
-			finalStatus, ids.NowMS(), nullIfEmpty(finalErr), tokensIn, tokensOut, cost, req.RunID)
+		_, err := tx.ExecContext(
+			context.Background(),
+			`UPDATE runs SET status=?, finished_at=?, error=?, tokens_in=?, tokens_out=?, cost_micro=? WHERE id=?`,
+			finalStatus,
+			ids.NowMS(),
+			nullIfEmpty(finalErr),
+			tokensIn,
+			tokensOut,
+			cost,
+			req.RunID,
+		)
 		return err
 	})
 	return RunResult{Status: finalStatus, Outputs: values, TokensIn: tokensIn, TokensOut: tokensOut,
@@ -193,7 +213,12 @@ func (ex *executor) addUsage(tokensIn, tokensOut int, cost int64) error {
 	return nil
 }
 
-func (ex *executor) emit(ctx context.Context, typ, stepID string, payload any, projection func(*sql.Tx) error) model.Event {
+func (ex *executor) emit(
+	ctx context.Context,
+	typ, stepID string,
+	payload any,
+	projection func(*sql.Tx) error,
+) model.Event {
 	pc := context.WithoutCancel(ctx)
 	pc, cancel := context.WithTimeout(pc, 5*time.Second)
 	defer cancel()
@@ -216,7 +241,13 @@ func (ex *executor) emit(ctx context.Context, typ, stepID string, payload any, p
 func (ex *executor) emitDelta(typ, stepID string, payload any) {
 	// Deltas are ephemeral but still cross the same trust boundary as persisted
 	// events, so redact them too.
-	ex.e.Bus.Delta(model.RunStream(ex.req.RunID), typ, ex.req.RunID, stepID, ex.e.redactPayload(payload))
+	ex.e.Bus.Delta(
+		model.RunStream(ex.req.RunID),
+		typ,
+		ex.req.RunID,
+		stepID,
+		ex.e.redactPayload(payload),
+	)
 }
 
 type stepOutcome struct {
@@ -226,7 +257,13 @@ type stepOutcome struct {
 	err    error
 }
 
-func (ex *executor) executeList(ctx context.Context, steps []Step, parent *Env, prefix string, depth int) (map[string]any, map[string]string, error) {
+func (ex *executor) executeList(
+	ctx context.Context,
+	steps []Step,
+	parent *Env,
+	prefix string,
+	depth int,
+) (map[string]any, map[string]string, error) {
 	if depth > 8 {
 		return nil, nil, errors.New("workflow nesting is too deep")
 	}
@@ -309,7 +346,14 @@ func (ex *executor) executeList(ctx context.Context, steps []Step, parent *Env, 
 			snapshot := copyEnv(env)
 			stCopy := st
 			go func() {
-				output, status, err := ex.executeStep(ctx, &stCopy, stepPath(prefix, stCopy.ID), snapshot, depth, steps)
+				output, status, err := ex.executeStep(
+					ctx,
+					&stCopy,
+					stepPath(prefix, stCopy.ID),
+					snapshot,
+					depth,
+					steps,
+				)
 				finished <- stepOutcome{id: stCopy.ID, output: output, status: status, err: err}
 			}()
 		}
@@ -365,7 +409,11 @@ func (ex *executor) executeList(ctx context.Context, steps []Step, parent *Env, 
 	return outputs, statuses, nil
 }
 
-func (ex *executor) dependencies(st Step, statuses map[string]string, siblings []Step) (ready, skip, fail bool) {
+func (ex *executor) dependencies(
+	st Step,
+	statuses map[string]string,
+	siblings []Step,
+) (ready, skip, fail bool) {
 	for _, need := range st.Needs {
 		status, ok := statuses[need]
 		if !ok {
@@ -397,7 +445,14 @@ func (ex *executor) recordSkipped(ctx context.Context, path, reason string) {
 	ex.emit(ctx, "step.skipped", path, map[string]any{"step_id": path, "reason": reason}, nil)
 }
 
-func (ex *executor) executeStep(ctx context.Context, st *Step, path string, env *Env, depth int, siblings []Step) (any, string, error) {
+func (ex *executor) executeStep(
+	ctx context.Context,
+	st *Step,
+	path string,
+	env *Env,
+	depth int,
+	siblings []Step,
+) (any, string, error) {
 	if ex.e.Controls != nil {
 		if err := ex.e.Controls.WaitIfPaused(ctx, ex.req.RunID); err != nil {
 			return nil, "cancelled", err
@@ -406,7 +461,8 @@ func (ex *executor) executeStep(ctx context.Context, st *Step, path string, env 
 	// Resume check (top-level list already does this, but nested lists reach here
 	// directly through branch/map).
 	if ex.req.Resume {
-		if sr, ok, err := ex.e.Store.SucceededStepAttempt(ctx, ex.req.RunID, path); err == nil && ok {
+		if sr, ok, err := ex.e.Store.SucceededStepAttempt(ctx, ex.req.RunID, path); err == nil &&
+			ok {
 			val, lerr := ex.loadOutput(ctx, sr.OutputRef)
 			if lerr == nil {
 				return val, "succeeded", nil
@@ -419,11 +475,24 @@ func (ex *executor) executeStep(ctx context.Context, st *Step, path string, env 
 			return nil, "failed", fmt.Errorf("when: %w", err)
 		}
 		if !ok {
-			sr, serr := ex.e.Store.StartStepRun(ctx, ex.req.RunID, path, nextAttempt(ctx, ex, path), "", "")
+			sr, serr := ex.e.Store.StartStepRun(
+				ctx,
+				ex.req.RunID,
+				path,
+				nextAttempt(ctx, ex, path),
+				"",
+				"",
+			)
 			if serr == nil {
 				_ = ex.e.Store.FinishStepRun(ctx, sr.ID, "skipped", "", "condition was false")
 			}
-			ex.emit(ctx, "step.skipped", path, map[string]any{"step_id": path, "reason": "condition was false"}, nil)
+			ex.emit(
+				ctx,
+				"step.skipped",
+				path,
+				map[string]any{"step_id": path, "reason": "condition was false"},
+				nil,
+			)
 			return nil, "skipped_condition", nil
 		}
 	}
@@ -443,7 +512,14 @@ func (ex *executor) executeStep(ctx context.Context, st *Step, path string, env 
 		if ctx.Err() != nil {
 			return nil, "cancelled", ctx.Err()
 		}
-		sr, err := ex.e.Store.StartStepRun(ctx, ex.req.RunID, path, attemptNum, "", ex.req.RunID+":"+path)
+		sr, err := ex.e.Store.StartStepRun(
+			ctx,
+			ex.req.RunID,
+			path,
+			attemptNum,
+			"",
+			ex.req.RunID+":"+path,
+		)
 		if err != nil {
 			return nil, "failed", err
 		}
@@ -467,8 +543,11 @@ func (ex *executor) executeStep(ctx context.Context, st *Step, path string, env 
 			} else {
 				_ = ex.e.Store.FinishStepRun(ctx, sr.ID, "succeeded", ref, "")
 				ex.emit(ctx, "step.finished", path, map[string]any{
-					"step_id": path, "status": "succeeded", "duration_ms": time.Since(start).Milliseconds(),
-					"output_ref": ref, "output": previewValue(output),
+					"step_id":     path,
+					"status":      "succeeded",
+					"duration_ms": time.Since(start).Milliseconds(),
+					"output_ref":  ref,
+					"output":      previewValue(output),
 				}, nil)
 				return output, "succeeded", nil
 			}
@@ -476,8 +555,11 @@ func (ex *executor) executeStep(ctx context.Context, st *Step, path string, env 
 		if execErr != nil {
 			_ = ex.e.Store.FinishStepRun(ctx, sr.ID, "failed", "", execErr.Error())
 			ex.emit(ctx, "step.finished", path, map[string]any{
-				"step_id": path, "status": "failed", "duration_ms": time.Since(start).Milliseconds(),
-				"error": execErr.Error(), "attempt": attemptNum,
+				"step_id":     path,
+				"status":      "failed",
+				"duration_ms": time.Since(start).Milliseconds(),
+				"error":       execErr.Error(),
+				"attempt":     attemptNum,
 			}, nil)
 			if ctx.Err() != nil {
 				return nil, "cancelled", ctx.Err()
@@ -538,10 +620,14 @@ func retryableError(err error) bool {
 		return rt.RetryableError()
 	}
 	msg := strings.ToLower(err.Error())
-	if strings.Contains(msg, "invalid_input") || strings.Contains(msg, "approval") || strings.Contains(msg, "401") || strings.Contains(msg, "403") {
+	if strings.Contains(msg, "invalid_input") || strings.Contains(msg, "approval") ||
+		strings.Contains(msg, "401") ||
+		strings.Contains(msg, "403") {
 		return false
 	}
-	if strings.Contains(msg, "timeout") || strings.Contains(msg, "rate") || strings.Contains(msg, "temporar") || strings.Contains(msg, "connection") {
+	if strings.Contains(msg, "timeout") || strings.Contains(msg, "rate") ||
+		strings.Contains(msg, "temporar") ||
+		strings.Contains(msg, "connection") {
 		return true
 	}
 	return false
