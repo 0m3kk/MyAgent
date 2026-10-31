@@ -23,11 +23,14 @@ import (
 	"myagent/internal/store"
 	"myagent/internal/tools"
 	"myagent/internal/workflow"
+	"myagent/internal/workspaces"
 )
 
 type Config struct {
 	DataDir       string
 	WorkspaceRoot string
+	WorkspaceName string
+	HomeDir       string
 	DBPath        string
 	ArtifactDir   string
 	ToolsDir      string
@@ -36,14 +39,15 @@ type Config struct {
 }
 
 type App struct {
-	cfg       Config
-	Store     *store.Store
-	Bus       *eventbus.Bus
-	Secrets   *secrets.Service
-	Executor  *tools.Executor
-	Engine    *workflow.Engine
-	LLM       *llm.Client
-	Workspace model.Workspace
+	cfg        Config
+	Store      *store.Store
+	Bus        *eventbus.Bus
+	Secrets    *secrets.Service
+	Executor   *tools.Executor
+	Engine     *workflow.Engine
+	LLM        *llm.Client
+	Workspace  model.Workspace
+	Workspaces *workspaces.Registry
 
 	runMu      sync.Mutex
 	runs       map[string]*RunControl
@@ -61,8 +65,10 @@ type App struct {
 	watchMu  sync.Mutex
 	watchers map[string][]*fileWatcher
 
-	closeCh chan struct{}
-	sem     chan struct{}
+	closeCh   chan struct{}
+	restartCh chan struct{}
+	restart   sync.Once
+	sem       chan struct{}
 
 	settingsMu sync.RWMutex
 	settings   Settings
@@ -181,6 +187,15 @@ func New(ctx context.Context, cfg Config) (*App, error) {
 	if cfg.WorkspaceRoot == "" {
 		cfg.WorkspaceRoot = defaultWorkspace()
 	}
+	if cfg.WorkspaceName == "" {
+		cfg.WorkspaceName = "Personal"
+	}
+	reg, err := workspaces.OpenOrCreate(
+		cfg.HomeDir, cfg.DataDir, cfg.WorkspaceRoot, cfg.WorkspaceName,
+	)
+	if err != nil {
+		return nil, err
+	}
 	migrateLegacyWorkspace(cfg.WorkspaceRoot)
 	if cfg.DBPath == "" {
 		cfg.DBPath = filepath.Join(cfg.DataDir, "myagent.db")
@@ -219,13 +234,13 @@ func New(ctx context.Context, cfg Config) (*App, error) {
 		st.Close()
 		return nil, err
 	}
-	ws, err := st.EnsureWorkspace(ctx, "Personal", cfg.WorkspaceRoot)
+	ws, err := st.EnsureWorkspace(ctx, cfg.WorkspaceName, cfg.WorkspaceRoot)
 	if err != nil {
 		st.Close()
 		return nil, err
 	}
 	a := &App{
-		cfg: cfg, Store: st, Bus: bus, Secrets: sec, Workspace: ws,
+		cfg: cfg, Store: st, Bus: bus, Secrets: sec, Workspace: ws, Workspaces: reg,
 		Executor:     tools.NewExecutor(cfg.WorkspaceRoot, cfg.DataDir),
 		LLM:          llm.NewClient(),
 		runs:         map[string]*RunControl{},
@@ -236,6 +251,7 @@ func New(ctx context.Context, cfg Config) (*App, error) {
 		cronIDs:      map[string]cron.EntryID{},
 		watchers:     map[string][]*fileWatcher{},
 		closeCh:      make(chan struct{}),
+		restartCh:    make(chan struct{}),
 		sem:          make(chan struct{}, 8),
 		settings:     DefaultSettings(),
 	}
@@ -294,8 +310,54 @@ func (a *App) Close() {
 
 func (a *App) Config() Config                 { return a.cfg }
 func (a *App) WorkspaceInfo() model.Workspace { return a.Workspace }
-func (a *App) KeyKind() string                { return a.Secrets.KeyKind() }
-func (a *App) KeyDescription() string         { return a.Secrets.KeyDescription() }
+
+// RequestRestart asks agentd to exit cleanly. The native shell watches the
+// process and relaunches it with the registry's newly active profile.
+func (a *App) RequestRestart() {
+	a.restart.Do(func() { close(a.restartCh) })
+}
+
+func (a *App) RestartCh() <-chan struct{} { return a.restartCh }
+
+func (a *App) HasActiveWork() bool {
+	a.chatMu.Lock()
+	for _, active := range a.chatActive {
+		if active {
+			a.chatMu.Unlock()
+			return true
+		}
+	}
+	a.chatMu.Unlock()
+	a.runMu.Lock()
+	activeRuns := len(a.runs)
+	a.runMu.Unlock()
+	return activeRuns > 0
+}
+
+// UpdateWorkspaceMetadata updates the active workspace row and executor. It is
+// used when the profile registry renames the active workspace or relinks its
+// project folder.
+func (a *App) UpdateWorkspaceMetadata(ctx context.Context, name, root string) error {
+	if name == "" {
+		name = a.Workspace.Name
+	}
+	if root == "" {
+		root = a.Workspace.RootPath
+	}
+	root = filepath.Clean(root)
+	rootChanged := root != filepath.Clean(a.Workspace.RootPath)
+	if err := a.Store.UpdateWorkspace(ctx, a.Workspace.ID, name, root); err != nil {
+		return err
+	}
+	a.Workspace.Name = name
+	a.Workspace.RootPath = root
+	if rootChanged {
+		a.Executor = tools.NewExecutor(root, a.cfg.DataDir)
+	}
+	return nil
+}
+func (a *App) KeyKind() string        { return a.Secrets.KeyKind() }
+func (a *App) KeyDescription() string { return a.Secrets.KeyDescription() }
 
 func (a *App) loadSettings(ctx context.Context) {
 	raw, err := a.Store.GetSetting(ctx, "settings")

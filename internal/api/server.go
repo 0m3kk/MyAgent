@@ -87,6 +87,14 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/events", s.handleEvents)
 	s.mux.HandleFunc("GET /api/events/replay", s.handleEventsReplay)
 
+	s.mux.HandleFunc("GET /api/workspaces", s.handleListWorkspaces)
+	s.mux.HandleFunc("POST /api/workspaces", s.handleCreateWorkspace)
+	s.mux.HandleFunc("POST /api/workspaces/import", s.handleImportWorkspace)
+	s.mux.HandleFunc("PATCH /api/workspaces/{id}", s.handleUpdateWorkspace)
+	s.mux.HandleFunc("DELETE /api/workspaces/{id}", s.handleDeleteWorkspace)
+	s.mux.HandleFunc("POST /api/workspaces/{id}/activate", s.handleActivateWorkspace)
+	s.mux.HandleFunc("GET /api/workspaces/{id}/export", s.handleExportWorkspace)
+
 	s.mux.HandleFunc("GET /api/conversations", s.handleListConversations)
 	s.mux.HandleFunc("POST /api/conversations", s.handleCreateConversation)
 	s.mux.HandleFunc("GET /api/conversations/{id}", s.handleGetConversation)

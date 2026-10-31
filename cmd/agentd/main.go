@@ -49,8 +49,18 @@ func main() {
 			os.Getenv("MYAGENT_WORKSPACE"),
 			"agent workspace directory",
 		)
-		uiDir     = flag.String("ui", envOr("MYAGENT_UI_DIR", "ui/dist"), "built UI directory")
-		openUI    = flag.Bool("open", true, "open the app in your browser")
+		uiDir   = flag.String("ui", envOr("MYAGENT_UI_DIR", "ui/dist"), "built UI directory")
+		openUI  = flag.Bool("open", true, "open the app in your browser")
+		homeDir = flag.String(
+			"home",
+			os.Getenv("MYAGENT_HOME"),
+			"workspace profile registry directory",
+		)
+		workspaceName = flag.String(
+			"workspace-name",
+			envOr("MYAGENT_WORKSPACE_NAME", "Personal"),
+			"active workspace display name",
+		)
 		parentPID = flag.Int(
 			"parent-pid",
 			0,
@@ -72,7 +82,14 @@ func main() {
 	defer cancel()
 	a, err := app.New(
 		ctx,
-		app.Config{DataDir: *dataDir, WorkspaceRoot: *workspace, Address: *addr, Version: version},
+		app.Config{
+			DataDir:       *dataDir,
+			WorkspaceRoot: *workspace,
+			WorkspaceName: *workspaceName,
+			HomeDir:       *homeDir,
+			Address:       *addr,
+			Version:       version,
+		},
 	)
 	if err != nil {
 		log.Fatalf("start app: %v", err)
@@ -149,6 +166,8 @@ func main() {
 		log.Printf("received %s, shutting down", sig)
 	case <-parentGone:
 		log.Printf("parent process %d exited, shutting down", *parentPID)
+	case <-a.RestartCh():
+		log.Printf("workspace switch requested, shutting down for restart")
 	case err := <-errCh:
 		if err != nil && err != http.ErrServerClosed {
 			log.Printf("server: %v", err)

@@ -62,7 +62,7 @@ swiftc -O \
   -F "$CONTENTS/Frameworks" \
   -framework Sparkle \
   -Xlinker -rpath -Xlinker "@executable_path/../Frameworks" \
-  -o "$CONTENTS/MacOS/MyAgent" "$ROOT/app/main.swift" \
+  -o "$CONTENTS/MacOS/MyAgent" "$ROOT/app/main.swift" "$ROOT/app/Workspaces.swift" \
   -framework Cocoa -framework WebKit
 
 cp "$ROOT/app/Info.plist" "$CONTENTS/Info.plist"

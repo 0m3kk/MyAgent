@@ -5,6 +5,7 @@ import { usePolling } from './hooks'
 
 const FONT_SCALE_KEY = 'myagent_font_scale'
 const THEME_KEY = 'myagent_theme'
+const APPEARANCE_MIGRATED_KEY = 'myagent_appearance_migrated'
 const FONT_MIN = 0.85
 const FONT_MAX = 1.6
 const FONT_STEP = 0.05
@@ -94,13 +95,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!data || appearanceHydrated.current) return
     appearanceHydrated.current = true
+    // localStorage is only a first-paint cache and a migration source from
+    // older builds. Once migrated, the per-workspace server settings win;
+    // otherwise switching workspaces would leak theme/font into a new profile.
+    const alreadyMigrated = localStorage.getItem(APPEARANCE_MIGRATED_KEY) === '1'
     const serverTheme = data.settings.theme
     const localTheme = localStorage.getItem(THEME_KEY)
     let nextTheme: ThemeMode = serverTheme === 'light' || serverTheme === 'dark' || serverTheme === 'system'
       ? serverTheme
       : 'system'
     let migrateTheme = false
-    if (nextTheme === 'system' && (localTheme === 'light' || localTheme === 'dark')) {
+    if (!alreadyMigrated && nextTheme === 'system' && (localTheme === 'light' || localTheme === 'dark')) {
       nextTheme = localTheme
       migrateTheme = true
     }
@@ -110,11 +115,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const localFontValid = Number.isFinite(localFont) && localFont >= FONT_MIN && localFont <= FONT_MAX
     let nextFont = serverFontValid ? serverFont : 1
     let migrateFont = false
-    if (serverFontValid && serverFont === 1 && localFontValid && localFont !== 1) {
+    if (!alreadyMigrated && serverFontValid && serverFont === 1 && localFontValid && localFont !== 1) {
       // Upgrade path from the localStorage-only build.
       nextFont = clampFontScale(localFont)
       migrateFont = true
-    } else if (!serverFontValid && localFontValid) {
+    } else if (!alreadyMigrated && !serverFontValid && localFontValid) {
       nextFont = clampFontScale(localFont)
       migrateFont = true
     }
@@ -123,6 +128,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     fontScaleRef.current = nextFont
     if (migrateTheme) void api.updateSettings({ theme: nextTheme }).catch(() => {})
     if (migrateFont) void api.updateSettings({ font_scale: nextFont }).catch(() => {})
+    if (!alreadyMigrated) localStorage.setItem(APPEARANCE_MIGRATED_KEY, '1')
   }, [data])
 
   useEffect(() => {

@@ -13,16 +13,21 @@ func (s *Store) EnsureWorkspace(ctx context.Context, name, root string) (model.W
 	err := s.db.QueryRowContext(ctx, `SELECT id, name, root_path, created_at FROM workspaces ORDER BY created_at LIMIT 1`).
 		Scan(&w.ID, &w.Name, &w.RootPath, &w.CreatedAt)
 	if err == nil {
-		// The configured root is authoritative; keep the stored row in sync.
-		if w.RootPath != root {
+		// The configured name and root are authoritative; keep the stored row in sync.
+		if name == "" {
+			name = w.Name
+		}
+		if w.Name != name || w.RootPath != root {
 			if _, err := s.db.ExecContext(
 				ctx,
-				`UPDATE workspaces SET root_path = ? WHERE id = ?`,
+				`UPDATE workspaces SET name = ?, root_path = ? WHERE id = ?`,
+				name,
 				root,
 				w.ID,
 			); err != nil {
 				return w, err
 			}
+			w.Name = name
 			w.RootPath = root
 		}
 		return w, nil
@@ -47,6 +52,17 @@ func (s *Store) GetWorkspace(ctx context.Context) (model.Workspace, error) {
 	err := s.db.QueryRowContext(ctx, `SELECT id, name, root_path, created_at FROM workspaces ORDER BY created_at LIMIT 1`).
 		Scan(&w.ID, &w.Name, &w.RootPath, &w.CreatedAt)
 	return w, fmtErr("workspace", err)
+}
+
+func (s *Store) UpdateWorkspace(ctx context.Context, id, name, root string) error {
+	_, err := s.db.ExecContext(
+		ctx,
+		`UPDATE workspaces SET name = ?, root_path = ? WHERE id = ?`,
+		name,
+		root,
+		id,
+	)
+	return err
 }
 
 func (s *Store) GetSetting(ctx context.Context, key string) (string, error) {

@@ -17,6 +17,8 @@ import type {
   ValidationResult,
   Workflow,
   WorkflowDetail,
+  WorkspaceList,
+  WorkspaceProfile,
 } from './types'
 
 const TOKEN_KEY = 'myagent_token'
@@ -64,7 +66,9 @@ export function getToken() {
 async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
   await ensureToken()
   const headers = new Headers(init.headers)
-  if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
+  if (init.body && !(init.body instanceof FormData) && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json')
+  }
   if (token) headers.set('Authorization', `Bearer ${token}`)
   const res = await fetch(path, { ...init, headers, credentials: 'same-origin' })
   if (res.status === 401 && retry) {
@@ -100,6 +104,24 @@ function json(body: unknown): RequestInit {
 export const api = {
   bootstrap: () => request<Bootstrap>('/api/bootstrap'),
   health: () => request<{ ok: boolean; version: string }>('/api/health'),
+
+  workspaces: () => request<WorkspaceList>('/api/workspaces'),
+  createWorkspace: (name: string, rootPath: string) =>
+    request<WorkspaceProfile>('/api/workspaces', json({ name, root_path: rootPath })),
+  updateWorkspace: (id: string, body: { name?: string; root_path?: string }) =>
+    request<WorkspaceProfile>(`/api/workspaces/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteWorkspace: (id: string) => request<{ ok: boolean }>(`/api/workspaces/${id}`, { method: 'DELETE' }),
+  activateWorkspace: (id: string) =>
+    request<{ ok: boolean; switched: boolean; workspace: WorkspaceProfile }>(`/api/workspaces/${id}/activate`, {
+      method: 'POST',
+    }),
+  importWorkspace: (file: File) => {
+    const body = new FormData()
+    body.append('file', file)
+    return request<WorkspaceProfile>('/api/workspaces/import', { method: 'POST', body })
+  },
+  exportWorkspaceUrl: (id: string) =>
+    `/api/workspaces/${id}/export?token=${encodeURIComponent(getToken())}`,
 
   conversations: () => request<{ conversations: Conversation[] }>('/api/conversations'),
   createConversation: (title = 'New chat') => request<Conversation>('/api/conversations', json({ title })),

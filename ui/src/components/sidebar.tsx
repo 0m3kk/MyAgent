@@ -16,6 +16,7 @@ import { formatRelative } from '../format'
 import { href, navigate, useRoute } from '../router'
 import { useApp } from '../store'
 import { Badge } from './ui'
+import { WorkspaceSwitcher } from './workspace-switcher'
 
 export function Sidebar({
   onCommand,
@@ -54,6 +55,7 @@ export function Sidebar({
           <span>Command</span>
           <kbd>⌘K</kbd>
         </button>
+        <WorkspaceSwitcher />
       </div>
 
       <nav className="nav">

@@ -2,13 +2,16 @@ import Cocoa
 import Sparkle
 import WebKit
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate {
     private var window: NSWindow!
     private var webView: WKWebView!
     private var core: Process?
     private var coreLog: FileHandle?
     private var serverURL: URL?
     private var updaterController: SPUStandardUpdaterController?
+    private var workspaceManager: WorkspaceManager?
+    private var terminating = false
+    private var restarting = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
@@ -25,11 +28,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         )
         buildMenu()
         do {
+            workspaceManager = try WorkspaceManager()
             let url = try startCore()
             serverURL = url
             buildWindow(url: url)
             NSApp.activate(ignoringOtherApps: true)
         } catch {
+            terminating = true
             showFatal(error)
         }
     }
@@ -51,20 +56,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        terminating = true
         stopCore()
     }
 
     private func startCore() throws -> URL {
+        guard let workspaceManager else {
+            throw WorkspaceError.message("Workspace registry is not initialized")
+        }
         let env = ProcessInfo.processInfo.environment
         let fm = FileManager.default
-        let dataDir: URL
-        if let path = env["MYAGENT_DATA_DIR"], !path.isEmpty {
-            dataDir = URL(fileURLWithPath: path)
-        } else {
-            dataDir = fm.homeDirectoryForCurrentUser
-                .appendingPathComponent("Library/Application Support/MyAgent")
-        }
+        let profile = workspaceManager.active
+        let dataDir = URL(fileURLWithPath: profile.dataDir)
         try fm.createDirectory(at: dataDir, withIntermediateDirectories: true)
+        // A stale api.json could point the shell at an old server. agentd
+        // writes a fresh one after binding its port.
+        try? fm.removeItem(at: dataDir.appendingPathComponent("api.json"))
 
         guard let agentd = locate("agentd", envKey: "MYAGENT_AGENTD") else {
             throw NSError(domain: "MyAgent", code: 1, userInfo: [NSLocalizedDescriptionKey:
@@ -88,14 +95,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         process.arguments = ["-addr", "127.0.0.1:0", "-open=false", "-ui", ui.path,
                              "-parent-pid", String(ProcessInfo.processInfo.processIdentifier)]
         var childEnv = env
+        childEnv["MYAGENT_HOME"] = workspaceManager.home.path
         childEnv["MYAGENT_DATA_DIR"] = dataDir.path
-        if childEnv["MYAGENT_WORKSPACE"] == nil {
-            childEnv["MYAGENT_WORKSPACE"] = fm.homeDirectoryForCurrentUser
-                .appendingPathComponent("MyAgent").path
-        }
+        childEnv["MYAGENT_WORKSPACE"] = profile.rootPath
+        childEnv["MYAGENT_WORKSPACE_NAME"] = profile.name
         process.environment = childEnv
         process.standardOutput = log
         process.standardError = log
+        process.terminationHandler = { [weak self] _ in
+            DispatchQueue.main.async { self?.coreDidExit() }
+        }
         try process.run()
         core = process
 
@@ -145,7 +154,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         window = NSWindow(contentRect: rect,
                           styleMask: [.titled, .closable, .miniaturizable, .resizable],
                           backing: .buffered, defer: false)
-        window.title = "MyAgent"
+        window.title = workspaceManager.map { "MyAgent — \($0.active.name)" } ?? "MyAgent"
         window.minSize = NSSize(width: 980, height: 680)
         window.center()
         window.setFrameAutosaveName("MyAgentMainWindow")
@@ -173,7 +182,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             if core.isRunning { core.terminate() }
         }
         try? coreLog?.close()
+        coreLog = nil
         core = nil
+    }
+
+    private func coreDidExit() {
+        guard !terminating, !restarting, window != nil else { return }
+        restarting = true
+        stopCore()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+            guard let self, !self.terminating else { return }
+            do {
+                try self.workspaceManager?.reload()
+                let url = try self.startCore()
+                self.serverURL = url
+                if let profile = self.workspaceManager?.active {
+                    self.window.title = "MyAgent — \(profile.name)"
+                }
+                self.webView.load(URLRequest(url: url))
+                self.restarting = false
+            } catch {
+                self.terminating = true
+                self.showFatal(error)
+            }
+        }
     }
 
     private func buildMenu() {
@@ -268,6 +300,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             return
         }
         decisionHandler(.allow)
+    }
+
+    func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
+                 decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+        if !navigationResponse.canShowMIMEType {
+            decisionHandler(.download)
+            return
+        }
+        decisionHandler(.allow)
+    }
+
+    func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {
+        download.delegate = self
+    }
+
+    func download(_ download: WKDownload, decideDestinationUsing response: URLResponse,
+                  suggestedFilename: String, completionHandler: @escaping (URL?) -> Void) {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = suggestedFilename
+        panel.canCreateDirectories = true
+        panel.begin { result in
+            completionHandler(result == .OK ? panel.url : nil)
+        }
+    }
+
+    func downloadDidFinish(_ download: WKDownload) {}
+
+    func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Download failed"
+        alert.informativeText = error.localizedDescription
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 
     func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String,

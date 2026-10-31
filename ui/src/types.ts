@@ -5,6 +5,21 @@ export interface Workspace {
   created_at: number
 }
 
+export interface WorkspaceProfile {
+  id: string
+  name: string
+  root_path: string
+  data_dir: string
+  created_at: number
+  last_opened_at: number
+}
+
+export interface WorkspaceList {
+  enabled: boolean
+  active: string
+  workspaces: WorkspaceProfile[]
+}
+
 export interface Settings {
   global_concurrency: number
   agent_max_steps: number

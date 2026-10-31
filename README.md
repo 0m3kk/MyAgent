@@ -55,14 +55,23 @@ Closing the window quits the app and stops the core. Scheduled and watched runs 
 
 | Item | Value |
 | --- | --- |
-| 📁 Data | `~/Library/Application Support/MyAgent` |
-| 🗂️ Workspace | `~/MyAgent` |
-| 🔑 Overrides | `MYAGENT_DATA_DIR`, `MYAGENT_WORKSPACE` |
+| 📁 Data | `~/Library/Application Support/MyAgent/profiles/<id>` |
+| 🗂️ Workspace | Active project folder (default `~/MyAgent`) |
+| 🔑 Overrides | `MYAGENT_HOME`, `MYAGENT_DATA_DIR`, `MYAGENT_WORKSPACE`, `MYAGENT_WORKSPACE_NAME` |
 
-Existing installs using `~/MyAgent Workspace` migrate on the next launch.
+Existing installs migrate into a `Personal` workspace profile on the next launch. The old `~/MyAgent Workspace` folder still migrates to `~/MyAgent`.
 
 > [!TIP]
 > A fresh install starts with built-in tools only. Add a model in **Settings → Models** to use chat. Workflows, conversations and workspace files are created by you.
+
+### 🗂️ Workspaces
+
+Each workspace profile is fully isolated: its own SQLite database, chats, workflows, tools, runs, secrets, model profiles and settings. The sidebar workspace switcher can create, rename, relink, delete, export and import profiles.
+
+- Switching restarts the local core; active chats and runs in the current workspace stop.
+- **Export** writes a `.myagentws` archive with the profile database, artifacts and tool files. Project files and secrets are not included; re-enter API keys after importing.
+- The project folder is just an authorized path. It is not copied into the archive.
+- Profiles live under `~/Library/Application Support/MyAgent/profiles/`; `workspaces.json` is the registry.
 
 ## ✨ What's inside
 
@@ -76,6 +85,7 @@ Existing installs using `~/MyAgent Workspace` migrate on the next launch.
 | 📊 | **Runs** | History, filters, feedback, rerun, side-by-side comparison and resumable interrupted runs. |
 | 🎯 | **Tuning** | Eval suites from real runs, deterministic replay, tuner diagnosis, diff review and rollback. |
 | ⏰ | **Triggers** | Cron, folder watchers, local webhooks, CLI, unattended policies and concurrency policies. |
+| 🗂️ | **Workspaces** | Isolated profiles with their own DB, chats, workflows, tools, runs, secrets and settings; switch, export and import without mixing state. |
 | 🖥️ | **Desktop** | Native Swift/WebKit shell, Geist Mono, adjustable text size, Light/Dark/System appearance and Sparkle auto-update. |
 
 ## 🧠 Models
