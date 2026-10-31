@@ -7,11 +7,11 @@ CONTENTS="$APP/Contents"
 
 if [ ! -d "$ROOT/ui/node_modules" ]; then
   echo "→ installing UI dependencies"
-  (cd "$ROOT/ui" && npm ci)
+  (cd "$ROOT/ui" && pnpm install --frozen-lockfile)
 fi
 
 echo "→ building UI"
-(cd "$ROOT/ui" && npm run build)
+(cd "$ROOT/ui" && pnpm run build)
 
 echo "→ building Go core"
 mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources/ui" "$ROOT/bin"

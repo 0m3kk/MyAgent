@@ -10,7 +10,7 @@ rm -f "$DATA_DIR/api.json"
 
 if [ ! -d "$ROOT/ui/node_modules" ]; then
   echo "→ installing UI dependencies"
-  (cd "$ROOT/ui" && npm install)
+  (cd "$ROOT/ui" && pnpm install)
 fi
 
 cleanup() {
@@ -43,4 +43,4 @@ echo "  UI:  http://127.0.0.1:5173/?token=$TOKEN"
 echo "  API: http://$ADDR"
 echo "  Log: $DATA_DIR/server.log"
 echo
-(cd "$ROOT/ui" && MYAGENT_API="http://$ADDR" npx vite --host 127.0.0.1)
+(cd "$ROOT/ui" && MYAGENT_API="http://$ADDR" pnpm exec vite --host 127.0.0.1)

@@ -2,6 +2,7 @@
   "name": "myagent-ui",
   "private": true,
   "version": "1.0.0",
+  "packageManager": "pnpm@12.16.1",
   "type": "module",
   "scripts": {
     "dev": "vite",

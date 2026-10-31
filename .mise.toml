@@ -1,6 +1,8 @@
 [tools]
 go = "1.27.3"
 node = "26.12.1"
+pnpm = "12.16.1"
+"go:github.com/golangci/golines" = "0.16.0"
 
 [tasks.help]
 description = "List available tasks"
@@ -8,7 +10,7 @@ run = "mise tasks"
 
 [tasks.deps]
 description = "Install UI dependencies"
-run = "cd ui && npm install"
+run = "cd ui && pnpm install"
 
 [tasks.dev]
 description = "Start the Go core and Vite with hot reload"
@@ -16,7 +18,7 @@ run = "./scripts/dev.sh"
 
 [tasks.ui]
 description = "Build the production UI"
-run = "cd ui && npm run build"
+run = "cd ui && pnpm run build"
 
 [tasks.api]
 description = "Build agentd and agentctl into bin/"
@@ -30,16 +32,23 @@ go build -o bin/agentctl ./cmd/agentctl
 description = "Build UI and Go binaries"
 depends = ["ui", "api"]
 
+[tasks.format]
+description = "Format Go code with gofmt and golines"
+run = """
+gofmt -w $(find cmd internal -name '*.go' -type f)
+golines -w --max-len=100 cmd internal
+"""
+
 [tasks.test]
 description = "Run Go tests and the UI typecheck"
 run = """
 go test ./...
-cd ui && npm run typecheck
+cd ui && pnpm run typecheck
 """
 
 [tasks.e2e]
 description = "Run Playwright smoke tests"
-run = "cd ui && npx playwright test"
+run = "cd ui && pnpm exec playwright test"
 
 [tasks.app]
 description = "Build the native MyAgent.app bundle"

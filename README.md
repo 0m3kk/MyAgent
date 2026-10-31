@@ -31,8 +31,8 @@ MyAgent is a native macOS desktop app with a Go core. Everything runs on your Ma
 Requirements: macOS 13+, [mise](https://mise.jdx.dev/), Xcode Command Line Tools.
 
 ```bash
-mise install       # Go 1.27.3 + Node 26.12.1 from .mise.toml
-mise run deps      # install UI dependencies
+mise install       # Go 1.27.3 + Node 26.12.1 + pnpm 12.16.1 from .mise.toml
+mise run deps      # install UI dependencies with pnpm
 mise run dev       # Go core + Vite with HMR
 ```
 
@@ -99,6 +99,7 @@ All project commands live in `.mise.toml`:
 | `mise run ui` | Build the production UI |
 | `mise run api` | Build `bin/agentd` and `bin/agentctl` |
 | `mise run build` | Build UI and Go binaries |
+| `mise run format` | Format Go code with gofmt and golines |
 | `mise run run` | Serve the production UI on `127.0.0.1:8787` |
 | `mise run app` | Build `dist/MyAgent.app` |
 | `mise run release` | Build and package a macOS release zip |
@@ -186,7 +187,7 @@ Coverage includes schema/expression validation, workflow validation and DAG exec
 
 ## Dependency updates
 
-Dependabot checks Go modules, the UI npm packages and GitHub Actions every Monday at 06:00 (Asia/Ho_Chi_Minh). The `all-dependencies` multi-ecosystem group in `.github/dependabot.yml` combines every update into a single pull request per week.
+Dependabot checks Go modules, the UI pnpm packages and GitHub Actions every Monday at 06:00 (Asia/Ho_Chi_Minh). The `all-dependencies` multi-ecosystem group in `.github/dependabot.yml` combines every update into a single pull request per week.
 
 ## Status and limitations
 
