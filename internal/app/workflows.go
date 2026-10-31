@@ -70,9 +70,14 @@ func (a *App) SaveWorkflowDraft(
 	if err != nil {
 		return SaveWorkflowResult{Validation: res}, err
 	}
+	var cur model.WorkflowVersion
+	hasCurrent := false
 	if w.CurrentVersionID != "" {
-		cur, err := a.Store.GetWorkflowVersion(ctx, w.CurrentVersionID)
-		if err == nil && baseVersion == 0 {
+		cur, err = a.Store.GetWorkflowVersion(ctx, w.CurrentVersionID)
+		if err == nil {
+			hasCurrent = true
+		}
+		if hasCurrent && baseVersion == 0 {
 			res.Errors = append(res.Errors, workflow.Diagnostic{Code: "E011", Path: "",
 				Message: fmt.Sprintf(
 					"base_version is required when editing an existing workflow (current v%d)",
@@ -86,7 +91,7 @@ func (a *App) SaveWorkflowDraft(
 				"base_version is required",
 			)
 		}
-		if err == nil && cur.Version != baseVersion {
+		if hasCurrent && cur.Version != baseVersion {
 			res.Errors = append(res.Errors, workflow.Diagnostic{Code: "E011", Path: "",
 				Message: fmt.Sprintf(
 					"base version %d is stale; current version is %d",
@@ -104,11 +109,32 @@ func (a *App) SaveWorkflowDraft(
 	}
 	inputSchema, _ := spec.InputSchema()
 	schemaJSON, _ := json.Marshal(inputSchema)
+	if hasCurrent && cur.Status == "draft" {
+		v, err := a.Store.UpdateWorkflowVersionDraft(ctx, model.WorkflowVersion{
+			ID: cur.ID, WorkflowID: w.ID, YAML: yamlText, InputSchema: schemaJSON,
+			ContentHash: spec.Hash(), ChangeNote: changeNote, CreatedBy: createdBy,
+		})
+		if err != nil {
+			return SaveWorkflowResult{Validation: res}, err
+		}
+		if err := a.Store.DeprecateSupersededWorkflowDrafts(ctx, w.ID, v.ID); err != nil {
+			return SaveWorkflowResult{Validation: res}, err
+		}
+		a.Bus.EmitNoErr(model.Event{Stream: model.StreamSys, Type: "workflow.version.updated",
+			Payload: a.mustPayload(
+				map[string]any{"workflow_id": w.ID, "version_id": v.ID, "version": v.Version,
+					"name": spec.Name, "created_by": createdBy, "warnings": res.Warnings},
+			)})
+		return SaveWorkflowResult{Workflow: w, Version: v, Validation: res}, nil
+	}
 	v, err := a.Store.AddWorkflowVersion(ctx, model.WorkflowVersion{
 		WorkflowID: w.ID, YAML: yamlText, InputSchema: schemaJSON, ContentHash: spec.Hash(),
 		Status: "draft", ChangeNote: changeNote, CreatedBy: createdBy,
 	})
 	if err != nil {
+		return SaveWorkflowResult{Validation: res}, err
+	}
+	if err := a.Store.DeprecateSupersededWorkflowDrafts(ctx, w.ID, v.ID); err != nil {
 		return SaveWorkflowResult{Validation: res}, err
 	}
 	a.Bus.EmitNoErr(model.Event{Stream: model.StreamSys, Type: "workflow.version.created",

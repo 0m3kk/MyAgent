@@ -31,7 +31,7 @@ export function useEventStream(
       'secret.requested', 'secret.accessed', 'secret.redacted',
       'message.created', 'conversation.updated',
       'trigger.created', 'trigger.fired', 'trigger.skipped',
-      'workflow.version.created', 'workflow.validation.failed', 'workflow.version.approved',
+      'workflow.version.created', 'workflow.version.updated', 'workflow.validation.failed', 'workflow.version.approved',
       'tool.version.created', 'tool.test.finished', 'tool.version.approved',
       'tuning.proposal.created', 'tuning.proposal.decided',
       'eval.case.finished', 'eval.run.finished', 'eval.case.created', 'eval.run.started',

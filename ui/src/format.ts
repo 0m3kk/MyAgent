@@ -12,6 +12,11 @@ export function formatRelative(ms?: number): string {
   return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+export function versionLabel(v?: { version: number; status?: string } | null): string {
+  if (!v) return ''
+  return v.status === 'draft' ? 'draft' : `v${v.version}`
+}
+
 export function formatDate(ms?: number): string {
   if (!ms) return '—'
   return new Date(ms).toLocaleString(undefined, {

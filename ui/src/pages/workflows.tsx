@@ -33,7 +33,7 @@ import { useApp } from '../store'
 import { useToast } from '../components/toast'
 import { useConfirm } from '../components/confirm'
 import type { ModelProfile, Run, StepSpec, Trigger, ValidationResult, Workflow, WorkflowDetail, WorkflowSpec, WorkflowVersion } from '../types'
-import { formatCost, formatDate, formatRelative, shortId, statusTone, titleCase } from '../format'
+import { formatCost, formatDate, formatRelative, shortId, statusTone, titleCase, versionLabel } from '../format'
 import { Badge, Button, Drawer, EmptyState, Field, IconButton, InlineNotice, Modal, PageHeader, SectionTitle, Select, Spinner, StatusBadge, Tabs, TextArea, TextInput, Toggle, CopyButton } from '../components/ui'
 import { DiagnosticsList } from '../components/diagnostics'
 import { InputForm, InputSpecList, schemaDefaults, validateInputs, type JSONSchema } from '../components/input-form'
@@ -119,7 +119,7 @@ function WorkflowRow({ workflow, runs }: { workflow: Workflow; runs: Run[] }) {
         <div className="workflow-row-title">
           <strong>{workflow.name}</strong>
           {v && <Badge tone={statusTone(v.status)}>{v.status}</Badge>}
-          {v && <span className="muted tiny">v{v.version}</span>}
+          {v && v.status !== 'draft' && <span className="muted tiny">{versionLabel(v)}</span>}
         </div>
         <div className="workflow-row-meta">
           <span>{steps.length} steps</span>
@@ -292,7 +292,7 @@ export function WorkflowPage({ workflowId }: { workflowId: string }) {
               <h1>{workflowName}</h1>
               <div className="workflow-subline">
                 {current && <Badge tone={statusTone(current.status)}>{current.status}</Badge>}
-                {current && <span>v{current.version}</span>}
+                {current && current.status !== 'draft' && <span>{versionLabel(current)}</span>}
                 {current && <span className="dot-sep" />}
                 <span>{current?.created_by || 'you'}</span>
                 {current && <span className="dot-sep" />}
@@ -624,7 +624,7 @@ function VersionsTab({
         </div>
         {detail.versions.map((v) => (
           <div key={v.id} className="versions-row">
-            <span className="mono">v{v.version}</span>
+            <span className="mono">{versionLabel(v)}</span>
             <StatusBadge status={v.status} />
             <span>{v.created_by}</span>
             <span className="muted">{v.change_note || '—'}</span>
@@ -638,7 +638,7 @@ function VersionsTab({
       </div>
       <div className="versions-note">
         <Info size={14} />
-        <span>Versions are immutable. Rollback is a pointer change, never an edit. Approval is tied to the content hash.</span>
+        <span>Drafts stay editable until approved. Approving snapshots the working draft as the next version; approved versions are immutable.</span>
       </div>
     </div>
   )
@@ -840,7 +840,7 @@ function RunWorkflowDialog({
     }
   }
   return (
-    <Modal open={open} onClose={onClose} title="Run workflow" subtitle={`${detail.workflow.name} · v${detail.workflow.version?.version}`} width={600}
+    <Modal open={open} onClose={onClose} title="Run workflow" subtitle={`${detail.workflow.name} · ${versionLabel(detail.workflow.version)}`} width={600}
       footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button variant="primary" icon={<CirclePlay size={15} />} onClick={run} loading={busy} disabled={Object.keys(errors).length > 0}>Start run</Button></>}>
       {errorsCount > 0 && <InlineNotice tone="bad" title="This version has validation errors">Run will be rejected until the E-codes are fixed.</InlineNotice>}
       {warnings > 0 && <InlineNotice tone="warn" title={`${warnings} warning(s)`}>The run is allowed; review risky steps in the graph.</InlineNotice>}

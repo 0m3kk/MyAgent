@@ -19,6 +19,7 @@ import {
 import clsx from 'clsx'
 import { navigate } from '../router'
 import { useApp } from '../store'
+import { versionLabel } from '../format'
 import { Kbd } from './ui'
 
 interface Item {
@@ -70,7 +71,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     }
     for (const w of data.workflows.slice(0, 30)) {
       base.push({
-        id: `wf-${w.id}`, label: w.name, hint: w.version ? `v${w.version.version} · ${w.version.status}` : '', group: 'Workflows',
+        id: `wf-${w.id}`, label: w.name, hint: w.version ? (w.version.status === 'draft' ? 'draft' : `${versionLabel(w.version)} · ${w.version.status}`) : '', group: 'Workflows',
         icon: <GitBranch size={16} />, keywords: w.version?.yaml, action: () => navigate(`/workflows/${w.id}`),
       })
     }

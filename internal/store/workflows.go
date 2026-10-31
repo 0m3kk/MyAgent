@@ -93,6 +93,72 @@ func (s *Store) AddWorkflowVersion(
 	return v, nil
 }
 
+// UpdateWorkflowVersionDraft edits the existing draft in place. Drafts do not
+// consume a new version number on every save; the next version starts only
+// after the current draft has been approved.
+func (s *Store) UpdateWorkflowVersionDraft(
+	ctx context.Context,
+	v model.WorkflowVersion,
+) (model.WorkflowVersion, error) {
+	if len(v.InputSchema) == 0 {
+		v.InputSchema = json.RawMessage(`{}`)
+	}
+	res, err := s.db.ExecContext(
+		ctx,
+		`UPDATE workflow_versions
+		 SET yaml=?, input_schema=?, content_hash=?, change_note=?, created_by=?
+		 WHERE id=? AND workflow_id=? AND status='draft'`,
+		v.YAML,
+		string(v.InputSchema),
+		v.ContentHash,
+		v.ChangeNote,
+		v.CreatedBy,
+		v.ID,
+		v.WorkflowID,
+	)
+	if err != nil {
+		return v, err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return v, err
+	}
+	if affected == 0 {
+		return v, ErrNotFound
+	}
+	return s.GetWorkflowVersion(ctx, v.ID)
+}
+
+// DeprecateSupersededWorkflowDrafts keeps only the active editable draft.
+// Older drafts from the previous create-a-row-on-every-save behavior remain
+// readable but stop looking like active work.
+func (s *Store) DeprecateOrphanWorkflowDrafts(ctx context.Context) error {
+	_, err := s.db.ExecContext(
+		ctx,
+		`UPDATE workflow_versions SET status='deprecated'
+		 WHERE status='draft'
+		   AND id NOT IN (
+		     SELECT current_version_id FROM workflows
+		     WHERE current_version_id IS NOT NULL AND current_version_id <> ''
+		   )`,
+	)
+	return err
+}
+
+func (s *Store) DeprecateSupersededWorkflowDrafts(
+	ctx context.Context,
+	workflowID, keepID string,
+) error {
+	_, err := s.db.ExecContext(
+		ctx,
+		`UPDATE workflow_versions SET status='deprecated'
+		 WHERE workflow_id=? AND id<>? AND status='draft'`,
+		workflowID,
+		keepID,
+	)
+	return err
+}
+
 func (s *Store) GetWorkflowVersion(ctx context.Context, id string) (model.WorkflowVersion, error) {
 	var v model.WorkflowVersion
 	var schema string
@@ -124,7 +190,8 @@ func (s *Store) WorkflowVersions(
 	rows, err := s.db.QueryContext(
 		ctx,
 		`SELECT id,workflow_id,version,yaml,input_schema,content_hash,status,change_note,COALESCE(parent_id,''),created_by,created_at
-		FROM workflow_versions WHERE workflow_id = ? ORDER BY version DESC`,
+		FROM workflow_versions WHERE workflow_id = ? AND status <> 'deprecated'
+		ORDER BY version DESC`,
 		workflowID,
 	)
 	if err != nil {

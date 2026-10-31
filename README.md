@@ -78,7 +78,7 @@ Each workspace profile is fully isolated: its own SQLite database, chats, workfl
 | | Area | Highlights |
 | --- | --- | --- |
 | 💬 | **Chat agent** | Streaming markdown, tool cards, approvals, live step/token limits, rename/auto-name, stop, run links and “Save as workflow”. |
-| 🔁 | **Workflows** | Strict YAML, structured validator, DAG engine, parallel/map/branch/agent steps, retries, pause/resume and crash recovery. |
+| 🔁 | **Workflows** | Strict YAML, structured validator, DAG engine, parallel/map/branch/agent steps, retries, pause/resume and crash recovery. Draft edits update one working version; approving snapshots the next version. |
 | 🎨 | **Canvas** | Live React Flow graph, status colors, animated edges and a per-step inspector for input, output, logs, trace and cost. |
 | 🧰 | **Tools** | Built-ins, Starlark, Python/Node/shell/binary sandbox, manifests, tests, version lifecycle and structured result rendering. |
 | 🛡️ | **Safety** | AES-256-GCM secrets, master key outside SQLite, redaction everywhere, path checks and a loopback-only API. |

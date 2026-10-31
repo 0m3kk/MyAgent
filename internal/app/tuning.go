@@ -482,6 +482,10 @@ func (a *App) DecideProposal(
 		if p.ProposedYAML == "" {
 			return p, errors.New("proposal has no proposed YAML")
 		}
+		if _, approvalRes, err := a.ValidateWorkflowYAML(ctx, p.ProposedYAML, true); err != nil ||
+			!approvalRes.OK() {
+			return p, fmt.Errorf("proposed workflow is not runnable: %w", validationError(approvalRes))
+		}
 		base, err := a.Store.GetWorkflowVersion(ctx, p.BaseVersionID)
 		if err != nil {
 			return p, fmt.Errorf("load proposal base version: %w", err)

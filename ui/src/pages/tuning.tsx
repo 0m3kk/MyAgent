@@ -22,7 +22,7 @@ import { useApp } from '../store'
 import { useToast } from '../components/toast'
 import { useConfirm } from '../components/confirm'
 import type { EvalRun, EvalSuite, Run, TuningProposal, WorkflowDetail } from '../types'
-import { formatCost, formatDate, formatRelative, safeJSON, shortId, statusTone } from '../format'
+import { formatCost, formatDate, formatRelative, safeJSON, shortId, statusTone, versionLabel } from '../format'
 import { Badge, Button, EmptyState, Field, InlineNotice, Modal, PageHeader, SectionTitle, Select, Spinner, StatusBadge, Tabs } from '../components/ui'
 
 type Tab = 'proposals' | 'evals' | 'signals'
@@ -219,7 +219,7 @@ export function TuningPage() {
         footer={<><Button variant="ghost" onClick={() => setRunEvalSuite(null)}>Cancel</Button><Button variant="primary" onClick={runEval} loading={busy === 'eval'} disabled={!targetVersion}>Run replay</Button></>}>
         <Field label="Target version" hint="Tool side effects are replayed from recorded outputs; LLM steps run live.">
           <Select value={targetVersion} onChange={(e) => setTargetVersion(e.target.value)}>
-            {versions.map((v) => <option key={v.id} value={v.id}>v{v.version} ({v.status})</option>)}
+            {versions.map((v) => <option key={v.id} value={v.id}>{v.status === 'draft' ? 'draft' : `${versionLabel(v)} (${v.status})`}</option>)}
           </Select>
         </Field>
         <InlineNotice tone="info" title="Deterministic tools">The current eval cases pin the original run inputs and recorded tool outputs.</InlineNotice>

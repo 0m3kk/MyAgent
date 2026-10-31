@@ -223,6 +223,10 @@ func New(ctx context.Context, cfg Config) (*App, error) {
 	_ = os.Chmod(cfg.DBPath, 0o600)
 	_ = os.Chmod(cfg.DBPath+"-wal", 0o600)
 	_ = os.Chmod(cfg.DBPath+"-shm", 0o600)
+	// Older builds created a new draft row on every save. Keep only each
+	// workflow's current draft as active work; superseded drafts remain as
+	// deprecated audit rows but are hidden from the version picker.
+	_ = st.DeprecateOrphanWorkflowDrafts(ctx)
 	bus := eventbus.New(st)
 	kp, err := secrets.NewKeyProvider(os.Getenv("MYAGENT_KEY_PROVIDER"), cfg.DataDir)
 	if err != nil {
