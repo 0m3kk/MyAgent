@@ -27,6 +27,31 @@ jobs:
       - name: Install Go and Node
         uses: jdx/mise-action@v5
 
+      # Optional: sign CI builds with the same self-signed identity as local
+      # builds. Without these secrets the release falls back to ad-hoc signing.
+      - name: Import self-signed signing identity
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          if [ -z "$MACOS_CERT_P12" ]; then
+            echo "MACOS_CERT_P12 is not set; building an ad-hoc signed release."
+            exit 0
+          fi
+          if [ -z "$MACOS_CERT_PASSWORD" ]; then
+            echo "MACOS_CERT_PASSWORD is required with MACOS_CERT_P12." >&2
+            exit 1
+          fi
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          security create-keychain -p actions "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p actions "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" "$HOME/Library/Keychains/login.keychain-db"
+          security default-keychain -d user -s "$KEYCHAIN"
+          printf '%s' "$MACOS_CERT_P12" | base64 -D > "$RUNNER_TEMP/MyAgent-SelfSigned.p12"
+          SIGNING_KEYCHAIN="$KEYCHAIN" SIGN_P12_PASSWORD="$MACOS_CERT_PASSWORD" \
+            ./scripts/setup-signing.sh import "$RUNNER_TEMP/MyAgent-SelfSigned.p12"
+
       # SPARKLE_PRIVATE_KEY signs the update archive and appcast with EdDSA.
       - name: Build release
         env:

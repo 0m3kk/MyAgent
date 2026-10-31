@@ -9,7 +9,10 @@ if [ -z "$VERSION" ]; then
   VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo dev)"
 fi
 VERSION="${VERSION//\//-}"
+export VERSION
 ARCH="$(uname -m)"
+SIGN_ID="${SIGN_ID:-MyAgent Self-Signed}"
+export SIGN_ID
 
 echo "→ releasing MyAgent ${VERSION} (${ARCH})"
 "$ROOT/scripts/build-macos.sh"
@@ -46,6 +49,11 @@ echo
 echo "Release artifacts:"
 ls -lh "$ZIP" "$ZIP.sha256" "$OUT/appcast.xml"
 echo
-echo "Note: this bundle is ad-hoc signed. Auto-update works without an Apple Developer account,"
-echo "but first installs and downloads may show a Gatekeeper warning until the app is signed"
-echo "with a Developer ID certificate and notarized."
+if codesign -d -r- "$ROOT/dist/MyAgent.app" 2>&1 | grep -q "cdhash"; then
+  echo "Note: this bundle is ad-hoc signed. Auto-update works without an Apple Developer account,"
+  echo "but macOS may ask for permissions again after each update. Run 'mise run sign-setup'"
+  echo "once to use a stable self-signed identity, or use a Developer ID + notarization."
+else
+  echo "Note: this bundle is signed with the local self-signed identity \"$SIGN_ID\"."
+  echo "First install may still need Open Anyway; Sparkle updates keep the same identity."
+fi

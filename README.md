@@ -112,12 +112,17 @@ All commands live in `.mise.toml`.
 | 🔎 | `mise run format-check` | Check Go formatting without writing |
 | ▶️ | `mise run run` | Serve production UI on `127.0.0.1:8787` |
 | 📱 | `mise run app` | Build `dist/MyAgent.app` |
+| 📲 | `mise run install` | Build and install into `/Applications` |
+| 🔏 | `mise run sign-setup` | Create a local self-signed signing identity |
+| 📥 | `mise run sign-import` | Import a self-signed identity from a `.p12` |
+| 🪪 | `mise run sign-status` | Show the local signing identity |
 | 🚀 | `mise run release` | Package a macOS release zip and appcast |
 | 🔑 | `mise run sparkle-key` | Print the Sparkle EdDSA public key |
 | 🔐 | `mise run sparkle-export` | Export the Sparkle private key for CI |
+| 📥 | `mise run sparkle-import` | Import the Sparkle private key from a file |
 | 🧪 | `mise run test` | Go tests + UI typecheck |
 | 🎭 | `mise run e2e` | Playwright smoke tests |
-| 🧹 | `mise run clean` | Remove build output and local data |
+| 🧹 | `mise run clean` | Remove build output and local data (keeps `dist/signing`) |
 
 ## 💻 CLI
 
@@ -183,7 +188,47 @@ cmd/agentctl        CLI
 VERSION=v1.0.0 mise run release
 ```
 
-Artifacts go to `dist/release/` as a zip, SHA-256 and Sparkle `appcast.xml`. The GitHub workflow builds on `macos-14` for `v*` tags and publishes the release. Local builds are ad-hoc signed; public distribution still needs Developer ID signing and notarization.
+Artifacts go to `dist/release/` as a zip, SHA-256 and Sparkle `appcast.xml`. The GitHub workflow builds on `macos-14` for `v*` tags and publishes the release. The tag name (for example `v0.1.6`) is written to `CFBundleShortVersionString` and injected into the Go core, so the in-app version matches the release.
+
+### 🔏 Local signing (self-signed)
+
+Local builds use a stable self-signed code signing identity so macOS keeps permissions (Local Network, firewall, TCC, login items) across updates. Run once per Mac:
+
+```bash
+mise run sign-setup
+```
+
+This creates `MyAgent Self-Signed`, trusts it for code signing in your login keychain, and exports `dist/signing/MyAgent-SelfSigned.p12`. Copy that file to the second Mac, then import it there:
+
+```bash
+mise run sign-import -- /path/to/MyAgent-SelfSigned.p12
+```
+
+Both Macs must use the same identity, otherwise permissions reset. Keep the `.p12` and its password safe (a password manager or encrypted disk); `mise run clean` keeps `dist/signing/`, but other cleanups may not.
+
+To sign GitHub Actions releases with the same identity, add the base64-encoded `.p12` and its password as the `MACOS_CERT_P12` and `MACOS_CERT_PASSWORD` repository secrets:
+
+```bash
+base64 -i dist/signing/MyAgent-SelfSigned.p12 | pbcopy
+```
+
+Without those secrets, CI builds remain ad-hoc signed.
+
+Check the active identity:
+
+```bash
+mise run sign-status
+```
+
+Then build and install:
+
+```bash
+mise run install
+```
+
+`install` builds the app, copies it to `/Applications`, removes the quarantine bit, and launches it. The first manual install on a new Mac may still show a Gatekeeper warning because a self-signed app is not notarized; approve it once in **System Settings → Privacy & Security → Open Anyway** (or run `xattr -dr com.apple.quarantine /Applications/MyAgent.app`). Sparkle updates keep the same identity and do not trigger Gatekeeper again.
+
+Public distribution still needs Developer ID signing and notarization; self-signed builds are for your own machines.
 
 ### 🔄 Auto-update
 
@@ -193,7 +238,8 @@ MyAgent uses **Sparkle 2**. The app checks GitHub Releases once per day and expo
 - The feed is `https://github.com/0m3kk/MyAgent/releases/latest/download/appcast.xml`.
 - Local releases use the Sparkle key in the macOS Keychain under the `com.myagent.desktop` account.
 - GitHub Actions needs the `SPARKLE_PRIVATE_KEY` secret. Run `mise run sparkle-export`, add the contents to the repository secret, then delete the local file.
-- Without Developer ID signing and notarization, the first install or update may show a Gatekeeper warning.
+- The self-signed identity keeps permissions stable across updates. The first install may still need **Open Anyway**; later Sparkle updates do not re-trigger Gatekeeper.
+- If you build releases on both Macs, share the Sparkle EdDSA key too: `mise run sparkle-export -- /path/to/key` on the first Mac, then `mise run sparkle-import -- /path/to/key` on the second. Otherwise each Mac signs appcasts with a different key and the app rejects the other's updates.
 
 ## 🧪 Tests
 

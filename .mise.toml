@@ -66,6 +66,23 @@ run = "cd ui && pnpm exec playwright test"
 description = "Build the native MyAgent.app bundle"
 run = "./scripts/build-macos.sh"
 
+[tasks.install]
+description = "Build and install MyAgent.app into /Applications"
+depends = ["app"]
+run = "./scripts/install-local.sh"
+
+[tasks.sign-setup]
+description = "Create a local self-signed code signing identity"
+run = "./scripts/setup-signing.sh create"
+
+[tasks.sign-import]
+description = "Import a self-signed code signing identity from a .p12"
+run = "./scripts/setup-signing.sh import"
+
+[tasks.sign-status]
+description = "Show the local code signing identity"
+run = "./scripts/setup-signing.sh status"
+
 [tasks.release]
 description = "Build and package a macOS release zip"
 run = "./scripts/release.sh"
@@ -78,6 +95,10 @@ run = "./scripts/sparkle-key.sh public"
 description = "Export the Sparkle private key for GitHub Actions"
 run = "./scripts/sparkle-key.sh export"
 
+[tasks.sparkle-import]
+description = "Import the Sparkle private key from a file"
+run = "./scripts/sparkle-key.sh import"
+
 [tasks.run]
 description = "Run the production build locally"
 depends = ["build"]
@@ -89,5 +110,5 @@ MYAGENT_WORKSPACE="${MYAGENT_WORKSPACE:-$PWD/.data/workspace}" \
 '''
 
 [tasks.clean]
-description = "Remove build output and local data"
-run = "rm -rf bin dist ui/dist .data"
+description = "Remove build output and local data (keeps dist/signing)"
+run = "rm -rf bin dist/MyAgent.app dist/release ui/dist .data"

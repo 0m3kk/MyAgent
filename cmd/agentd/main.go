@@ -21,7 +21,10 @@ import (
 	"myagent/internal/app"
 )
 
-const version = "1.0.0"
+// version is overridden at build time with:
+//
+//	go build -ldflags "-X main.version=1.2.3"
+var version = "1.0.0"
 
 type runtimeInfo struct {
 	URL   string `json:"url"`
