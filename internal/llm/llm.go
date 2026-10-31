@@ -9,9 +9,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type Message struct {
@@ -54,6 +57,9 @@ type ChatRequest struct {
 	OutputSchema map[string]any
 	Stream       bool
 	Extra        map[string]any
+	// SessionID is a stable per-conversation or per-run identifier. Some
+	// gateways (notably OpenCode Go) require it in a session header.
+	SessionID string
 }
 
 type Usage struct {
@@ -163,6 +169,12 @@ func (c *Client) Chat(ctx context.Context, p Profile, req ChatRequest, onDelta f
 		httpReq.Header.Set("Authorization", "Bearer "+p.APIKey)
 	}
 	applyHeaders(httpReq, p.Params)
+	if header := sessionHeaderName(p); header != "" && req.SessionID != "" {
+		if !strings.ContainsAny(req.SessionID, "\r\n") {
+			// The dynamic session value wins over a static headers entry.
+			httpReq.Header.Set(header, req.SessionID)
+		}
+	}
 	resp, err := c.HTTP.Do(httpReq)
 	if err != nil {
 		return ChatResult{}, &ProviderError{Message: err.Error(), Retryable: true}
@@ -199,6 +211,23 @@ func applyHeaders(req *http.Request, params map[string]any) {
 	for k, v := range headers {
 		req.Header.Set(k, fmt.Sprint(v))
 	}
+}
+
+// sessionHeaderName returns the configured header name, or the OpenCode Go
+// default when the profile points at opencode.ai. A stable value is supplied
+// per conversation/run by ChatRequest.SessionID.
+func sessionHeaderName(p Profile) string {
+	if v, ok := p.Params["session_header"].(string); ok && strings.TrimSpace(v) != "" {
+		return strings.TrimSpace(v)
+	}
+	u, err := url.Parse(strings.TrimSpace(p.BaseURL))
+	if err == nil {
+		host := strings.ToLower(u.Hostname())
+		if host == "opencode.ai" || strings.HasSuffix(host, ".opencode.ai") {
+			return "x-opencode-session"
+		}
+	}
+	return ""
 }
 
 func chatURL(base string) string {
@@ -523,6 +552,7 @@ func (c *Client) Probe(ctx context.Context, p Profile) Capabilities {
 		Messages:  []Message{{Role: "user", Content: "Call report_capability with phrase \"ok\". Do not answer with text."}},
 		Tools:     tools,
 		MaxTokens: 64,
+		SessionID: uuid.NewString(),
 	}
 	res, err := c.Chat(ctx, p, req, nil)
 	caps.LatencyMS = time.Since(start).Milliseconds()

@@ -254,9 +254,10 @@ Return JSON:
 {"diagnosis":"...", "patch_summary":"...", "expected_effect":"...", "proposed_yaml":"<full corrected workflow YAML>"}
 The diagnosis must classify the cause: bad input, wrong tool choice, weak prompt, tool bug, model limit, or flaky external service. Do not change steps that passed.`, v.YAML, run.Status, run.Error, run.Source, string(run.Inputs), mustJSON(run.Steps), string(trace))
 	res, err := a.ChatWithTools(ctx, workflow.LLMChatRequest{
-		Role:     "planner",
-		System:   "You are the tuner inside MyAgent. Diagnose from evidence, not guesses. Propose the smallest backward-compatible patch for one root cause. Do not touch steps that passed.",
-		Messages: []llm.Message{{Role: "user", Content: prompt}},
+		SessionID: runID,
+		Role:      "planner",
+		System:    "You are the tuner inside MyAgent. Diagnose from evidence, not guesses. Propose the smallest backward-compatible patch for one root cause. Do not touch steps that passed.",
+		Messages:  []llm.Message{{Role: "user", Content: prompt}},
 		OutputSchema: map[string]any{"type": "object", "required": []any{"diagnosis", "patch_summary", "expected_effect", "proposed_yaml"},
 			"properties": map[string]any{"diagnosis": map[string]any{"type": "string"}, "patch_summary": map[string]any{"type": "string"},
 				"expected_effect": map[string]any{"type": "string"}, "proposed_yaml": map[string]any{"type": "string"}}},

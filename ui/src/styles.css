@@ -1033,7 +1033,6 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .settings-inline-note { margin-top: 9px; color: var(--faint); font-size: calc(9.5px * var(--font-scale)); }
 .settings-inline-note strong { color: var(--muted); font-weight: 500; }
 .settings-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
-.cost-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; grid-column: 1 / -1; }
 .settings-toggles { display: flex; flex-direction: column; border-top: 1px solid var(--border-soft); margin-top: 14px; }
 .model-mini-list { display: flex; flex-direction: column; gap: 3px; margin: 10px 0; }
 .model-mini { display: flex; align-items: center; gap: 8px; padding: 5px 0; }

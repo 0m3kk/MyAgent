@@ -53,6 +53,7 @@ func (e *ToolError) Error() string {
 type LLMChatRequest struct {
 	RunID        string
 	StepID       string
+	SessionID    string
 	Role         string
 	System       string
 	Messages     []llm.Message

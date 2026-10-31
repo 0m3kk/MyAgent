@@ -157,7 +157,7 @@ func (ex *executor) runLLM(ctx context.Context, st *Step, path string, env *Env)
 		ex.emitDelta("step.output.delta", path, map[string]any{"chunk": text})
 	}
 	res, err := ex.e.LLM.ChatWithTools(ctx, LLMChatRequest{
-		RunID: ex.req.RunID, StepID: path, Role: role, System: systemStr,
+		RunID: ex.req.RunID, StepID: path, SessionID: ex.req.RunID, Role: role, System: systemStr,
 		Messages:     []llm.Message{{Role: "user", Content: promptStr}},
 		OutputSchema: st.LLM.OutputSchema, MaxTokens: st.LLM.MaxTokens, Temperature: st.LLM.Temperature,
 		Stream: stream,
@@ -467,7 +467,7 @@ func (ex *executor) runAgent(ctx context.Context, st *Step, path string, env *En
 		}
 		ex.emit(ctx, "llm.request", path+":agent", map[string]any{"role": role, "step": step + 1, "tools": len(defs)}, nil)
 		res, err := ex.e.LLM.ChatWithTools(ctx, LLMChatRequest{
-			RunID: ex.req.RunID, StepID: path + ":agent", Role: role, System: systemStr,
+			RunID: ex.req.RunID, StepID: path + ":agent", SessionID: ex.req.RunID, Role: role, System: systemStr,
 			Messages: messages, Tools: defs, MaxTokens: 0,
 			Stream: func(text string) {
 				ex.emitDelta("llm.delta", path, map[string]any{"text": text})

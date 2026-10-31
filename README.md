@@ -59,6 +59,7 @@ The implementation follows `DESIGN.md`: Go is the source of truth, every state c
 - Any OpenAI Chat Completions-compatible endpoint: OpenAI, OpenRouter, Ollama, LM Studio, vLLM, Groq, DeepSeek, etc.
 - Roles: planner, executor, judge, cheap; default profile for chat.
 - Capability probe (streaming, tool calling, JSON mode, latency), retryable error classification, usage/cost accounting and fallback role selection.
+- OpenCode Go preset (`https://opencode.ai/zen/go/v1`) with automatic `x-opencode-session` headers. The value is a stable per-conversation (chat) or per-run (workflow) UUID, not a shared static value.
 
 ## Requirements
 

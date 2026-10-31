@@ -484,9 +484,13 @@ func (a *App) ChatWithTools(ctx context.Context, req workflow.LLMChatRequest) (w
 		}
 		msgs = append(msgs, m)
 	}
+	sessionID := req.SessionID
+	if sessionID == "" {
+		sessionID = req.RunID
+	}
 	chatReq := llm.ChatRequest{
 		Messages: msgs, Tools: req.Tools, Temperature: req.Temperature, MaxTokens: req.MaxTokens,
-		OutputSchema: req.OutputSchema, Stream: true,
+		OutputSchema: req.OutputSchema, Stream: true, SessionID: sessionID,
 	}
 	res, err := a.LLM.Chat(ctx, prof, chatReq, func(ev llm.StreamEvent) {
 		if ev.TextDelta != "" && req.Stream != nil {

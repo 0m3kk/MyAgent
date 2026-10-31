@@ -179,7 +179,7 @@ func (a *App) runAssistant(convID, userText string) {
 		a.Bus.EmitNoErr(model.Event{Stream: model.ConvStream(convID), Type: "llm.request",
 			Payload: a.mustPayload(map[string]any{"role": "executor", "model": prof.Model, "step": step + 1, "tools": len(toolSet.Defs)})})
 		res, err := a.ChatWithTools(ctx, workflow.LLMChatRequest{
-			Role: "executor", System: system, Messages: messages, Tools: toolSet.Defs,
+			SessionID: convID, Role: "executor", System: system, Messages: messages, Tools: toolSet.Defs,
 			Stream: func(text string) {
 				streamedThisTurn += text
 				a.Bus.Delta(model.ConvStream(convID), "llm.delta", "", "", map[string]any{"text": text})

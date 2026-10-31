@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import clsx from 'clsx'
 import {
   AlertTriangle,
@@ -418,9 +418,19 @@ function SecretsTab({
   )
 }
 
-const PRESETS = [
+interface ModelPreset {
+  id: string
+  label: string
+  icon: ReactNode
+  base_url: string
+  model: string
+  session_header?: string
+}
+
+const PRESETS: ModelPreset[] = [
   { id: 'openai', label: 'OpenAI', icon: <Cloud size={15} />, base_url: 'https://api.openai.com/v1', model: 'gpt-4.1' },
   { id: 'openrouter', label: 'OpenRouter', icon: <Cloud size={15} />, base_url: 'https://openrouter.ai/api/v1', model: 'openai/gpt-4.1' },
+  { id: 'opencode', label: 'OpenCode Go', icon: <Zap size={15} />, base_url: 'https://opencode.ai/zen/go/v1', model: 'deepseek-v4.1-flash', session_header: 'x-opencode-session' },
   { id: 'ollama', label: 'Ollama (local)', icon: <Laptop size={15} />, base_url: 'http://127.0.0.1:11434/v1', model: 'llama3.2' },
   { id: 'lmstudio', label: 'LM Studio (local)', icon: <Laptop size={15} />, base_url: 'http://127.0.0.1:1234/v1', model: 'local-model' },
   { id: 'deepseek', label: 'DeepSeek', icon: <Server size={15} />, base_url: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
@@ -435,8 +445,7 @@ function ModelModal({ open, model, onClose, onSaved }: { open: boolean; model: M
   const [modelName, setModelName] = useState(PRESETS[0].model)
   const [role, setRole] = useState('executor')
   const [apiKey, setAPIKey] = useState('')
-  const [inputCost, setInputCost] = useState('')
-  const [outputCost, setOutputCost] = useState('')
+  const [sessionHeader, setSessionHeader] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -449,17 +458,15 @@ function ModelModal({ open, model, onClose, onSaved }: { open: boolean; model: M
       setBaseURL(model.base_url)
       setModelName(model.model)
       setRole(model.role)
-      const params = model.params || {}
-      setInputCost(params.input_cost_per_mtok !== undefined ? String(params.input_cost_per_mtok) : '')
-      setOutputCost(params.output_cost_per_mtok !== undefined ? String(params.output_cost_per_mtok) : '')
+      const header = (model.params || {}).session_header
+      setSessionHeader(typeof header === 'string' ? header : '')
       setPreset('custom')
     } else {
       setName('')
       setBaseURL(PRESETS[0].base_url)
       setModelName(PRESETS[0].model)
       setRole('executor')
-      setInputCost('')
-      setOutputCost('')
+      setSessionHeader('')
       setPreset('openai')
     }
   }, [open, model])
@@ -470,6 +477,7 @@ function ModelModal({ open, model, onClose, onSaved }: { open: boolean; model: M
     if (p) {
       setBaseURL(p.base_url)
       setModelName(p.model)
+      setSessionHeader(p.session_header || '')
       if (!name) setName(p.label)
     }
   }
@@ -478,6 +486,9 @@ function ModelModal({ open, model, onClose, onSaved }: { open: boolean; model: M
     setBusy(true)
     setError(null)
     try {
+      const params: Record<string, unknown> = { ...(model?.params || {}) }
+      if (sessionHeader.trim()) params.session_header = sessionHeader.trim()
+      else delete params.session_header
       await api.saveModel({
         id: model?.id,
         name: name || modelName,
@@ -485,11 +496,7 @@ function ModelModal({ open, model, onClose, onSaved }: { open: boolean; model: M
         model: modelName,
         role,
         api_key: apiKey,
-        params: {
-          ...(model?.params || {}),
-          input_cost_per_mtok: inputCost ? Number(inputCost) : 0,
-          output_cost_per_mtok: outputCost ? Number(outputCost) : 0,
-        },
+        params,
       })
       onSaved()
     } catch (err) {
@@ -518,10 +525,7 @@ function ModelModal({ open, model, onClose, onSaved }: { open: boolean; model: M
         <Field label="Base URL" hint="Include /v1 when the provider expects it."><TextInput value={baseURL} onChange={(e) => setBaseURL(e.target.value)} className="mono" /></Field>
         <Field label="Model"><TextInput value={modelName} onChange={(e) => setModelName(e.target.value)} className="mono" /></Field>
         <Field label="API key" hint={model?.secret_id ? 'Leave blank to keep the current key. A new value overwrites the stored secret.' : 'Stored encrypted; never appears in prompts.'}><TextInput type="password" value={apiKey} onChange={(e) => setAPIKey(e.target.value)} placeholder={model?.secret_id ? '•••••••• (unchanged)' : 'sk-…'} autoComplete="off" /></Field>
-        <div className="cost-fields">
-          <Field label="Input $/1M tokens"><TextInput type="number" step="0.01" value={inputCost} onChange={(e) => setInputCost(e.target.value)} /></Field>
-          <Field label="Output $/1M tokens"><TextInput type="number" step="0.01" value={outputCost} onChange={(e) => setOutputCost(e.target.value)} /></Field>
-        </div>
+        <Field label="Session header" hint="Optional. Use x-opencode-session for OpenCode Go; the app sends a stable per-conversation/run ID."><TextInput value={sessionHeader} onChange={(e) => setSessionHeader(e.target.value)} placeholder="x-opencode-session" className="mono" /></Field>
       </div>
       {error && <div className="form-error">{error}</div>}
       <InlineNotice tone="info" title="Probe after saving">Use Probe to verify streaming and tool calling before assigning this profile to workflow authoring.</InlineNotice>

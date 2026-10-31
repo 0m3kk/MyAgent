@@ -75,7 +75,7 @@ func (a *App) SaveChatAsWorkflow(ctx context.Context, convID, requestedName stri
 	// Try the planner first. It parameterizes and explains better than the
 	// offline fallback.
 	if profileOK, _ := a.hasPlanner(ctx); profileOK {
-		if res, err := a.llmAuthorWorkflow(ctx, requestedName, requestText, calls); err == nil {
+		if res, err := a.llmAuthorWorkflow(ctx, conv.ID, requestedName, requestText, calls); err == nil {
 			return res, nil
 		}
 	}
@@ -90,7 +90,7 @@ func (a *App) hasPlanner(ctx context.Context) (bool, error) {
 	return p.BaseURL != "mock://demo" && p.Model != "demo", nil
 }
 
-func (a *App) llmAuthorWorkflow(ctx context.Context, name, request string, calls []toolCallRecord) (SaveWorkflowResult, error) {
+func (a *App) llmAuthorWorkflow(ctx context.Context, sessionID, name, request string, calls []toolCallRecord) (SaveWorkflowResult, error) {
 	chain, _ := json.Marshal(calls)
 	system := `You are the workflow author mode of MyAgent. Turn one successful chat task into a small reusable workflow.
 Rules:
@@ -103,7 +103,7 @@ Rules:
 - The workflow must be valid and runnable.`
 	prompt := fmt.Sprintf("Name: %s\nOriginal request: %s\n\nSuccessful tool calls (in order):\n%s\n\nGenerate the workflow YAML. Keep it minimal.", name, request, string(chain))
 	res, err := a.ChatWithTools(ctx, workflow.LLMChatRequest{
-		Role: "planner", System: system, Messages: []llm.Message{{Role: "user", Content: prompt}},
+		SessionID: sessionID, Role: "planner", System: system, Messages: []llm.Message{{Role: "user", Content: prompt}},
 		OutputSchema: map[string]any{"type": "object", "required": []any{"yaml"},
 			"properties": map[string]any{"yaml": map[string]any{"type": "string"}}},
 	})
@@ -132,7 +132,7 @@ Rules:
 	diagnostics, _ := json.Marshal(resSave.Validation.Errors)
 	repair := fmt.Sprintf("The YAML failed validation. Diagnostics:\n%s\n\nReturn the corrected full YAML as JSON {\"yaml\":\"...\"}.", string(diagnostics))
 	res2, err := a.ChatWithTools(ctx, workflow.LLMChatRequest{
-		Role: "planner", System: system,
+		SessionID: sessionID, Role: "planner", System: system,
 		Messages: []llm.Message{{Role: "user", Content: prompt}, {Role: "assistant", Content: "```yaml\n" + yamlText + "\n```"}, {Role: "user", Content: repair}},
 		OutputSchema: map[string]any{"type": "object", "required": []any{"yaml"},
 			"properties": map[string]any{"yaml": map[string]any{"type": "string"}}},

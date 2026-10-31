@@ -74,6 +74,48 @@ func TestStreamingChatAndToolCalls(t *testing.T) {
 	}
 }
 
+func TestSessionHeader(t *testing.T) {
+	var session, static string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		session = r.Header.Get("x-opencode-session")
+		static = r.Header.Get("x-static")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"model":"m","choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}`))
+	}))
+	defer srv.Close()
+	c := NewClient()
+	_, err := c.Chat(context.Background(), Profile{
+		BaseURL: srv.URL, Model: "m",
+		Params: map[string]any{
+			"session_header": "x-opencode-session",
+			"headers":        map[string]any{"x-opencode-session": "static-value", "x-static": "yes"},
+		},
+	}, ChatRequest{
+		Messages: []Message{{Role: "user", Content: "hi"}}, SessionID: "conv-123",
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if session != "conv-123" {
+		t.Fatalf("session header = %q, want per-conversation value", session)
+	}
+	if static != "yes" {
+		t.Fatalf("static header missing: %q", static)
+	}
+}
+
+func TestSessionHeaderAutoDetect(t *testing.T) {
+	if got := sessionHeaderName(Profile{BaseURL: "https://opencode.ai/zen/go/v1"}); got != "x-opencode-session" {
+		t.Fatalf("opencode auto header = %q", got)
+	}
+	if got := sessionHeaderName(Profile{BaseURL: "https://api.example.com/v1"}); got != "" {
+		t.Fatalf("non-opencode header = %q", got)
+	}
+	if got := sessionHeaderName(Profile{BaseURL: "https://opencode.ai/zen/go/v1", Params: map[string]any{"session_header": "x-custom-session"}}); got != "x-custom-session" {
+		t.Fatalf("explicit header = %q", got)
+	}
+}
+
 func TestProviderErrorRetryable(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":{"message":"rate limited"}}`, 429)
