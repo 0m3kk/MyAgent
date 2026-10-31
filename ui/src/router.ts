@@ -8,7 +8,7 @@ export interface Route {
 
 function parseHash(): Route {
   let hash = window.location.hash.replace(/^#/, '')
-  if (!hash || hash === '/') hash = '/chats'
+  if (!hash || hash === '/') hash = '/home'
   const [path] = hash.split('?')
   return { path, segments: path.split('/').filter(Boolean), hash }
 }
@@ -18,7 +18,7 @@ export function useRoute(): Route {
   useEffect(() => {
     const onChange = () => setRoute(parseHash())
     window.addEventListener('hashchange', onChange)
-    if (!window.location.hash) window.location.replace('#/chats')
+    if (!window.location.hash) window.location.replace('#/home')
     return () => window.removeEventListener('hashchange', onChange)
   }, [])
   return route

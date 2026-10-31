@@ -4,6 +4,7 @@ import {
   ArrowRight,
   Command,
   GitBranch,
+  Home,
   MessageSquareText,
   Plus,
   Search,
@@ -48,6 +49,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   const items = useMemo<Item[]>(() => {
     if (!data) return []
     const base: Item[] = [
+      { id: 'nav-home', label: 'Go to Home', group: 'Navigate', icon: <Home size={16} />, action: () => navigate('/home') },
       { id: 'nav-chats', label: 'Go to Chats', group: 'Navigate', icon: <MessageSquareText size={16} />, action: () => navigate('/chats') },
       { id: 'nav-workflows', label: 'Go to Workflows', group: 'Navigate', icon: <GitBranch size={16} />, action: () => navigate('/workflows') },
       { id: 'nav-tools', label: 'Go to Tools', group: 'Navigate', icon: <Wrench size={16} />, action: () => navigate('/tools') },

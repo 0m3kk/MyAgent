@@ -16,6 +16,16 @@ test('home, command palette and workflow list', async ({ page }) => {
   await expect(page.getByText('Build your first workflow')).toBeVisible()
 })
 
+test('home and all chats are separate menus', async ({ page }) => {
+  await page.goto('/#/home')
+  await expect(page.getByRole('heading', { name: 'What should we get done?' })).toBeVisible({ timeout: 15_000 })
+  await page.getByRole('link', { name: /^Chats/ }).click()
+  await expect(page.getByRole('heading', { name: 'All chats' })).toBeVisible()
+  await expect(page.getByText('No chats yet')).toBeVisible()
+  await page.getByRole('link', { name: 'Home' }).click()
+  await expect(page.getByRole('heading', { name: 'What should we get done?' })).toBeVisible()
+})
+
 test('new chat opens a chat-only composer', async ({ page }) => {
   await page.goto('/#/workflows')
   await expect(page.getByRole('heading', { name: 'Workflows' })).toBeVisible({ timeout: 15_000 })

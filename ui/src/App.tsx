@@ -6,7 +6,7 @@ import { Sidebar } from './components/sidebar'
 import { CommandPalette } from './components/command-palette'
 import { ApprovalCenter } from './components/approval'
 import { Button, EmptyState, Spinner } from './components/ui'
-import { ChatHome, ChatPage, NewChatPage } from './pages/chat'
+import { ChatHome, ChatPage, ChatsPage, NewChatPage } from './pages/chat'
 import { WorkflowPage, WorkflowsPage } from './pages/workflows'
 import { RunPage, RunsPage } from './pages/runs'
 import { ToolPage, ToolsPage } from './pages/tools'
@@ -91,9 +91,11 @@ function Router({ route }: { route: ReturnType<typeof useRoute> }) {
   const [root, id, extra] = route.segments
   switch (root) {
     case undefined:
+    case 'home':
+      return <ChatHome />
     case 'chats':
       if (id === 'new') return <NewChatPage />
-      return id ? <ChatPage conversationId={id} /> : <ChatHome />
+      return id ? <ChatPage conversationId={id} /> : <ChatsPage />
     case 'workflows':
       return id ? <WorkflowPage workflowId={id} /> : <WorkflowsPage />
     case 'runs':
@@ -107,7 +109,7 @@ function Router({ route }: { route: ReturnType<typeof useRoute> }) {
     default:
       return (
         <div className="page center-page">
-          <EmptyState icon={<Sparkles size={26} />} title="Page not found" description={`Unknown route “${route.path}”.`} action={<Button onClick={() => navigate('/chats')}>Go home</Button>} />
+          <EmptyState icon={<Sparkles size={26} />} title="Page not found" description={`Unknown route “${route.path}”.`} action={<Button onClick={() => navigate('/home')}>Go home</Button>} />
         </div>
       )
   }

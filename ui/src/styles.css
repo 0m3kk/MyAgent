@@ -552,6 +552,16 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .home-composer { max-width: 900px; margin: 0 auto 22px; }
 .home-composer .composer, .home-composer .composer-foot { max-width: none; }
 .home-columns { display: grid; grid-template-columns: 1.25fr 0.9fr; gap: 14px; max-width: 900px; margin: 0 auto; }
+.chats-page { max-width: 900px; }
+.chat-list-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.chat-list-toolbar .search-box { flex: 1; max-width: 360px; }
+.chat-list { display: flex; flex-direction: column; gap: 5px; }
+.chat-list-row { display: flex; align-items: center; gap: 11px; width: 100%; text-align: left; border: 1px solid var(--border-soft); background: var(--surface); border-radius: var(--radius-md); padding: 11px 13px; transition: border-color 0.15s, background 0.15s; }
+.chat-list-row:hover { border-color: var(--border-strong); background: var(--surface-2); }
+.chat-list-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.chat-list-copy strong { font-size: calc(12.5px * var(--font-scale)); font-weight: 560; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-list-copy em { font-style: normal; color: var(--faint); font-size: calc(10px * var(--font-scale)); }
+.chat-list-row .conversation-icon { width: 30px; height: 30px; }
 .home-panel { border: 1px solid var(--border-soft); background: var(--surface); border-radius: var(--radius-lg); padding: 15px; }
 .home-panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
 .home-panel-head h2 { font-size: calc(12.5px * var(--font-scale)); }
@@ -1152,6 +1162,8 @@ input[type="checkbox"] { accent-color: var(--accent); }
   .tool-overview-side, .settings-side { grid-template-columns: 1fr; }
   .tuning-stats { grid-template-columns: 1fr 1fr; }
   .preset-grid { grid-template-columns: 1fr 1fr; }
+  .chat-list-toolbar { flex-direction: column; align-items: stretch; }
+  .chat-list-toolbar .search-box { max-width: none; }
 }
 
 /* Text size */

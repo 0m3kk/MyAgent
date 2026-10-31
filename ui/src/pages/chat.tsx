@@ -6,6 +6,7 @@ import {
   MessageSquareText,
   MoreHorizontal,
   Plus,
+  Search,
   Send,
   Sparkles,
   Square,
@@ -23,7 +24,7 @@ import { formatRelative } from '../format'
 import { ApprovalCard } from '../components/approval'
 import { StartChatComposer } from '../components/chat-composer'
 import { Markdown, MessageMeta, StreamCursor, ToolCard, TypingIndicator, type ToolView } from '../components/chat-bits'
-import { Badge, Button, EmptyState, IconButton, Spinner, TextArea } from '../components/ui'
+import { Badge, Button, EmptyState, IconButton, PageHeader, Spinner, TextArea } from '../components/ui'
 import { useToast } from '../components/toast'
 
 function approvalsFor(list: Approval[], conversationId: string) {
@@ -134,6 +135,64 @@ export function ChatHome() {
             <span>Try asking the agent to turn a successful chat into a workflow. It keeps the approvals you already made.</span>
           </div>
         </section>
+      </div>
+    </div>
+  )
+}
+
+export function ChatsPage() {
+  const { data } = useApp()
+  const [query, setQuery] = useState('')
+  if (!data) return null
+  const needle = query.trim().toLowerCase()
+  const conversations = needle
+    ? data.conversations.filter((c) => c.title.toLowerCase().includes(needle))
+    : data.conversations
+
+  return (
+    <div className="page chats-page">
+      <PageHeader
+        eyebrow="Chats"
+        title="All chats"
+        description="Every conversation with the agent, newest first."
+        actions={
+          <Button variant="primary" icon={<Plus size={15} />} onClick={() => navigate('/chats/new')}>
+            New chat
+          </Button>
+        }
+      />
+
+      <div className="chat-list-toolbar">
+        <div className="search-box">
+          <Search size={14} />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search chats…" />
+        </div>
+        <span className="muted small">{conversations.length} conversation{conversations.length === 1 ? '' : 's'}</span>
+      </div>
+
+      <div className="chat-list">
+        {conversations.map((c) => (
+          <button key={c.id} className="chat-list-row" onClick={() => navigate(`/chats/${c.id}`)}>
+            <span className="conversation-icon"><MessageSquareText size={16} /></span>
+            <span className="chat-list-copy">
+              <strong>{c.title}</strong>
+              <em>Updated {formatRelative(c.updated_at)}</em>
+            </span>
+            <ArrowRight size={15} className="muted" />
+          </button>
+        ))}
+        {conversations.length === 0 && (
+          <EmptyState
+            icon={<MessageSquareText size={24} />}
+            title={needle ? 'No matching chats' : 'No chats yet'}
+            description={needle ? 'Try a different search.' : 'Start a conversation to see it here.'}
+            action={
+              <Button variant="primary" size="sm" icon={<Plus size={14} />} onClick={() => navigate('/chats/new')}>
+                New chat
+              </Button>
+            }
+          />
+        )}
       </div>
     </div>
   )

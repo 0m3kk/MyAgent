@@ -3,6 +3,7 @@ import {
   Bot,
   Command,
   GitBranch,
+  Home,
   MessageSquareText,
   Plus,
   Search,
@@ -31,18 +32,19 @@ export function Sidebar({
   const defaultModel = data.model_profiles.find((m) => m.id === data.settings.default_model_id) || data.model_profiles[0]
   const running = (data.counts?.run_running || 0) + (data.counts?.run_waiting_approval || 0)
   const nav = [
+    { id: 'home', label: 'Home', icon: Home },
     { id: 'chats', label: 'Chats', icon: MessageSquareText, count: data.conversations.length },
     { id: 'workflows', label: 'Workflows', icon: GitBranch, count: data.workflows.length },
     { id: 'tools', label: 'Tools', icon: Wrench, count: data.tools.length },
     { id: 'runs', label: 'Runs', icon: Activity, count: running || undefined },
     { id: 'tuning', label: 'Tuning', icon: SlidersHorizontal },
   ]
-  const activeRoot = route.segments[0] || 'chats'
+  const activeRoot = route.segments[0] || 'home'
 
   return (
     <aside className="sidebar">
       <div className="sidebar-top">
-        <a className="brand" href={href('/chats')} onClick={(e) => { e.preventDefault(); navigate('/chats') }}>
+        <a className="brand" href={href('/home')} onClick={(e) => { e.preventDefault(); navigate('/home') }}>
           <span className="brand-mark"><Bot size={18} /></span>
           <span className="brand-copy">
             <strong>MyAgent</strong>
@@ -61,7 +63,7 @@ export function Sidebar({
       <nav className="nav">
         {nav.map((item) => {
           const Icon = item.icon
-          const active = activeRoot === item.id || (item.id === 'chats' && activeRoot === 'chats')
+          const active = activeRoot === item.id
           return (
             <a
               key={item.id}
