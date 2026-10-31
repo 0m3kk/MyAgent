@@ -33,6 +33,7 @@ import { Badge, Button, EmptyState, IconButton, InlineNotice, Modal, PageHeader,
 import { WorkflowCanvas } from '../components/workflow-canvas'
 import { RunInspector, StepStatusList } from '../components/run-inspector'
 import { Markdown, ToolCard, type ToolView } from '../components/chat-bits'
+import { ResultBlock } from '../components/result-view'
 
 function mergeEvents(prev: EventEnvelope[], next: EventEnvelope[]): EventEnvelope[] {
   const byID = new Map<number, EventEnvelope>()
@@ -468,7 +469,7 @@ function ToolRunView({
       </div>
       <div className="tool-run-json">
         <div className="terminal-head"><span>Result</span><span className="mono tiny">{shortId(run.id)}</span></div>
-        <pre className="json-block">{safeJSON(result ?? {}, 30000)}</pre>
+        <ResultBlock value={result ?? {}} rawMax={30000} />
       </div>
       {run.error && <InlineNotice tone="bad" title="Run failed">{run.error}</InlineNotice>}
     </div>

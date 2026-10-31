@@ -62,6 +62,54 @@ test('chat title can be renamed and reset', async ({ page }) => {
   await expect(title).toHaveText('first chat')
 })
 
+test('structured workflow output renders readable content', async ({ page }) => {
+  await page.goto('/#/runs')
+  await expect(page.getByRole('heading', { name: 'Runs' })).toBeVisible({ timeout: 15_000 })
+  const token = await page.evaluate(async () => {
+    const res = await fetch('/api/dev-token')
+    return ((await res.json()) as { token: string }).token
+  })
+  const headers = { Authorization: `Bearer ${token}` }
+  const yaml = `schema: 1
+name: result-view-test
+description: Structured output test.
+inputs: {}
+outputs:
+  summary: \${steps.compose.output.summary}
+  sources: \${steps.compose.output.sources}
+steps:
+  - id: compose
+    set:
+      summary: |
+        # Internet summary
+
+        The agent found **useful sources**.
+      sources:
+        - title: Local-first software
+          url: https://www.inkandswitch.com/local-first/
+          snippet: Seven ideals for local-first software.
+`
+  const saved = await page.request.post('/api/workflows', {
+    headers,
+    data: { yaml, change_note: 'e2e', approve: true },
+  })
+  const workflowID = ((await saved.json()) as { workflow: { id: string } }).workflow.id
+  const runResponse = await page.request.post(`/api/workflows/${workflowID}/run`, {
+    headers,
+    data: { inputs: {} },
+  })
+  const runID = ((await runResponse.json()) as { run: { id: string } }).run.id
+  await expect.poll(async () => {
+    const res = await page.request.get(`/api/runs/${runID}`, { headers })
+    return ((await res.json()) as { run: { status: string } }).run.status
+  }, { timeout: 10_000 }).toBe('succeeded')
+
+  await page.goto(`/#/runs/${runID}`)
+  await expect(page.getByRole('heading', { name: 'Internet summary' })).toBeVisible()
+  await expect(page.getByRole('link', { name: /Local-first software/ })).toBeVisible()
+  await expect(page.getByText('Raw JSON')).toBeVisible()
+})
+
 test('text size can be increased and reset in settings', async ({ page }) => {
   await page.goto('/#/settings')
   const control = page.locator('.settings-page .text-size-control')

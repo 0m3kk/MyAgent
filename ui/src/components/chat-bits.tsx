@@ -1,6 +1,4 @@
 import { useState, type ReactNode } from 'react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
 import clsx from 'clsx'
 import {
   CheckCircle2,
@@ -9,7 +7,6 @@ import {
   Circle,
   CircleAlert,
   Clock3,
-  ExternalLink,
   Loader2,
   Play,
   TerminalSquare,
@@ -19,43 +16,9 @@ import {
 import { navigate } from '../router'
 import { formatDuration, safeJSON, titleCase } from '../format'
 import { Badge, CopyButton } from './ui'
+import { ResultBlock } from './result-view'
 
-export function Markdown({ children, className }: { children: string; className?: string }) {
-  return (
-    <div className={clsx('markdown', className)}>
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          a: ({ href, children }) => (
-            <a href={href} target="_blank" rel="noreferrer">
-              {children} <ExternalLink size={11} className="inline-icon" />
-            </a>
-          ),
-          pre: ({ children }) => {
-            const text = extractText(children)
-            return (
-              <div className="code-wrap">
-                <div className="code-head"><span>code</span><CopyButton text={text} /></div>
-                <pre>{children}</pre>
-              </div>
-            )
-          },
-        }}
-      >
-        {children}
-      </ReactMarkdown>
-    </div>
-  )
-}
-
-function extractText(node: ReactNode): string {
-  if (typeof node === 'string' || typeof node === 'number') return String(node)
-  if (Array.isArray(node)) return node.map(extractText).join('')
-  if (node && typeof node === 'object' && 'props' in node) {
-    return extractText((node as { props?: { children?: ReactNode } }).props?.children)
-  }
-  return ''
-}
+export { Markdown } from './markdown'
 
 export interface ToolView {
   key: string
@@ -112,11 +75,7 @@ export function ToolCard({ tool, live }: { tool: ToolView; live?: boolean }) {
           ) : tool.result !== undefined ? (
             <div className="tool-section">
               <div className="tool-section-head">Result <CopyButton text={safeJSON(tool.result, 10000)} /></div>
-              {typeof result === 'string' ? (
-                <pre className="json-block">{result}</pre>
-              ) : (
-                <pre className="json-block">{safeJSON(result, 12000)}</pre>
-              )}
+              <ResultBlock value={result} rawMax={12000} />
             </div>
           ) : status === 'running' ? (
             <div className="tool-running"><Loader2 size={14} className="spin" /> Waiting for the tool…</div>

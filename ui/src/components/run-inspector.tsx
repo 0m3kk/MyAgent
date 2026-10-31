@@ -14,6 +14,7 @@ import {
 import type { EventEnvelope, Run, StepSpec, WorkflowSpec } from '../types'
 import { formatCost, formatDate, formatDuration, safeJSON, shortId, titleCase } from '../format'
 import { Badge, CopyButton, StatusBadge, Tabs } from './ui'
+import { ResultBlock } from './result-view'
 
 type Tab = 'overview' | 'input' | 'output' | 'logs' | 'trace' | 'cost'
 
@@ -78,11 +79,11 @@ export function RunInspector({
           <div className="inspector-section">
             <InspectorLabel icon={<FileJson size={13} />} title="Output" />
             {selectedStep && stepOutputs[selectedStep] !== undefined ? (
-              <pre className="json-block">{safeJSON(stepOutputs[selectedStep], 20000)}</pre>
+              <ResultBlock value={stepOutputs[selectedStep]} rawMax={20000} />
             ) : selectedStep ? (
               <div className="muted-block">No output yet for this step.</div>
             ) : (
-              <pre className="json-block">{safeJSON(outputs, 30000)}</pre>
+              <ResultBlock value={outputs} rawMax={30000} />
             )}
           </div>
         )}
@@ -128,7 +129,7 @@ function RunOverview({ run, outputs, events }: { run: Run; outputs: Record<strin
       <InspectorLabel icon={<CircleDot size={13} />} title="Inputs" />
       <pre className="json-block">{safeJSON(run.inputs, 8000)}</pre>
       <InspectorLabel icon={<FileJson size={13} />} title="Outputs" />
-      <pre className="json-block">{safeJSON(outputs, 20000)}</pre>
+      <ResultBlock value={outputs} rawMax={20000} />
       <div className="overview-foot">
         <span className="mono tiny">run {run.id}</span>
         <CopyButton text={run.id} />
