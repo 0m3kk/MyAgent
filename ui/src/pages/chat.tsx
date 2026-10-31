@@ -689,7 +689,7 @@ export function ChatPage({ conversationId }: { conversationId: string }) {
                 <div className="assistant-card">
                   {streamText ? (
                     <>
-                      <Markdown>{streamText}</Markdown>
+                      <Markdown streaming>{streamText}</Markdown>
                       <StreamCursor />
                     </>
                   ) : !liveToolList.length ? <TypingIndicator /> : null}

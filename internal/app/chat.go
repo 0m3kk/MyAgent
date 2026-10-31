@@ -641,6 +641,24 @@ You can use tools, author reusable workflows and tools, run them, inspect runs a
 - If a request is ambiguous and a wrong guess is costly, ask ONE short question with ask_user.
 - The user sees YAML/diffs in the UI; summarize outcomes instead of dumping long YAML unless asked.
 `)
+	b.WriteString(`
+# Visual output
+- When a chart, table, metric grid or comparison is clearer than prose, add a fenced block tagged "ui". Keep the surrounding prose short.
+- The block contains JSON: {"root":"<id>","elements":{"<id>":{"type":"<Component>","props":{...},"children":["<child-id>"]}}}
+- Every element includes children; use [] for leaf components.
+- Allowed components and props:
+  - Stack {gap?: sm|md|lg, direction?: row|column} + children
+  - Grid {columns?: 1-4} + children
+  - Card {title?, description?} + children
+  - Markdown {content}
+  - Metric {label, value, change?, hint?}
+  - BarChart, LineChart, AreaChart, PieChart {title?, data:[{label,value}], valueFormat?: number|currency|percent}
+  - Table {columns:[string], rows:[[string|number|null]], caption?}
+  - Callout {tone?: info|ok|warn|bad, title?, content}
+- Use only these components, at most 12 elements, no actions, forms, HTML or extra props. Skip the block when it would not add clarity.
+- Do not repeat a title in both a Card and its child blocks.
+- Example:
+` + "```ui\n" + `{"root":"stats","elements":{"stats":{"type":"Grid","props":{"columns":2},"children":["cost","runs"]},"cost":{"type":"Metric","props":{"label":"Cost","value":"$1.20"},"children":[]},"runs":{"type":"Metric","props":{"label":"Runs","value":12},"children":[]}}}` + "\n```\n")
 	fmt.Fprintf(
 		&b,
 		"\n# Environment\n- Date: %s\n- OS: %s/%s\n- Workspace: %s\n- App: MyAgent %s\n",
