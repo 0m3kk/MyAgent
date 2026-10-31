@@ -884,6 +884,8 @@ touch steps that passed.
 |  | `run_tool_tests(tool)` | Per-test results and redacted logs |
 |  | `probe_permissions(tool)` | Run learning mode and return blocked accesses |
 |  | `request_tool_approval(tool, summary)` | Show the approval card; return `pending_user` |
+| Lifecycle | `delete_workflow(name, reason?)` | Requires an approval card; deletes the workflow, its versions and triggers |
+|  | `delete_tool(name, reason?)` | Requires an approval card; deletes the tool, its versions and secret bindings |
 | Execution | `run_workflow(name, inputs, version?)` | Return `run_id`; execute asynchronously |
 |  | `get_run(run_id)`, `wait_run(run_id, timeout)` | Run status summary, step by step |
 |  | active tools | Exposed directly as model functions, without a wrapper |
@@ -894,7 +896,7 @@ touch steps that passed.
 |  | `propose_patch(target, base_version, content, rationale)` | Store a `tuning_proposals` row |
 |  | `run_eval(suite, target_version)` | Run replay and return the comparison |
 
-**Things the agent never has a tool for:** approving or activating tools/workflows, reading secret values, enabling automatic triggers, changing permissions of an approved tool without re-approval, or disabling the redactor/sandbox. Those are user-only actions in the UI.
+**Things the agent never has a tool for:** approving or activating tools/workflows, reading secret values, enabling automatic triggers, changing permissions of an approved tool without re-approval, or disabling the redactor/sandbox. Those are user-only actions in the UI. Destructive tools (`delete_workflow`, `delete_tool`) exist, but they always block on the approval card; the agent cannot delete anything without the user's decision.
 
 ### E.6 Meta-tool design rules
 

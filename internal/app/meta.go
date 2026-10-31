@@ -71,6 +71,21 @@ func metaToolDefs() []llm.ToolDef {
 			"name",
 		),
 		toolDef(
+			"delete_workflow",
+			"Delete a workflow, its versions and triggers. Always shows an approval card; only call when the user explicitly asks to delete it.",
+			map[string]any{
+				"name": map[string]any{
+					"type":        "string",
+					"description": "Workflow name as returned by list_workflows",
+				},
+				"reason": map[string]any{
+					"type":        "string",
+					"description": "Short reason shown on the approval card",
+				},
+			},
+			"name",
+		),
+		toolDef(
 			"validate_workflow",
 			"Validate workflow YAML without saving it. Returns E-code diagnostics.",
 			map[string]any{
@@ -176,6 +191,21 @@ func metaToolDefs() []llm.ToolDef {
 				},
 			},
 			"manifest_yaml",
+		),
+		toolDef(
+			"delete_tool",
+			"Delete a tool, its versions and secret bindings. Always shows an approval card; only call when the user explicitly asks to delete it.",
+			map[string]any{
+				"name": map[string]any{
+					"type":        "string",
+					"description": "Tool name as returned by search_tools",
+				},
+				"reason": map[string]any{
+					"type":        "string",
+					"description": "Short reason shown on the approval card",
+				},
+			},
+			"name",
 		),
 		toolDef(
 			"write_tool_file",
@@ -375,6 +405,8 @@ func (a *App) executeMetaTool(
 		return map[string]any{"ok": true, "name": w.Name, "version_id": v.ID, "version": v.Version,
 			"yaml": v.YAML, "diagnostics": val.Errors, "warnings": val.Warnings,
 			"next_hint": "Edit the YAML, validate, then save_workflow_draft."}, nil
+	case "delete_workflow":
+		return a.metaDeleteWorkflow(ctx, convID, str(args, "name"), str(args, "reason"))
 	case "validate_workflow":
 		spec, res, perr := a.ValidateWorkflowYAML(ctx, str(args, "yaml"), false)
 		if perr != nil {
@@ -601,6 +633,8 @@ func (a *App) executeMetaTool(
 			out["next_hint"] = "Fix manifest issues and try again."
 		}
 		return out, nil
+	case "delete_tool":
+		return a.metaDeleteTool(ctx, convID, str(args, "name"), str(args, "reason"))
 	case "write_tool_file":
 		t, err := a.Store.GetToolByName(ctx, str(args, "tool"))
 		if err != nil {
@@ -759,6 +793,107 @@ func (a *App) executeMetaTool(
 		return a.metaRunEval(ctx, str(args, "suite"), str(args, "target_version"))
 	}
 	return nil, fmt.Errorf("unknown meta tool %s", name)
+}
+
+// metaDeleteWorkflow and metaDeleteTool are irreversible, so they block on an
+// approval card before touching the store. The approval kind is "delete" and
+// the payload carries enough context for the UI to show what will disappear.
+func (a *App) metaDeleteWorkflow(ctx context.Context, convID, name, reason string) (any, error) {
+	w, err := a.Store.GetWorkflowByName(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	versions, _ := a.Store.WorkflowVersions(ctx, w.ID)
+	latest := 0
+	status := ""
+	if len(versions) > 0 {
+		latest = versions[0].Version
+		status = versions[0].Status
+	}
+	payload := map[string]any{
+		"action": "delete", "object": "workflow", "workflow": w.Name, "workflow_id": w.ID,
+		"versions": len(versions), "version": latest, "status": status,
+	}
+	if reason = strings.TrimSpace(reason); reason != "" {
+		payload["reason"] = reason
+	}
+	title := "Delete workflow " + w.Name + "?"
+	description := "This permanently deletes the workflow, its versions and triggers. Past runs stay in history."
+	payload["title"] = title
+	payload["description"] = description
+	d, err := a.askApproval(ctx, workflow.ApprovalRequest{
+		ConversationID: convID,
+		Kind:           "delete",
+		Title:          title,
+		Description:    description,
+		Source:         "chat",
+		ExpiresAt:      time.Now().Add(30 * time.Minute),
+	}, payload)
+	if err != nil {
+		return nil, err
+	}
+	if !d.Approved {
+		return map[string]any{
+			"ok": false, "status": "rejected", "workflow": w.Name,
+			"next_hint": "The user denied the deletion. Do not retry unless they ask again.",
+		}, nil
+	}
+	if err := a.Store.DeleteWorkflow(ctx, w.ID); err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"ok": true, "deleted": true, "workflow": w.Name, "workflow_id": w.ID,
+		"next_hint": "Workflow deleted. Past runs remain in history.",
+	}, nil
+}
+
+func (a *App) metaDeleteTool(ctx context.Context, convID, name, reason string) (any, error) {
+	t, err := a.Store.GetToolByName(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	versions, _ := a.Store.ToolVersions(ctx, t.ID)
+	latest := 0
+	status := ""
+	if len(versions) > 0 {
+		latest = versions[0].Version
+		status = versions[0].Status
+	}
+	payload := map[string]any{
+		"action": "delete", "object": "tool", "tool": t.Name, "tool_id": t.ID, "tool_kind": t.Kind,
+		"versions": len(versions), "version": latest, "status": status,
+	}
+	if reason = strings.TrimSpace(reason); reason != "" {
+		payload["reason"] = reason
+	}
+	title := "Delete tool " + t.Name + "?"
+	description := "This permanently deletes the tool, its versions and secret bindings."
+	payload["title"] = title
+	payload["description"] = description
+	d, err := a.askApproval(ctx, workflow.ApprovalRequest{
+		ConversationID: convID,
+		Kind:           "delete",
+		Title:          title,
+		Description:    description,
+		Source:         "chat",
+		ExpiresAt:      time.Now().Add(30 * time.Minute),
+	}, payload)
+	if err != nil {
+		return nil, err
+	}
+	if !d.Approved {
+		return map[string]any{
+			"ok": false, "status": "rejected", "tool": t.Name,
+			"next_hint": "The user denied the deletion. Do not retry unless they ask again.",
+		}, nil
+	}
+	if err := a.Store.DeleteTool(ctx, t.ID); err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"ok": true, "deleted": true, "tool": t.Name, "tool_id": t.ID,
+		"next_hint": "Tool deleted. Workflows that referenced it will need another tool.",
+	}, nil
 }
 
 func (a *App) metaSearchTools(ctx context.Context, query string, limit int) (any, error) {

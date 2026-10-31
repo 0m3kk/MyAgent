@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Check, Clock3, KeyRound, ShieldAlert, ShieldCheck, X } from 'lucide-react'
+import { Check, Clock3, KeyRound, ShieldAlert, ShieldCheck, Trash2, X } from 'lucide-react'
 import { api } from '../api'
 import type { Approval } from '../types'
 import { formatRelative, safeJSON } from '../format'
@@ -32,6 +32,7 @@ export function ApprovalCard({
   const isTool = kind === 'tool'
   const isTrigger = kind === 'trigger'
   const isSecret = kind === 'secret'
+  const isDelete = kind === 'delete'
   const options = useMemo(() => {
     const raw = req.options
     return Array.isArray(raw) ? raw.map(String) : []
@@ -61,7 +62,7 @@ export function ApprovalCard({
     <div className={`approval-card ${compact ? 'compact' : ''} ${urgent ? 'urgent' : ''}`}>
       <div className="approval-head">
         <div className="approval-icon">
-          {isQuestion ? <Clock3 size={17} /> : isTool || isTrigger || isSecret ? <ShieldAlert size={17} /> : <ShieldCheck size={17} />}
+          {isQuestion ? <Clock3 size={17} /> : isDelete ? <Trash2 size={17} /> : isTool || isTrigger || isSecret ? <ShieldAlert size={17} /> : <ShieldCheck size={17} />}
         </div>
         <div className="approval-title">
           <div className="approval-kicker">
@@ -113,6 +114,14 @@ export function ApprovalCard({
             <span>Workflow <strong>{String(req.workflow || '—')}</strong></span>
             <span>Kind <strong>{String(req.trigger_kind || '')}</strong></span>
             <pre>{safeJSON(req.config, 3000)}</pre>
+          </div>
+        )}
+        {isDelete && (
+          <div className="approval-meta vertical">
+            <span>Object <strong className="capitalize">{String(req.object || 'item')}</strong></span>
+            <span>Name <strong>{String(req.workflow || req.tool || '—')}</strong></span>
+            <span>Versions <strong>{String(req.versions ?? '—')}</strong></span>
+            {req.reason !== undefined && <span>Reason <strong>{String(req.reason)}</strong></span>}
           </div>
         )}
         {!isTool && show !== undefined && show !== null && (
@@ -169,10 +178,10 @@ export function ApprovalCard({
         ) : (
           <>
             <Button variant="ghost" icon={<X size={15} />} onClick={() => decide('reject')} loading={busy === 'reject'}>
-              Deny
+              {isDelete ? 'Cancel' : 'Deny'}
             </Button>
-            <Button variant="primary" icon={<Check size={15} />} onClick={() => decide('approve')} loading={busy === 'approve'}>
-              Allow
+            <Button variant="primary" icon={isDelete ? <Trash2 size={15} /> : <Check size={15} />} onClick={() => decide('approve')} loading={busy === 'approve'}>
+              {isDelete ? 'Delete' : 'Allow'}
             </Button>
           </>
         )}

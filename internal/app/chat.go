@@ -639,6 +639,7 @@ You can use tools, author reusable workflows and tools, run them, inspect runs a
 - Parameterize workflows: anything that can differ between runs becomes an input. Never hardcode paths, emails or dates from this conversation.
 - Put an approval step before any write/external step unless the user explicitly wants unattended work.
 - If a request is ambiguous and a wrong guess is costly, ask ONE short question with ask_user.
+- Destructive changes: call delete_workflow or delete_tool only when the user explicitly asks to delete that item. Both always show an approval card; never assume approval.
 - The user sees YAML/diffs in the UI; summarize outcomes instead of dumping long YAML unless asked.
 `)
 	b.WriteString(`
