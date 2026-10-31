@@ -454,8 +454,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .new-chat-empty .hero-orb { margin: 0 auto 16px; }
 .new-chat-empty h2 { font-size: calc(24px * var(--font-scale)); letter-spacing: -0.03em; margin-bottom: 8px; }
 .new-chat-empty p { color: var(--muted); font-size: calc(12.5px * var(--font-scale)); line-height: 1.6; margin: 0 auto 16px; }
-.new-chat-page .composer, .new-chat-page .composer-foot { max-width: 900px; }
-.message-stack { max-width: 860px; margin: 0 auto; padding: 26px 28px 20px; display: flex; flex-direction: column; gap: 28px; }
+.message-stack { margin: 0 auto; padding: 26px 28px 20px; display: flex; flex-direction: column; gap: 28px; }
 .message { display: flex; gap: 11px; align-items: flex-start; }
 .message.user-message { flex-direction: row; justify-content: flex-end; }
 .message-body { min-width: 0; display: flex; flex-direction: column; gap: 5px; max-width: calc(100% - 46px); }
@@ -481,13 +480,13 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .stream-cursor { display: inline-block; width: 2px; height: 13px; background: var(--accent-bright); margin-left: 2px; vertical-align: -2px; animation: blink 0.9s steps(2) infinite; }
 @keyframes blink { 50% { opacity: 0; } }
 .composer-dock { flex: 0 0 auto; padding: 12px 28px 15px; border-top: 1px solid var(--border-soft); background: linear-gradient(to top, var(--bg) 60%, color-mix(in oklab, var(--bg) 80%, transparent)); }
-.composer { max-width: 860px; margin: 0 auto; border: 1px solid var(--border); background: var(--surface-raised); border-radius: 18px; padding: 12px 12px 8px 15px; box-shadow: var(--shadow-md); transition: border-color 0.15s, box-shadow 0.15s; }
+.composer { margin: 0 auto; border: 1px solid var(--border); background: var(--surface-raised); border-radius: 18px; padding: 12px 12px 8px 15px; box-shadow: var(--shadow-md); transition: border-color 0.15s, box-shadow 0.15s; }
 .composer:focus-within { border-color: color-mix(in oklab, var(--accent) 55%, var(--border)); box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow-md); }
 .composer textarea { border: 0 !important; box-shadow: none !important; background: transparent !important; resize: none; padding: 0; min-height: 68px; max-height: 180px; font-size: calc(13.5px * var(--font-scale)); line-height: 1.55; }
 .composer-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; }
 .composer-hint { display: flex; gap: 10px; color: var(--faint); font-size: calc(9.5px * var(--font-scale)); }
 .composer-hint kbd { font-family: var(--font-sans); font-size: calc(9px * var(--font-scale)); padding: 1px 4px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface-2); }
-.composer-foot { max-width: 860px; margin: 7px auto 0; display: flex; align-items: center; gap: 6px; padding: 0 6px; color: var(--faint); font-size: calc(9.5px * var(--font-scale)); }
+.composer-foot { margin: 7px auto 0; display: flex; align-items: center; gap: 6px; padding: 0 6px; color: var(--faint); font-size: calc(9.5px * var(--font-scale)); }
 .composer-foot .badge { margin-left: auto; }
 
 /* Markdown */
@@ -549,7 +548,6 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .home-hero p { max-width: 620px; margin: 0 auto; color: var(--muted); font-size: calc(13px * var(--font-scale)); line-height: 1.65; }
 .hero-approval { margin: 20px auto 0; display: inline-flex; align-items: center; gap: 8px; border: 1px solid color-mix(in oklab, var(--amber) 35%, var(--border)); background: var(--amber-soft); color: var(--amber); border-radius: 999px; padding: 6px 12px; font-size: calc(11px * var(--font-scale)); }
 .home-composer { max-width: 900px; margin: 0 auto 22px; }
-.home-composer .composer, .home-composer .composer-foot { max-width: none; }
 .home-columns { display: grid; grid-template-columns: 1.25fr 0.9fr; gap: 14px; max-width: 900px; margin: 0 auto; }
 .chats-page { max-width: 900px; }
 .chat-list-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
