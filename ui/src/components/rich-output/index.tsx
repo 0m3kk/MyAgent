@@ -4,6 +4,7 @@ import type { Spec } from '@json-render/core'
 import { JSONUIProvider, Renderer } from '@json-render/react'
 import { CopyButton } from '../ui'
 import { richCatalog } from './catalog'
+import { normalizeSpec } from './normalize'
 import { richRegistry } from './registry'
 
 function rawSpec(spec: unknown, raw?: string) {
@@ -15,38 +16,14 @@ function rawSpec(spec: unknown, raw?: string) {
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
-}
-
-/**
- * `children` is required by the json-render spec schema, but models routinely
- * omit it on leaves. Fill it in so an otherwise valid output still renders.
- */
-function normalizeSpec(spec: unknown): unknown {
-  if (!isRecord(spec) || !isRecord(spec.elements)) return spec
-  const elements = Object.fromEntries(
-    Object.entries(spec.elements).map(([key, element]) => {
-      if (!isRecord(element)) return [key, element]
-      return [
-        key,
-        {
-          ...element,
-          props: isRecord(element.props) ? element.props : {},
-          children: Array.isArray(element.children) ? element.children : [],
-        },
-      ]
-    }),
-  )
-  return { ...spec, elements }
-}
-
 export function RichOutput({ spec, raw }: { spec: unknown; raw?: string }) {
-  const normalized = useMemo(() => normalizeSpec(spec), [spec])
+  const normalized = useMemo(() => normalizeSpec(spec, raw), [spec, raw])
   const validation = useMemo(() => richCatalog.validate(normalized), [normalized])
   const text = rawSpec(spec, raw)
   if (!validation.success) {
-    const issues = validation.error?.issues?.map((issue) => issue.message).slice(0, 3) ?? []
+    const issues = spec === undefined
+      ? ['The ui block is not valid JSON.']
+      : validation.error?.issues?.map((issue) => issue.message).slice(0, 3) ?? []
     return (
       <div className="rich-output-error">
         <div className="rich-output-error-head">
