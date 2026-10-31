@@ -5,7 +5,6 @@ import {
   GitBranch,
   Home,
   MessageSquareText,
-  Plus,
   Search,
   Settings2,
   ShieldCheck,
@@ -51,9 +50,6 @@ export function Sidebar({
           </span>
         </a>
         <div className="sidebar-actions">
-          <button className="new-chat" onClick={() => navigate('/chats/new')}>
-            <Plus size={15} /> New chat
-          </button>
           <IconButton label="Command palette (⌘K)" onClick={onCommand} className="sidebar-icon">
             <Command size={16} />
           </IconButton>

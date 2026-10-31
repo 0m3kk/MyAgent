@@ -27,9 +27,9 @@ test('home and all chats are separate menus', async ({ page }) => {
 })
 
 test('new chat opens a chat-only composer', async ({ page }) => {
-  await page.goto('/#/workflows')
-  await expect(page.getByRole('heading', { name: 'Workflows' })).toBeVisible({ timeout: 15_000 })
-  await page.getByRole('button', { name: 'New chat' }).click()
+  await page.goto('/#/chats')
+  await expect(page.getByRole('heading', { name: 'All chats' })).toBeVisible({ timeout: 15_000 })
+  await page.locator('.page-header').getByRole('button', { name: 'New chat' }).click()
   await expect(page.getByRole('heading', { name: 'New chat' })).toBeVisible()
   await expect(page.locator('.new-chat-page .composer textarea')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Recent chats' })).toHaveCount(0)
