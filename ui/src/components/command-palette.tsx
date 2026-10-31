@@ -54,7 +54,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       { id: 'nav-runs', label: 'Go to Runs', group: 'Navigate', icon: <Activity size={16} />, action: () => navigate('/runs') },
       { id: 'nav-tuning', label: 'Go to Tuning', group: 'Navigate', icon: <SlidersHorizontal size={16} />, action: () => navigate('/tuning') },
       { id: 'nav-settings', label: 'Open Settings', group: 'Navigate', icon: <Settings2 size={16} />, action: () => navigate('/settings') },
-      { id: 'new-chat', label: 'Start a new chat', group: 'Actions', icon: <Plus size={16} />, action: () => navigate('/chats') },
+      { id: 'new-chat', label: 'Start a new chat', group: 'Actions', icon: <Plus size={16} />, action: () => navigate('/chats/new') },
       { id: 'new-workflow', label: 'Create a workflow', group: 'Actions', icon: <Sparkles size={16} />, action: () => navigate('/workflows/new') },
       { id: 'new-tool', label: 'Create a tool', group: 'Actions', icon: <Wrench size={16} />, action: () => navigate('/tools/new') },
       { id: 'new-model', label: 'Add a model profile', group: 'Actions', icon: <Settings2 size={16} />, action: () => navigate('/settings/models/new') },

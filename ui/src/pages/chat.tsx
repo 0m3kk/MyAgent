@@ -21,6 +21,7 @@ import { useEventStream, usePolling, useAutoScroll } from '../hooks'
 import type { Approval, Conversation, EventEnvelope, Message } from '../types'
 import { formatRelative } from '../format'
 import { ApprovalCard } from '../components/approval'
+import { StartChatComposer } from '../components/chat-composer'
 import { Markdown, MessageMeta, StreamCursor, ToolCard, TypingIndicator, type ToolView } from '../components/chat-bits'
 import { Badge, Button, EmptyState, IconButton, Spinner, TextArea } from '../components/ui'
 import { useToast } from '../components/toast'
@@ -32,15 +33,6 @@ function approvalsFor(list: Approval[], conversationId: string) {
 export function ChatHome() {
   const { data, approvals, refresh } = useApp()
   const toast = useToast()
-  const [starting, setStarting] = useState<string | null>(null)
-  const [draft, setDraft] = useState('')
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
-  useEffect(() => {
-    const el = textareaRef.current
-    if (!el) return
-    el.style.height = 'auto'
-    el.style.height = `${Math.min(el.scrollHeight, 180)}px`
-  }, [draft])
   if (!data) return null
   const recent = data.conversations.slice(0, 6)
   const hasModel = data.model_profiles.length > 0
@@ -51,7 +43,6 @@ export function ChatHome() {
       navigate('/settings/models/new')
       return false
     }
-    setStarting(prompt)
     try {
       const res = await api.sendChat('', prompt)
       void refresh()
@@ -60,23 +51,6 @@ export function ChatHome() {
     } catch (err) {
       toast('Could not start the chat', err instanceof Error ? err.message : undefined, 'error')
       return false
-    } finally {
-      setStarting(null)
-    }
-  }
-
-  async function sendDraft() {
-    const text = draft.trim()
-    if (!text || starting) return
-    setDraft('')
-    const ok = await start(text)
-    if (!ok) setDraft(text)
-  }
-
-  function onDraftKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      void sendDraft()
     }
   }
 
@@ -110,39 +84,7 @@ export function ChatHome() {
       )}
 
       <div className="home-composer">
-        <div className="composer">
-          <TextArea
-            ref={textareaRef}
-            rows={1}
-            placeholder={hasModel ? 'Ask anything, or describe a task to automate…' : 'Add a model in Settings to start chatting…'}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={onDraftKeyDown}
-            disabled={!!starting || !hasModel}
-            autoFocus
-          />
-          <div className="composer-actions">
-            <span className="composer-hint">
-              <span><kbd>↵</kbd> send</span>
-              <span><kbd>⇧ ↵</kbd> newline</span>
-            </span>
-            <Button
-              variant="primary"
-              size="sm"
-              icon={<Send size={14} />}
-              onClick={sendDraft}
-              loading={!!starting}
-              disabled={!hasModel || !draft.trim()}
-            >
-              Send
-            </Button>
-          </div>
-        </div>
-        <div className="composer-foot">
-          <span>{defaultModel?.model || 'No model selected'}</span>
-          <span>·</span>
-          <span>Secrets never enter the prompt</span>
-        </div>
+        <StartChatComposer hasModel={hasModel} model={defaultModel?.model} onSend={start} />
       </div>
 
       <div className="home-columns">
@@ -163,7 +105,7 @@ export function ChatHome() {
               </button>
             ))}
             {recent.length === 0 && (
-              <EmptyState compact icon={<MessageSquareText size={22} />} title="No chats yet" description="Start with a suggestion above." />
+              <EmptyState compact icon={<MessageSquareText size={22} />} title="No chats yet" description="Start a new chat above." />
             )}
           </div>
         </section>
@@ -192,6 +134,62 @@ export function ChatHome() {
             <span>Try asking the agent to turn a successful chat into a workflow. It keeps the approvals you already made.</span>
           </div>
         </section>
+      </div>
+    </div>
+  )
+}
+
+export function NewChatPage() {
+  const { data, refresh } = useApp()
+  const toast = useToast()
+  if (!data) return null
+  const hasModel = data.model_profiles.length > 0
+  const defaultModel = data.model_profiles.find((m) => m.id === data.settings.default_model_id) || data.model_profiles[0]
+
+  async function start(prompt: string): Promise<boolean> {
+    if (!hasModel) {
+      navigate('/settings/models/new')
+      return false
+    }
+    try {
+      const res = await api.sendChat('', prompt)
+      void refresh()
+      navigate(`/chats/${res.conversation.id}`)
+      return true
+    } catch (err) {
+      toast('Could not start the chat', err instanceof Error ? err.message : undefined, 'error')
+      return false
+    }
+  }
+
+  return (
+    <div className="chat-page new-chat-page">
+      <header className="chat-head">
+        <div className="chat-title-wrap">
+          <div className="eyebrow"><MessageSquareText size={12} /> Chats</div>
+          <h1>New chat</h1>
+          <div className="chat-subline">
+            <span className="model-chip"><span className="model-orb small" /> {defaultModel?.name || 'No model'}</span>
+            <span>Start a new conversation</span>
+          </div>
+        </div>
+      </header>
+
+      <div className="chat-scroll new-chat-scroll">
+        <div className="new-chat-empty">
+          <div className="hero-orb"><Sparkles size={24} /></div>
+          <h2>Start a new conversation</h2>
+          <p>Ask anything, or describe a task to automate. The agent uses tools and asks before anything risky.</p>
+          {!hasModel && (
+            <Button variant="primary" size="sm" onClick={() => navigate('/settings/models/new')}>
+              Add model
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <div className="composer-dock">
+        <StartChatComposer hasModel={hasModel} model={defaultModel?.model} onSend={start} />
       </div>
     </div>
   )

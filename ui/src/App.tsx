@@ -6,7 +6,7 @@ import { Sidebar } from './components/sidebar'
 import { CommandPalette } from './components/command-palette'
 import { ApprovalCenter } from './components/approval'
 import { Button, EmptyState, Spinner } from './components/ui'
-import { ChatHome, ChatPage } from './pages/chat'
+import { ChatHome, ChatPage, NewChatPage } from './pages/chat'
 import { WorkflowPage, WorkflowsPage } from './pages/workflows'
 import { RunPage, RunsPage } from './pages/runs'
 import { ToolPage, ToolsPage } from './pages/tools'
@@ -92,6 +92,7 @@ function Router({ route }: { route: ReturnType<typeof useRoute> }) {
   switch (root) {
     case undefined:
     case 'chats':
+      if (id === 'new') return <NewChatPage />
       return id ? <ChatPage conversationId={id} /> : <ChatHome />
     case 'workflows':
       return id ? <WorkflowPage workflowId={id} /> : <WorkflowsPage />

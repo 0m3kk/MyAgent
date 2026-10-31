@@ -16,12 +16,13 @@ test('home, command palette and workflow list', async ({ page }) => {
   await expect(page.getByText('Build your first workflow')).toBeVisible()
 })
 
-test('new chat opens a composer', async ({ page }) => {
+test('new chat opens a chat-only composer', async ({ page }) => {
   await page.goto('/#/workflows')
   await expect(page.getByRole('heading', { name: 'Workflows' })).toBeVisible({ timeout: 15_000 })
   await page.getByRole('button', { name: 'New chat' }).click()
-  await expect(page.getByRole('heading', { name: 'What should we get done?' })).toBeVisible()
-  await expect(page.locator('.home-composer textarea')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'New chat' })).toBeVisible()
+  await expect(page.locator('.new-chat-page .composer textarea')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Recent chats' })).toHaveCount(0)
 })
 
 test('text size can be increased and reset in settings', async ({ page }) => {
