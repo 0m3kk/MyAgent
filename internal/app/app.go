@@ -178,6 +178,7 @@ func New(ctx context.Context, cfg Config) (*App, error) {
 	if cfg.WorkspaceRoot == "" {
 		cfg.WorkspaceRoot = defaultWorkspace()
 	}
+	migrateLegacyWorkspace(cfg.WorkspaceRoot)
 	if cfg.DBPath == "" {
 		cfg.DBPath = filepath.Join(cfg.DataDir, "myagent.db")
 	}
@@ -397,7 +398,28 @@ func defaultWorkspace() string {
 		return v
 	}
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, "MyAgent Workspace")
+	return filepath.Join(home, "MyAgent")
+}
+
+// migrateLegacyWorkspace moves the old default workspace to the new default
+// location. It only runs for the default path and never overwrites existing data.
+func migrateLegacyWorkspace(root string) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+	target := filepath.Join(home, "MyAgent")
+	if filepath.Clean(root) != filepath.Clean(target) {
+		return
+	}
+	legacy := filepath.Join(home, "MyAgent Workspace")
+	if _, err := os.Stat(legacy); err != nil {
+		return
+	}
+	if _, err := os.Stat(target); err == nil {
+		return
+	}
+	_ = os.Rename(legacy, target)
 }
 
 func parseToolRef(ref string) (string, int) {

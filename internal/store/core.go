@@ -13,6 +13,13 @@ func (s *Store) EnsureWorkspace(ctx context.Context, name, root string) (model.W
 	err := s.db.QueryRowContext(ctx, `SELECT id, name, root_path, created_at FROM workspaces ORDER BY created_at LIMIT 1`).
 		Scan(&w.ID, &w.Name, &w.RootPath, &w.CreatedAt)
 	if err == nil {
+		// The configured root is authoritative; keep the stored row in sync.
+		if w.RootPath != root {
+			if _, err := s.db.ExecContext(ctx, `UPDATE workspaces SET root_path = ? WHERE id = ?`, root, w.ID); err != nil {
+				return w, err
+			}
+			w.RootPath = root
+		}
 		return w, nil
 	}
 	if !isNoRows(err) {

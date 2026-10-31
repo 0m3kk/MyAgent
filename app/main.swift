@@ -84,7 +84,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         childEnv["MYAGENT_DATA_DIR"] = dataDir.path
         if childEnv["MYAGENT_WORKSPACE"] == nil {
             childEnv["MYAGENT_WORKSPACE"] = fm.homeDirectoryForCurrentUser
-                .appendingPathComponent("MyAgent Workspace").path
+                .appendingPathComponent("MyAgent").path
         }
         process.environment = childEnv
         process.standardOutput = log

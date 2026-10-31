@@ -50,7 +50,8 @@ Closing the window quits the app and stops the core. Scheduled and watched runs 
 ### First run
 
 - Data: `~/Library/Application Support/MyAgent`
-- Workspace: `~/MyAgent Workspace`
+- Workspace: `~/MyAgent`
+- Existing installs using `~/MyAgent Workspace` are migrated on the next launch.
 - Override with `MYAGENT_DATA_DIR` and `MYAGENT_WORKSPACE`.
 
 A fresh install starts with built-in tools only. Add a model in **Settings → Models** to use chat. Workflows, conversations and workspace files are created by you.
