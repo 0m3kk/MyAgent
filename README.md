@@ -183,6 +183,10 @@ mise run e2e       # Playwright smoke tests
 
 Coverage includes schema/expression validation, workflow validation and DAG execution (retry, approval, resume), AES-GCM secrets and redaction, tool manifests/Starlark execution, proxy allowlists/mocks, LLM SSE streaming and tool calls, and an end-to-end API test that authors a workflow, runs it through human approval, persists appearance settings and tests a freshly created tool.
 
+## Dependency updates
+
+Dependabot checks Go modules, the UI npm packages and GitHub Actions every Monday at 06:00 (Asia/Ho_Chi_Minh). The `all-dependencies` multi-ecosystem group in `.github/dependabot.yml` combines every update into a single pull request per week.
+
 ## Status and limitations
 
 ### Implemented
