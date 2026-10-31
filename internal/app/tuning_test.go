@@ -36,8 +36,20 @@ func TestDecideProposalUsesBaseVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	proposed := strings.Replace(tuningTestWorkflow, "Workflow used by the tuning test.", "Updated by the tuning test.", 1)
-	p, err := a.createProposal(ctx, base.Workflow.ID, base.Version.ID, proposed, "test proposal", "tuner")
+	proposed := strings.Replace(
+		tuningTestWorkflow,
+		"Workflow used by the tuning test.",
+		"Updated by the tuning test.",
+		1,
+	)
+	p, err := a.createProposal(
+		ctx,
+		base.Workflow.ID,
+		base.Version.ID,
+		proposed,
+		"test proposal",
+		"tuner",
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +93,12 @@ func TestDraftEditsDoNotConsumeVersions(t *testing.T) {
 	if first.Version.Version != 1 {
 		t.Fatalf("first version = %d", first.Version.Version)
 	}
-	edited := strings.Replace(tuningTestWorkflow, "Workflow used by the tuning test.", "Edited draft.", 1)
+	edited := strings.Replace(
+		tuningTestWorkflow,
+		"Workflow used by the tuning test.",
+		"Edited draft.",
+		1,
+	)
 	second, err := a.SaveWorkflowDraft(ctx, edited, "edit draft", "user", 1)
 	if err != nil {
 		t.Fatal(err)

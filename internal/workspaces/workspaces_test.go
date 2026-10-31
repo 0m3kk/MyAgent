@@ -64,7 +64,12 @@ func TestRegistryLifecycle(t *testing.T) {
 
 func TestExportStripsSecretsAndImportCreatesProfile(t *testing.T) {
 	home := t.TempDir()
-	reg, err := OpenOrCreate(home, filepath.Join(home, "profiles", "default"), filepath.Join(home, "project"), "Personal")
+	reg, err := OpenOrCreate(
+		home,
+		filepath.Join(home, "profiles", "default"),
+		filepath.Join(home, "project"),
+		"Personal",
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +137,8 @@ func TestExportStripsSecretsAndImportCreatesProfile(t *testing.T) {
 		t.Fatal(err)
 	}
 	var secretID sql.NullString
-	if err := db.QueryRow(`SELECT secret_id FROM model_profiles WHERE id='model1'`).Scan(&secretID); err != nil {
+	if err := db.QueryRow(`SELECT secret_id FROM model_profiles WHERE id='model1'`).
+		Scan(&secretID); err != nil {
 		t.Fatal(err)
 	}
 	db.Close()

@@ -71,7 +71,12 @@ func TestToolDraftEditsDoNotConsumeVersions(t *testing.T) {
 	if tool.DraftVersionID != first.Version.ID {
 		t.Fatalf("draft_version_id = %q", tool.DraftVersionID)
 	}
-	if err := a.Store.UpdateToolVersionStatus(ctx, first.Version.ID, model.ToolTested, 0); err != nil {
+	if err := a.Store.UpdateToolVersionStatus(
+		ctx,
+		first.Version.ID,
+		model.ToolTested,
+		0,
+	); err != nil {
 		t.Fatal(err)
 	}
 	if err := a.ApproveToolVersion(ctx, first.Tool.ID, first.Version.ID); err != nil {

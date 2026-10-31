@@ -73,7 +73,11 @@ func Export(w io.Writer, p Profile) error {
 	if err := addFile(zw, exportDB, archiveDBPath, 0o600); err != nil {
 		return err
 	}
-	if err := addTree(zw, filepath.Join(p.DataDir, "artifacts"), archiveDataDir+"/artifacts"); err != nil {
+	if err := addTree(
+		zw,
+		filepath.Join(p.DataDir, "artifacts"),
+		archiveDataDir+"/artifacts",
+	); err != nil {
 		return err
 	}
 	if err := addTree(zw, filepath.Join(p.DataDir, "tools"), archiveDataDir+"/tools"); err != nil {
@@ -230,7 +234,10 @@ func validateDatabase(path string) error {
 func stripSecrets(dbPath string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	db, err := sql.Open("sqlite", "file:"+dbPath+"?_pragma=foreign_keys(ON)&_pragma=busy_timeout(5000)")
+	db, err := sql.Open(
+		"sqlite",
+		"file:"+dbPath+"?_pragma=foreign_keys(ON)&_pragma=busy_timeout(5000)",
+	)
 	if err != nil {
 		return err
 	}

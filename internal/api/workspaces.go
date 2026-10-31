@@ -59,7 +59,12 @@ func (s *Server) handleUpdateWorkspace(w http.ResponseWriter, r *http.Request) {
 	name, _ := body["name"].(string)
 	root, _ := body["root_path"].(string)
 	if id == reg.Active() && root != "" && s.app.HasActiveWork() {
-		writeError(w, http.StatusConflict, "stop active chats and runs before changing the workspace folder", nil)
+		writeError(
+			w,
+			http.StatusConflict,
+			"stop active chats and runs before changing the workspace folder",
+			nil,
+		)
 		return
 	}
 	p, err := reg.Update(id, name, root)
@@ -156,7 +161,8 @@ func (s *Server) handleExportWorkspace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/zip")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", workspaces.ArchiveFilename(p)))
+	w.Header().
+		Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", workspaces.ArchiveFilename(p)))
 	w.Header().Set("Content-Length", strconv.FormatInt(info.Size(), 10))
 	_, _ = io.Copy(w, tmp)
 }

@@ -484,7 +484,10 @@ func (a *App) DecideProposal(
 		}
 		if _, approvalRes, err := a.ValidateWorkflowYAML(ctx, p.ProposedYAML, true); err != nil ||
 			!approvalRes.OK() {
-			return p, fmt.Errorf("proposed workflow is not runnable: %w", validationError(approvalRes))
+			return p, fmt.Errorf(
+				"proposed workflow is not runnable: %w",
+				validationError(approvalRes),
+			)
 		}
 		base, err := a.Store.GetWorkflowVersion(ctx, p.BaseVersionID)
 		if err != nil {
@@ -505,7 +508,10 @@ func (a *App) DecideProposal(
 			return p, fmt.Errorf("save tuning patch: %w", err)
 		}
 		if !v.Validation.OK() {
-			return p, fmt.Errorf("proposed workflow is no longer valid: %w", validationError(v.Validation))
+			return p, fmt.Errorf(
+				"proposed workflow is no longer valid: %w",
+				validationError(v.Validation),
+			)
 		}
 		if v.Workflow.ID != w.ID {
 			return p, errors.New("proposed workflow changed the workflow name")

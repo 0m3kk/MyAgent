@@ -293,7 +293,11 @@ func (r *Registry) Delete(id string) error {
 		return err
 	}
 	// Only remove data we own under home/profiles. Never touch the project root.
-	if within, err := pathWithin(filepath.Join(r.home, "profiles"), p.DataDir); err == nil && within {
+	if within, err := pathWithin(
+		filepath.Join(r.home, "profiles"),
+		p.DataDir,
+	); err == nil &&
+		within {
 		_ = os.RemoveAll(p.DataDir)
 	}
 	return nil
@@ -441,7 +445,8 @@ func hasProfile(list []Profile, id string) bool {
 
 func nameTaken(list []Profile, name, exceptID string) bool {
 	for _, p := range list {
-		if p.ID != exceptID && strings.EqualFold(strings.TrimSpace(p.Name), strings.TrimSpace(name)) {
+		if p.ID != exceptID &&
+			strings.EqualFold(strings.TrimSpace(p.Name), strings.TrimSpace(name)) {
 			return true
 		}
 	}
@@ -511,5 +516,6 @@ func pathWithin(base, target string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator))), nil
+	return rel == "." ||
+		(rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator))), nil
 }

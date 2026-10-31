@@ -54,7 +54,9 @@ func TestRebaseDataPaths(t *testing.T) {
 		t.Fatalf("code path = %q, want %q", got.CodePath, want)
 	}
 	var artifact string
-	if err := st.DB().QueryRow(`SELECT path FROM artifacts WHERE id='a1'`).Scan(&artifact); err != nil {
+	if err := st.DB().
+		QueryRow(`SELECT path FROM artifacts WHERE id='a1'`).
+		Scan(&artifact); err != nil {
 		t.Fatal(err)
 	}
 	wantArtifact := filepath.Join(newArtifacts, "run", "out.json")
