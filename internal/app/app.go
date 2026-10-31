@@ -448,6 +448,13 @@ func (a *App) notify(title, message string) {
 	if !a.GetSettings().Notifications {
 		return
 	}
+	// Tests exercise approval flows with real app settings. Never invoke
+	// AppleScript (and the macOS Automation permission prompt) from a test
+	// binary or CI.
+	if os.Getenv("MYAGENT_DISABLE_NOTIFICATIONS") == "1" ||
+		strings.HasSuffix(os.Args[0], ".test") {
+		return
+	}
 	if len(message) > 400 {
 		message = message[:400]
 	}

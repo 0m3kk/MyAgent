@@ -54,7 +54,7 @@ fi
 [tasks.test]
 description = "Run Go tests and the UI typecheck"
 run = """
-go test ./...
+MYAGENT_DISABLE_NOTIFICATIONS=1 go test ./...
 cd ui && pnpm run typecheck
 """
 
