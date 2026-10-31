@@ -41,7 +41,11 @@ func (s *Server) handleGetConversation(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error(), nil)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"conversation": conv, "messages": msgs})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"conversation": conv,
+		"messages":     msgs,
+		"active":       s.app.ChatActive(conv.ID),
+	})
 }
 
 func (s *Server) handleDeleteConversation(w http.ResponseWriter, r *http.Request) {

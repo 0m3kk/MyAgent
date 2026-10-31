@@ -278,6 +278,11 @@ export function ChatPage({ conversationId }: { conversationId: string }) {
       const res = await api.conversation(conversationId)
       setConversation(res.conversation)
       setMessages(res.messages)
+      setStreaming(res.active)
+      if (!res.active) {
+        setStreamText('')
+        setLiveTools({})
+      }
       setNotFound(false)
     } catch (err) {
       if ((err as Error & { status?: number }).status === 404) setNotFound(true)
@@ -485,6 +490,11 @@ export function ChatPage({ conversationId }: { conversationId: string }) {
           </div>
         </div>
         <div className="chat-head-actions">
+          {streaming && (
+            <Button variant="subtle" size="sm" icon={<Plus size={15} />} onClick={() => navigate('/chats/new')}>
+              New chat
+            </Button>
+          )}
           <Button variant="subtle" size="sm" icon={<Workflow size={15} />} onClick={saveAsWorkflow} loading={savingWorkflow}>
             Save as workflow
           </Button>

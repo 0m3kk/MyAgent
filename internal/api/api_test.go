@@ -16,6 +16,7 @@ import (
 
 	"myagent/internal/api"
 	"myagent/internal/app"
+	"myagent/internal/model"
 )
 
 type testClient struct {
@@ -227,5 +228,96 @@ func TestEndToEndAPI(t *testing.T) {
 	res := c.must("POST", "/api/tools/"+toolID+"/versions/"+versionID+"/test", nil)
 	if res["passed"] != true {
 		t.Fatalf("tool tests failed: %+v", res)
+	}
+}
+
+func TestConcurrentChats(t *testing.T) {
+	release := make(chan struct{})
+	llmSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		flusher, _ := w.(http.Flusher)
+		fmt.Fprint(
+			w,
+			"data: {\"model\":\"fake\",\"choices\":[{\"delta\":{\"content\":\"thinking\"}}]}\n\n",
+		)
+		if flusher != nil {
+			flusher.Flush()
+		}
+		<-release
+		fmt.Fprint(
+			w,
+			"data: {\"model\":\"fake\",\"choices\":[{\"delta\":{\"content\":\" done\"},\"finish_reason\":\"stop\"}]}\n\n",
+		)
+		fmt.Fprint(w, "data: [DONE]\n\n")
+		if flusher != nil {
+			flusher.Flush()
+		}
+	}))
+	defer llmSrv.Close()
+
+	dir := t.TempDir()
+	ctx := context.Background()
+	a, err := app.New(ctx, app.Config{
+		DataDir: dir, WorkspaceRoot: filepath.Join(dir, "workspace"),
+		DBPath: filepath.Join(dir, "test.db"), ArtifactDir: filepath.Join(dir, "artifacts"),
+		ToolsDir: filepath.Join(dir, "tools"), Version: "test",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	if _, err := a.SaveModelProfile(ctx, model.ModelProfile{
+		Name: "fake", BaseURL: llmSrv.URL + "/v1", Model: "fake", Role: "executor",
+	}, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := httptest.NewServer(api.New(a, "test-token", filepath.Join(dir, "ui")).Handler())
+	defer srv.Close()
+	c := &testClient{t: t, base: srv.URL, token: "test-token"}
+
+	first := c.must("POST", "/api/chat", map[string]any{"text": "first chat"})
+	firstID := first["conversation"].(map[string]any)["id"].(string)
+	if !a.ChatActive(firstID) {
+		t.Fatal("first chat should be active")
+	}
+	firstDetail := c.must("GET", "/api/conversations/"+firstID, nil)
+	if firstDetail["active"] != true {
+		t.Fatalf("conversation should report active: %+v", firstDetail)
+	}
+
+	second := c.must("POST", "/api/chat", map[string]any{"text": "second chat"})
+	secondID := second["conversation"].(map[string]any)["id"].(string)
+	if secondID == firstID {
+		t.Fatal("second chat should be a new conversation")
+	}
+	if !a.ChatActive(secondID) {
+		t.Fatal("second chat should be active")
+	}
+
+	close(release)
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) && (a.ChatActive(firstID) || a.ChatActive(secondID)) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if a.ChatActive(firstID) || a.ChatActive(secondID) {
+		t.Fatal("chats did not finish")
+	}
+
+	for _, id := range []string{firstID, secondID} {
+		detail := c.must("GET", "/api/conversations/"+id, nil)
+		if detail["active"] != false {
+			t.Fatalf("conversation %s should not be active: %+v", id, detail)
+		}
+		messages := detail["messages"].([]any)
+		if len(messages) < 2 {
+			t.Fatalf("conversation %s has no assistant reply: %+v", id, messages)
+		}
+		last := messages[len(messages)-1].(map[string]any)
+		content := last["content"].(map[string]any)
+		if !strings.Contains(fmt.Sprint(content["text"]), "done") {
+			t.Fatalf("unexpected assistant reply: %+v", content)
+		}
 	}
 }

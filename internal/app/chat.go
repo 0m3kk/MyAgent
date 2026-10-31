@@ -143,6 +143,12 @@ func (a *App) StartWorkflowEditChat(
 	return conv, nil
 }
 
+func (a *App) ChatActive(conversationID string) bool {
+	a.chatMu.Lock()
+	defer a.chatMu.Unlock()
+	return a.chatActive[conversationID]
+}
+
 func (a *App) StopChat(ctx context.Context, conversationID string) error {
 	a.chatMu.Lock()
 	cancel := a.chatCancels[conversationID]
