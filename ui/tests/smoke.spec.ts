@@ -62,6 +62,37 @@ test('chat title can be renamed and reset', async ({ page }) => {
   await expect(title).toHaveText('first chat')
 })
 
+test('delete uses the in-app confirm dialog', async ({ page }) => {
+  await page.goto('/#/chats')
+  await expect(page.getByRole('heading', { name: 'All chats' })).toBeVisible({ timeout: 15_000 })
+  const token = await page.evaluate(async () => {
+    const res = await fetch('/api/dev-token')
+    return ((await res.json()) as { token: string }).token
+  })
+  const headers = { Authorization: `Bearer ${token}` }
+  const response = await page.request.post('/api/chat', {
+    headers,
+    data: { text: 'Confirm test' },
+  })
+  const conversationID = ((await response.json()) as { conversation: { id: string } }).conversation.id
+  await page.goto(`/#/chats/${conversationID}`)
+  await expect(page.getByRole('heading', { name: 'Confirm test' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Conversation menu' }).click()
+  await page.getByRole('button', { name: 'Delete conversation' }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByText('Delete conversation')).toBeVisible()
+  await dialog.getByRole('button', { name: 'Cancel' }).click()
+  await expect(dialog).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Conversation menu' }).click()
+  await page.getByRole('button', { name: 'Delete conversation' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete chat' }).click()
+  await expect(page.getByRole('heading', { name: 'All chats' })).toBeVisible()
+  await expect(page.getByText('Confirm test', { exact: true })).toHaveCount(0)
+})
+
 test('structured workflow output renders readable content', async ({ page }) => {
   await page.goto('/#/runs')
   await expect(page.getByRole('heading', { name: 'Runs' })).toBeVisible({ timeout: 15_000 })

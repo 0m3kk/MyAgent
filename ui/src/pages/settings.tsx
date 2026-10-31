@@ -28,6 +28,7 @@ import { api } from '../api'
 import { navigate } from '../router'
 import { useApp } from '../store'
 import { useToast } from '../components/toast'
+import { useConfirm } from '../components/confirm'
 import type { ModelProfile, SecretMeta, Settings } from '../types'
 import { formatDate, formatRelative, safeJSON, statusTone } from '../format'
 import { Badge, Button, CopyButton, EmptyState, Field, InlineNotice, Modal, PageHeader, SectionTitle, Select, Spinner, StatusBadge, Tabs, TextArea, TextInput, Toggle } from '../components/ui'
@@ -40,6 +41,7 @@ const UNLIMITED_STEPS = -1
 export function SettingsPage({ sub }: { sub?: string[] }) {
   const { data, refresh } = useApp()
   const toast = useToast()
+  const confirm = useConfirm()
   const tab: Tab = sub?.[0] === 'models' ? 'models' : sub?.[0] === 'secrets' ? 'secrets' : 'general'
   const wantsNewModel = tab === 'models' && sub?.[1] === 'new'
   const wantsNewSecret = tab === 'secrets' && sub?.[1] === 'new'
@@ -112,7 +114,12 @@ export function SettingsPage({ sub }: { sub?: string[] }) {
           onAdd={() => setSecretModal('new')}
           onOverwrite={(s) => setSecretModal(s)}
           onDelete={async (s) => {
-            if (!window.confirm(`Delete ${s.name}? Tools using it will fail immediately.`)) return
+            const ok = await confirm({
+              title: 'Delete secret',
+              message: `Delete ${s.name}? Tools using it will fail immediately.`,
+              confirmLabel: 'Delete secret',
+            })
+            if (!ok) return
             try {
               await api.deleteSecret(s.id)
               toast('Secret deleted', undefined, 'success')
@@ -320,6 +327,7 @@ function GeneralTab({ onNeedModels }: { onNeedModels: () => void }) {
 function ModelsTab({ onAdd, onEdit, onProbe }: { onAdd: () => void; onEdit: (m: ModelProfile) => void; onProbe: (m: ModelProfile) => void }) {
   const { data, refresh } = useApp()
   const toast = useToast()
+  const confirm = useConfirm()
   const [busy, setBusy] = useState<string | null>(null)
   if (!data) return null
   async function setDefault(m: ModelProfile) {
@@ -335,7 +343,12 @@ function ModelsTab({ onAdd, onEdit, onProbe }: { onAdd: () => void; onEdit: (m: 
     }
   }
   async function remove(m: ModelProfile) {
-    if (!window.confirm(`Delete model profile ${m.name}?`)) return
+    const ok = await confirm({
+      title: 'Delete model profile',
+      message: `Delete ${m.name}?`,
+      confirmLabel: 'Delete model',
+    })
+    if (!ok) return
     try {
       await api.deleteModel(m.id)
       toast('Model deleted', undefined, 'success')

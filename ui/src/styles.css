@@ -376,6 +376,11 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .modal-head p, .drawer-head p { color: var(--muted); font-size: calc(11.5px * var(--font-scale)); margin-top: 3px; max-width: 580px; }
 .modal-body { padding: 6px 22px 22px; overflow-y: auto; }
 .modal-footer { padding: 14px 22px; border-top: 1px solid var(--border-soft); display: flex; justify-content: flex-end; gap: 8px; background: var(--surface-2); }
+.confirm-body { display: flex; align-items: flex-start; gap: 11px; }
+.confirm-icon { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; flex: 0 0 auto; background: var(--red-soft); color: var(--red); }
+.confirm-icon.primary { background: var(--accent-soft); color: var(--accent-bright); }
+.confirm-message { margin: 0; color: var(--text-soft); font-size: calc(12.5px * var(--font-scale)); line-height: 1.6; }
+.confirm-dialog .modal-body { padding-top: 4px; }
 .drawer {
   margin-left: auto; height: 100%; max-height: 100vh; display: flex; flex-direction: column;
   background: var(--surface); border-left: 1px solid var(--border); box-shadow: var(--shadow-lg);
@@ -399,12 +404,13 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .dirty-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--amber); display: inline-block; }
 
 /* Toast */
-.toast-stack { position: fixed; right: 20px; bottom: 20px; z-index: 120; display: flex; flex-direction: column; gap: 8px; width: min(360px, calc(100vw - 40px)); }
+.toast-stack { position: fixed; top: 20px; right: 20px; z-index: 120; display: flex; flex-direction: column; gap: 8px; width: min(360px, calc(100vw - 40px)); }
 .toast {
   display: flex; align-items: flex-start; gap: 10px; padding: 11px 12px; border-radius: var(--radius-md);
   background: var(--surface-raised); border: 1px solid var(--border); box-shadow: var(--shadow-lg);
-  animation: slideUp 0.2s var(--ease);
+  animation: slideDown 0.2s var(--ease);
 }
+@keyframes slideDown { from { opacity: 0; transform: translateY(-10px) scale(0.985); } to { opacity: 1; transform: none; } }
 .toast-icon { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; flex: 0 0 auto; background: var(--blue-soft); color: var(--blue); }
 .toast-success .toast-icon { background: var(--mint-soft); color: var(--mint); }
 .toast-error .toast-icon { background: var(--red-soft); color: var(--red); }

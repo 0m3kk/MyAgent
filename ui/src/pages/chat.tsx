@@ -31,6 +31,7 @@ import { StartChatComposer } from '../components/chat-composer'
 import { Markdown, MessageMeta, StreamCursor, ToolCard, TypingIndicator, type ToolView } from '../components/chat-bits'
 import { Badge, Button, EmptyState, IconButton, PageHeader, Spinner, TextArea } from '../components/ui'
 import { useToast } from '../components/toast'
+import { useConfirm } from '../components/confirm'
 
 function approvalsFor(list: Approval[], conversationId: string) {
   return list.filter((a) => a.conversation_id === conversationId && a.status === 'pending')
@@ -285,6 +286,7 @@ export function NewChatPage() {
 export function ChatPage({ conversationId }: { conversationId: string }) {
   const { data, approvals, refresh, refreshApprovals } = useApp()
   const toast = useToast()
+  const confirm = useConfirm()
   const [conversation, setConversation] = useState<Conversation | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(true)
@@ -479,8 +481,13 @@ export function ChatPage({ conversationId }: { conversationId: string }) {
   }
 
   async function removeConversation() {
-    if (!window.confirm('Delete this conversation? This does not delete runs or workflows.')) return
     setMenuOpen(false)
+    const ok = await confirm({
+      title: 'Delete conversation',
+      message: 'Delete this conversation? This does not delete runs or workflows.',
+      confirmLabel: 'Delete chat',
+    })
+    if (!ok) return
     try {
       await api.deleteConversation(conversationId)
       toast('Conversation deleted', undefined, 'success')

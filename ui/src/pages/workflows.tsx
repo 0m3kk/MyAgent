@@ -31,6 +31,7 @@ import { api } from '../api'
 import { navigate } from '../router'
 import { useApp } from '../store'
 import { useToast } from '../components/toast'
+import { useConfirm } from '../components/confirm'
 import type { ModelProfile, Run, StepSpec, Trigger, ValidationResult, Workflow, WorkflowDetail, WorkflowSpec, WorkflowVersion } from '../types'
 import { formatCost, formatDate, formatRelative, shortId, statusTone, titleCase } from '../format'
 import { Badge, Button, Drawer, EmptyState, Field, IconButton, InlineNotice, Modal, PageHeader, SectionTitle, Select, Spinner, StatusBadge, Tabs, TextArea, TextInput, Toggle, CopyButton } from '../components/ui'
@@ -150,6 +151,7 @@ export function WorkflowPage({ workflowId }: { workflowId: string }) {
   const isNew = workflowId === 'new'
   const { refresh, data } = useApp()
   const toast = useToast()
+  const confirm = useConfirm()
   const [detail, setDetail] = useState<WorkflowDetail | null>(null)
   const [yaml, setYaml] = useState(isNew ? STARTER_YAML : '')
   const [savedYaml, setSavedYaml] = useState(isNew ? STARTER_YAML : '')
@@ -263,7 +265,12 @@ export function WorkflowPage({ workflowId }: { workflowId: string }) {
 
   async function remove() {
     if (!detail) return
-    if (!window.confirm(`Delete workflow “${detail.workflow.name}” and its runs?`)) return
+    const ok = await confirm({
+      title: 'Delete workflow',
+      message: `Delete “${detail.workflow.name}” and its runs? This cannot be undone.`,
+      confirmLabel: 'Delete workflow',
+    })
+    if (!ok) return
     try {
       await api.deleteWorkflow(detail.workflow.id)
       toast('Workflow deleted', undefined, 'success')
@@ -639,6 +646,7 @@ function VersionsTab({
 
 function TriggersTab({ detail, onChanged }: { detail: WorkflowDetail; onChanged: () => void }) {
   const toast = useToast()
+  const confirm = useConfirm()
   const [triggers, setTriggers] = useState<Trigger[]>(detail.triggers || [])
   const [open, setOpen] = useState(false)
   const [kind, setKind] = useState('cron')
@@ -681,7 +689,12 @@ function TriggersTab({ detail, onChanged }: { detail: WorkflowDetail; onChanged:
   }
 
   async function remove(t: Trigger) {
-    if (!window.confirm('Delete this trigger?')) return
+    const ok = await confirm({
+      title: 'Delete trigger',
+      message: 'Delete this trigger? Scheduled and watched runs will stop.',
+      confirmLabel: 'Delete trigger',
+    })
+    if (!ok) return
     setBusy(t.id)
     try {
       await api.deleteTrigger(t.id)

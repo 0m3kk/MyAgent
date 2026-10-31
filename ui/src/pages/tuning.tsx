@@ -20,6 +20,7 @@ import { api } from '../api'
 import { navigate } from '../router'
 import { useApp } from '../store'
 import { useToast } from '../components/toast'
+import { useConfirm } from '../components/confirm'
 import type { EvalRun, EvalSuite, Run, TuningProposal, WorkflowDetail } from '../types'
 import { formatCost, formatDate, formatRelative, safeJSON, shortId, statusTone } from '../format'
 import { Badge, Button, EmptyState, Field, InlineNotice, Modal, PageHeader, SectionTitle, Select, Spinner, StatusBadge, Tabs } from '../components/ui'
@@ -29,6 +30,7 @@ type Tab = 'proposals' | 'evals' | 'signals'
 export function TuningPage() {
   const { data, refresh } = useApp()
   const toast = useToast()
+  const confirm = useConfirm()
   const [tab, setTab] = useState<Tab>('proposals')
   const [proposals, setProposals] = useState<TuningProposal[]>([])
   const [suites, setSuites] = useState<EvalSuite[]>([])
@@ -57,7 +59,15 @@ export function TuningPage() {
   useEffect(() => { void load() }, [load])
 
   async function decide(p: TuningProposal, action: 'accept' | 'reject' | 'rollback') {
-    if (action === 'accept' && !window.confirm('Apply this patch as a new approved version?')) return
+    if (action === 'accept') {
+      const ok = await confirm({
+        title: 'Apply tuning patch',
+        message: 'Apply this patch as a new approved version?',
+        confirmLabel: 'Apply patch',
+        tone: 'primary',
+      })
+      if (!ok) return
+    }
     setBusy(p.id + action)
     try {
       await api.decideProposal(p.id, action)

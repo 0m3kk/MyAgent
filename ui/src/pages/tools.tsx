@@ -26,6 +26,7 @@ import { api } from '../api'
 import { navigate } from '../router'
 import { useApp } from '../store'
 import { useToast } from '../components/toast'
+import { useConfirm } from '../components/confirm'
 import { useEventStream } from '../hooks'
 import type { EventEnvelope, SecretMeta, TestResult, Tool, ToolDetail, ToolVersion } from '../types'
 import { formatCost, formatDate, formatRelative, safeJSON, shortId, statusTone, titleCase } from '../format'
@@ -245,6 +246,7 @@ function NewToolPage() {
 
 function ToolDetailPage({ toolId }: { toolId: string }) {
   const toast = useToast()
+  const confirm = useConfirm()
   const { refresh, refreshApprovals } = useApp()
   const [detail, setDetail] = useState<ToolDetail | null>(null)
   const [secrets, setSecrets] = useState<SecretMeta[]>([])
@@ -303,7 +305,13 @@ function ToolDetailPage({ toolId }: { toolId: string }) {
 
   async function approve() {
     if (!current) return
-    if (!window.confirm(`Approve and activate ${tool.name} v${current.version}?`)) return
+    const ok = await confirm({
+      title: 'Approve and activate tool',
+      message: `Approve and activate ${tool.name} v${current.version}? It becomes available to the agent and workflows.`,
+      confirmLabel: 'Approve tool',
+      tone: 'primary',
+    })
+    if (!ok) return
     setBusy('approve')
     try {
       await api.approveTool(tool.id, current.id)
@@ -319,7 +327,12 @@ function ToolDetailPage({ toolId }: { toolId: string }) {
   }
 
   async function del() {
-    if (!window.confirm(`Delete ${tool.name} and all of its versions?`)) return
+    const ok = await confirm({
+      title: 'Delete tool',
+      message: `Delete ${tool.name} and all of its versions?`,
+      confirmLabel: 'Delete tool',
+    })
+    if (!ok) return
     try {
       await api.deleteTool(tool.id)
       toast('Tool deleted', undefined, 'success')
