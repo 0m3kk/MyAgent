@@ -1,0 +1,64 @@
+[tools]
+go = "1.27.3"
+node = "26.12.1"
+
+[tasks.help]
+description = "List available tasks"
+run = "mise tasks"
+
+[tasks.deps]
+description = "Install UI dependencies"
+run = "cd ui && npm install"
+
+[tasks.dev]
+description = "Start the Go core and Vite with hot reload"
+run = "./scripts/dev.sh"
+
+[tasks.ui]
+description = "Build the production UI"
+run = "cd ui && npm run build"
+
+[tasks.api]
+description = "Build agentd and agentctl into bin/"
+run = """
+mkdir -p bin
+go build -o bin/agentd ./cmd/agentd
+go build -o bin/agentctl ./cmd/agentctl
+"""
+
+[tasks.build]
+description = "Build UI and Go binaries"
+depends = ["ui", "api"]
+
+[tasks.test]
+description = "Run Go tests and the UI typecheck"
+run = """
+go test ./...
+cd ui && npm run typecheck
+"""
+
+[tasks.e2e]
+description = "Run Playwright smoke tests"
+run = "cd ui && npx playwright test"
+
+[tasks.app]
+description = "Build the native MyAgent.app bundle"
+run = "./scripts/build-macos.sh"
+
+[tasks.release]
+description = "Build and package a macOS release zip"
+run = "./scripts/release.sh"
+
+[tasks.run]
+description = "Run the production build locally"
+depends = ["build"]
+run = '''
+MYAGENT_DEV=1 \
+MYAGENT_DATA_DIR="${MYAGENT_DATA_DIR:-$PWD/.data}" \
+MYAGENT_WORKSPACE="${MYAGENT_WORKSPACE:-$PWD/.data/workspace}" \
+./bin/agentd -addr 127.0.0.1:8787 -open=true -ui ui/dist
+'''
+
+[tasks.clean]
+description = "Remove build output and local data"
+run = "rm -rf bin dist ui/dist .data"

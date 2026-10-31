@@ -1,0 +1,26 @@
+# build output
+/bin/
+/dist/
+/ui/dist/
+/node_modules/
+/ui/node_modules/
+/ui/.vite/
+
+# data
+/.data/
+/.e2e-data/
+/app/AppIcon.iconset/
+*.db
+*.db-shm
+*.db-wal
+/secrets/
+
+# os / editor
+.DS_Store
+.idea/
+.vscode/
+*.log
+
+# tests
+/ui/test-results/
+/ui/playwright-report/
