@@ -217,6 +217,24 @@ func TestEndToEndAPI(t *testing.T) {
 		t.Fatalf("settings not persisted: %+v", settings)
 	}
 
+	// Step limits allow arbitrary values and -1 for unlimited; 0 falls back to
+	// the default so missing/legacy values stay finite.
+	c.must("PATCH", "/api/settings", map[string]any{"agent_max_steps": -1})
+	settings = c.must("GET", "/api/settings", nil)
+	if settings["agent_max_steps"] != float64(-1) {
+		t.Fatalf("unlimited steps not persisted: %+v", settings)
+	}
+	c.must("PATCH", "/api/settings", map[string]any{"agent_max_steps": 100})
+	settings = c.must("GET", "/api/settings", nil)
+	if settings["agent_max_steps"] != float64(100) {
+		t.Fatalf("large step limit not persisted: %+v", settings)
+	}
+	c.must("PATCH", "/api/settings", map[string]any{"agent_max_steps": 0})
+	settings = c.must("GET", "/api/settings", nil)
+	if settings["agent_max_steps"] != float64(12) {
+		t.Fatalf("zero step limit should use the default: %+v", settings)
+	}
+
 	// A tool is created, tested and left as a draft for user approval.
 	created := c.must("POST", "/api/tools", map[string]any{
 		"manifest_yaml": testToolManifest,
@@ -286,6 +304,13 @@ func TestConcurrentChats(t *testing.T) {
 	if firstDetail["active"] != true {
 		t.Fatalf("conversation should report active: %+v", firstDetail)
 	}
+	progress, ok := firstDetail["progress"].(map[string]any)
+	if !ok {
+		t.Fatalf("conversation should report progress: %+v", firstDetail)
+	}
+	if progress["max_steps"].(float64) <= 0 || progress["budget_tokens"].(float64) <= 0 {
+		t.Fatalf("conversation should report limits: %+v", progress)
+	}
 
 	second := c.must("POST", "/api/chat", map[string]any{"text": "second chat"})
 	secondID := second["conversation"].(map[string]any)["id"].(string)
@@ -309,6 +334,9 @@ func TestConcurrentChats(t *testing.T) {
 		detail := c.must("GET", "/api/conversations/"+id, nil)
 		if detail["active"] != false {
 			t.Fatalf("conversation %s should not be active: %+v", id, detail)
+		}
+		if detail["progress"] != nil {
+			t.Fatalf("conversation %s should not report progress: %+v", id, detail)
 		}
 		messages := detail["messages"].([]any)
 		if len(messages) < 2 {

@@ -35,6 +35,8 @@ import { FontSizeControl } from '../components/font-size'
 
 type Tab = 'general' | 'models' | 'secrets'
 
+const UNLIMITED_STEPS = -1
+
 export function SettingsPage({ sub }: { sub?: string[] }) {
   const { data, refresh } = useApp()
   const toast = useToast()
@@ -193,8 +195,29 @@ function GeneralTab({ onNeedModels }: { onNeedModels: () => void }) {
             <Field label="Global concurrent runs" hint="Across all workflows and tools.">
               <TextInput type="number" min={1} max={16} value={form.global_concurrency} onChange={(e) => setForm({ ...form, global_concurrency: Number(e.target.value) })} />
             </Field>
-            <Field label="Agent steps per turn" hint="Maximum LLM ↔ tool loop iterations.">
-              <TextInput type="number" min={1} max={50} value={form.agent_max_steps} onChange={(e) => setForm({ ...form, agent_max_steps: Number(e.target.value) })} />
+            <Field
+              label="Agent steps per turn"
+              hint={form.agent_max_steps === UNLIMITED_STEPS
+                ? 'Unlimited. The token budget or Stop still ends the run.'
+                : 'Maximum LLM ↔ tool loop iterations. Use Unlimited to remove the cap.'}
+            >
+              <div className="inline-number-toggle">
+                <TextInput
+                  type="number"
+                  min={1}
+                  value={form.agent_max_steps === UNLIMITED_STEPS ? '' : form.agent_max_steps}
+                  disabled={form.agent_max_steps === UNLIMITED_STEPS}
+                  onChange={(e) => setForm({ ...form, agent_max_steps: Math.max(1, Number(e.target.value) || 1) })}
+                />
+                <label className="inline-check">
+                  <input
+                    type="checkbox"
+                    checked={form.agent_max_steps === UNLIMITED_STEPS}
+                    onChange={(e) => setForm({ ...form, agent_max_steps: e.target.checked ? UNLIMITED_STEPS : 12 })}
+                  />
+                  Unlimited
+                </label>
+              </div>
             </Field>
             <Field label="Chat token budget" hint="The agent stops a conversation that exceeds this.">
               <TextInput type="number" min={1000} step={1000} value={form.agent_budget_tokens} onChange={(e) => setForm({ ...form, agent_budget_tokens: Number(e.target.value) })} />

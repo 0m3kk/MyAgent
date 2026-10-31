@@ -3,6 +3,7 @@ import {
   ArrowRight,
   Bot,
   Cpu,
+  Gauge,
   MessageSquareText,
   MoreHorizontal,
   Plus,
@@ -19,7 +20,7 @@ import { api } from '../api'
 import { navigate } from '../router'
 import { useApp } from '../store'
 import { useEventStream, usePolling, useAutoScroll } from '../hooks'
-import type { Approval, Conversation, EventEnvelope, Message } from '../types'
+import type { Approval, ChatProgress, Conversation, EventEnvelope, Message } from '../types'
 import { formatRelative } from '../format'
 import { ApprovalCard } from '../components/approval'
 import { StartChatComposer } from '../components/chat-composer'
@@ -29,6 +30,29 @@ import { useToast } from '../components/toast'
 
 function approvalsFor(list: Approval[], conversationId: string) {
   return list.filter((a) => a.conversation_id === conversationId && a.status === 'pending')
+}
+
+function progressFromPayload(p: Record<string, unknown>, prev: ChatProgress | null): ChatProgress | null {
+  const step = Number(p.step)
+  const maxSteps = Number(p.max_steps)
+  const used = Number(p.used_tokens)
+  const budget = Number(p.budget_tokens)
+  if (!Number.isFinite(step) || !Number.isFinite(maxSteps) || maxSteps === 0 || maxSteps < -1) return prev
+  return {
+    step,
+    max_steps: maxSteps,
+    used_tokens: Number.isFinite(used) ? used : 0,
+    budget_tokens: Number.isFinite(budget) && budget > 0 ? budget : (prev?.budget_tokens ?? 0),
+    started_at: prev?.started_at ?? Date.now(),
+  }
+}
+
+function formatTokens(n: number) {
+  if (!Number.isFinite(n) || n <= 0) return '0'
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}m`
+  if (n >= 100_000) return `${Math.round(n / 1_000)}k`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`
+  return String(Math.round(n))
 }
 
 export function ChatHome() {
@@ -264,6 +288,7 @@ export function ChatPage({ conversationId }: { conversationId: string }) {
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const [streaming, setStreaming] = useState(false)
+  const [progress, setProgress] = useState<ChatProgress | null>(null)
   const [streamText, setStreamText] = useState('')
   const [liveTools, setLiveTools] = useState<Record<string, ToolView>>({})
   const [menuOpen, setMenuOpen] = useState(false)
@@ -279,6 +304,7 @@ export function ChatPage({ conversationId }: { conversationId: string }) {
       setConversation(res.conversation)
       setMessages(res.messages)
       setStreaming(res.active)
+      setProgress(res.progress)
       if (!res.active) {
         setStreamText('')
         setLiveTools({})
@@ -297,6 +323,7 @@ export function ChatPage({ conversationId }: { conversationId: string }) {
     setConversation(null)
     setMessages([])
     setStreaming(false)
+    setProgress(null)
     setStreamText('')
     setLiveTools({})
     void load()
@@ -313,12 +340,16 @@ export function ChatPage({ conversationId }: { conversationId: string }) {
         case 'llm.request':
           setStreaming(true)
           setStreamText('')
+          setProgress((prev) => progressFromPayload(p, prev))
           break
         case 'llm.delta':
           if (typeof p.text === 'string') {
             setStreaming(true)
             setStreamText((prev) => prev + p.text)
           }
+          break
+        case 'llm.finished':
+          setProgress((prev) => progressFromPayload(p, prev))
           break
         case 'tool.call.started': {
           const key = String(p.tool_call_id || `${p.tool}-${Date.now()}`)
@@ -477,6 +508,30 @@ export function ChatPage({ conversationId }: { conversationId: string }) {
   const visible = messages.filter((m) => m.role !== 'tool')
   const liveToolList = Object.values(liveTools)
   const lastAssistant = [...visible].reverse().find((m) => m.role === 'assistant')
+  const limits = progress ?? {
+    step: 0,
+    max_steps: data?.settings.agent_max_steps ?? 0,
+    used_tokens: 0,
+    budget_tokens: data?.settings.agent_budget_tokens ?? 0,
+    started_at: 0,
+  }
+  const showProgress = streaming && progress !== null
+  const limitRatio = showProgress
+    ? Math.max(
+      limits.max_steps > 0 ? limits.step / limits.max_steps : 0,
+      limits.budget_tokens > 0 ? limits.used_tokens / limits.budget_tokens : 0,
+    )
+    : 0
+  const limitTone = limitRatio >= 1 ? 'danger' : limitRatio >= 0.8 ? 'warn' : ''
+  const unlimitedSteps = limits.max_steps < 0
+  const stepText = unlimitedSteps ? `Step ${limits.step}/∞` : `Step ${limits.step}/${limits.max_steps}`
+  const idleStepText = unlimitedSteps ? 'Unlimited steps' : `${limits.max_steps} steps`
+  const limitText = showProgress
+    ? `${stepText} · ${formatTokens(limits.used_tokens)}/${formatTokens(limits.budget_tokens)} tokens`
+    : `${idleStepText} · ${formatTokens(limits.budget_tokens)} tokens`
+  const limitTitle = showProgress
+    ? `${limits.used_tokens.toLocaleString()} of ${limits.budget_tokens.toLocaleString()} tokens used in ${unlimitedSteps ? `step ${limits.step} (unlimited steps)` : `step ${limits.step} of ${limits.max_steps}`}`
+    : `Per-run limits: ${unlimitedSteps ? 'unlimited steps' : `${limits.max_steps} steps`} and ${limits.budget_tokens.toLocaleString()} tokens`
 
   return (
     <div className="chat-page">
@@ -590,6 +645,15 @@ export function ChatPage({ conversationId }: { conversationId: string }) {
           <span>{defaultModel?.model}</span>
           <span>·</span>
           <span>Secrets never enter the prompt</span>
+          <span className={clsx('limit-chip', limitTone)} title={limitTitle}>
+            <Gauge size={11} />
+            {limitText}
+            {showProgress && (
+              <span className="limit-bar">
+                <span style={{ width: `${Math.min(100, Math.max(0, limitRatio * 100))}%` }} />
+              </span>
+            )}
+          </span>
           {pending.length > 0 && <Badge tone="warn">{pending.length} awaiting approval</Badge>}
         </div>
       </div>

@@ -50,9 +50,10 @@ type App struct {
 	approvalMu sync.Mutex
 	waiters    map[string]*ApprovalWaiter
 
-	chatMu      sync.Mutex
-	chatActive  map[string]bool
-	chatCancels map[string]context.CancelFunc
+	chatMu       sync.Mutex
+	chatActive   map[string]bool
+	chatCancels  map[string]context.CancelFunc
+	chatProgress map[string]ChatProgress
 
 	cronMu   sync.Mutex
 	cron     *cron.Cron
@@ -66,6 +67,8 @@ type App struct {
 	settingsMu sync.RWMutex
 	settings   Settings
 }
+
+const AgentStepsUnlimited = -1
 
 type Settings struct {
 	GlobalConcurrency int     `json:"global_concurrency"`
@@ -108,7 +111,7 @@ func normalizeSettings(s Settings) Settings {
 	if s.GlobalConcurrency < 1 || s.GlobalConcurrency > 64 {
 		s.GlobalConcurrency = DefaultSettings().GlobalConcurrency
 	}
-	if s.AgentMaxSteps < 1 || s.AgentMaxSteps > 50 {
+	if s.AgentMaxSteps == 0 || s.AgentMaxSteps < AgentStepsUnlimited {
 		s.AgentMaxSteps = DefaultSettings().AgentMaxSteps
 	}
 	if s.AgentBudgetTokens <= 0 {
@@ -223,17 +226,18 @@ func New(ctx context.Context, cfg Config) (*App, error) {
 	}
 	a := &App{
 		cfg: cfg, Store: st, Bus: bus, Secrets: sec, Workspace: ws,
-		Executor:    tools.NewExecutor(cfg.WorkspaceRoot, cfg.DataDir),
-		LLM:         llm.NewClient(),
-		runs:        map[string]*RunControl{},
-		waiters:     map[string]*ApprovalWaiter{},
-		chatActive:  map[string]bool{},
-		chatCancels: map[string]context.CancelFunc{},
-		cronIDs:     map[string]cron.EntryID{},
-		watchers:    map[string][]*fileWatcher{},
-		closeCh:     make(chan struct{}),
-		sem:         make(chan struct{}, 8),
-		settings:    DefaultSettings(),
+		Executor:     tools.NewExecutor(cfg.WorkspaceRoot, cfg.DataDir),
+		LLM:          llm.NewClient(),
+		runs:         map[string]*RunControl{},
+		waiters:      map[string]*ApprovalWaiter{},
+		chatActive:   map[string]bool{},
+		chatCancels:  map[string]context.CancelFunc{},
+		chatProgress: map[string]ChatProgress{},
+		cronIDs:      map[string]cron.EntryID{},
+		watchers:     map[string][]*fileWatcher{},
+		closeCh:      make(chan struct{}),
+		sem:          make(chan struct{}, 8),
+		settings:     DefaultSettings(),
 	}
 	a.loadSettings(ctx)
 	// Concurrency cap follows settings on boot; changes apply to new runs.

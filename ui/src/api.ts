@@ -1,6 +1,7 @@
 import type {
   Approval,
   Bootstrap,
+  ChatProgress,
   Conversation,
   EvalRun,
   EvalSuite,
@@ -102,7 +103,7 @@ export const api = {
 
   conversations: () => request<{ conversations: Conversation[] }>('/api/conversations'),
   createConversation: (title = 'New chat') => request<Conversation>('/api/conversations', json({ title })),
-  conversation: (id: string) => request<{ conversation: Conversation; messages: Message[]; active: boolean }>(`/api/conversations/${id}`),
+  conversation: (id: string) => request<{ conversation: Conversation; messages: Message[]; active: boolean; progress: ChatProgress | null }>(`/api/conversations/${id}`),
   deleteConversation: (id: string) => request<{ ok: boolean }>(`/api/conversations/${id}`, { method: 'DELETE' }),
   sendChat: (conversationId: string, text: string) =>
     request<{ conversation: Conversation; message: Message }>('/api/chat', json({ conversation_id: conversationId, text })),

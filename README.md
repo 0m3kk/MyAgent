@@ -68,7 +68,7 @@ Existing installs using `~/MyAgent Workspace` migrate on the next launch.
 
 | | Area | Highlights |
 | --- | --- | --- |
-| 💬 | **Chat agent** | Streaming markdown, tool cards, approvals, stop, run links and “Save as workflow”. |
+| 💬 | **Chat agent** | Streaming markdown, tool cards, approvals, live step/token limits, stop, run links and “Save as workflow”. |
 | 🔁 | **Workflows** | Strict YAML, structured validator, DAG engine, parallel/map/branch/agent steps, retries, pause/resume and crash recovery. |
 | 🎨 | **Canvas** | Live React Flow graph, status colors, animated edges and a per-step inspector for input, output, logs, trace and cost. |
 | 🧰 | **Tools** | Built-ins, Starlark, Python/Node/shell/binary sandbox, manifests, tests and version lifecycle. |

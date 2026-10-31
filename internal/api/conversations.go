@@ -41,10 +41,15 @@ func (s *Server) handleGetConversation(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error(), nil)
 		return
 	}
+	var progress any
+	if p, ok := s.app.ChatProgress(conv.ID); ok {
+		progress = p
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"conversation": conv,
 		"messages":     msgs,
 		"active":       s.app.ChatActive(conv.ID),
+		"progress":     progress,
 	})
 }
 

@@ -38,6 +38,14 @@ export interface Conversation {
   updated_at: number
 }
 
+export interface ChatProgress {
+  step: number
+  max_steps: number
+  used_tokens: number
+  budget_tokens: number
+  started_at: number
+}
+
 export interface Part {
   type: string
   text?: string

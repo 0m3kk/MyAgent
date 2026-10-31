@@ -55,6 +55,18 @@ test('text size can be increased and reset in settings', async ({ page }) => {
   await page.locator('.settings-page .text-size-value').click()
 })
 
+test('agent steps can be unlimited', async ({ page }) => {
+  await page.goto('/#/settings')
+  const unlimited = page.getByRole('checkbox', { name: 'Unlimited' })
+  await expect(unlimited).toBeVisible({ timeout: 15_000 })
+  await unlimited.check()
+  await page.getByRole('button', { name: 'Save settings' }).click()
+  await page.reload()
+  await expect(page.getByRole('checkbox', { name: 'Unlimited' })).toBeChecked()
+  await page.getByRole('checkbox', { name: 'Unlimited' }).uncheck()
+  await page.getByRole('button', { name: 'Save settings' }).click()
+})
+
 test('appearance has light, dark and system modes', async ({ page }) => {
   await page.goto('/#/settings')
   await expect(page.getByRole('radiogroup', { name: 'Appearance' })).toBeVisible({ timeout: 15_000 })

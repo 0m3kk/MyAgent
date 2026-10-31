@@ -22,6 +22,14 @@ type ChatReply struct {
 	Message      model.Message      `json:"message"`
 }
 
+type ChatProgress struct {
+	Step         int   `json:"step"`
+	MaxSteps     int   `json:"max_steps"`
+	UsedTokens   int   `json:"used_tokens"`
+	BudgetTokens int   `json:"budget_tokens"`
+	StartedAt    int64 `json:"started_at"`
+}
+
 type chatToolSet struct {
 	Defs    []llm.ToolDef
 	Routes  map[string]chatToolRoute
@@ -92,6 +100,7 @@ func (a *App) SendChat(ctx context.Context, conversationID, text string) (ChatRe
 	a.emitMessage(conv.ID, msg)
 	a.Bus.EmitNoErr(model.Event{Stream: model.ConvStream(conv.ID), Type: "conversation.updated",
 		Payload: a.mustPayload(map[string]any{"conversation": conv})})
+	a.startChatProgress(conv.ID)
 	go a.runAssistant(conv.ID, text)
 	return ChatReply{Conversation: conv, Message: msg}, nil
 }
@@ -139,6 +148,7 @@ func (a *App) StartWorkflowEditChat(
 	a.emitMessage(conv.ID, msg)
 	a.Bus.EmitNoErr(model.Event{Stream: model.ConvStream(conv.ID), Type: "conversation.updated",
 		Payload: a.mustPayload(map[string]any{"conversation": conv})})
+	a.startChatProgress(conv.ID)
 	go a.runAssistant(conv.ID, text)
 	return conv, nil
 }
@@ -147,6 +157,34 @@ func (a *App) ChatActive(conversationID string) bool {
 	a.chatMu.Lock()
 	defer a.chatMu.Unlock()
 	return a.chatActive[conversationID]
+}
+
+func (a *App) ChatProgress(conversationID string) (ChatProgress, bool) {
+	a.chatMu.Lock()
+	defer a.chatMu.Unlock()
+	p, ok := a.chatProgress[conversationID]
+	return p, ok
+}
+
+func (a *App) startChatProgress(conversationID string) {
+	settings := a.GetSettings()
+	a.chatMu.Lock()
+	a.chatProgress[conversationID] = ChatProgress{
+		MaxSteps:     settings.AgentMaxSteps,
+		BudgetTokens: settings.AgentBudgetTokens,
+		StartedAt:    time.Now().UnixMilli(),
+	}
+	a.chatMu.Unlock()
+}
+
+func (a *App) updateChatProgress(conversationID string, update func(*ChatProgress)) {
+	a.chatMu.Lock()
+	p, ok := a.chatProgress[conversationID]
+	if ok {
+		update(&p)
+		a.chatProgress[conversationID] = p
+	}
+	a.chatMu.Unlock()
 }
 
 func (a *App) StopChat(ctx context.Context, conversationID string) error {
@@ -170,6 +208,7 @@ func (a *App) runAssistant(convID, userText string) {
 		a.chatMu.Lock()
 		delete(a.chatCancels, convID)
 		delete(a.chatActive, convID)
+		delete(a.chatProgress, convID)
 		a.chatMu.Unlock()
 	}()
 
@@ -216,19 +255,26 @@ func (a *App) runAssistant(convID, userText string) {
 	settings := a.GetSettings()
 	totalTokens := 0
 	streamedThisTurn := ""
-	for step := 0; step < settings.AgentMaxSteps; step++ {
+	for step := 0; settings.AgentMaxSteps == AgentStepsUnlimited || step < settings.AgentMaxSteps; step++ {
 		if ctx.Err() != nil {
 			a.saveAssistantText(convID, "_Stopped._", nil, prof.ID, 0, 0, 0)
 			return
 		}
 		streamedThisTurn = ""
+		a.updateChatProgress(convID, func(p *ChatProgress) {
+			p.Step = step + 1
+			p.UsedTokens = totalTokens
+		})
 		a.Bus.EmitNoErr(model.Event{Stream: model.ConvStream(convID), Type: "llm.request",
 			Payload: a.mustPayload(
 				map[string]any{
-					"role":  "executor",
-					"model": prof.Model,
-					"step":  step + 1,
-					"tools": len(toolSet.Defs),
+					"role":          "executor",
+					"model":         prof.Model,
+					"step":          step + 1,
+					"max_steps":     settings.AgentMaxSteps,
+					"budget_tokens": settings.AgentBudgetTokens,
+					"used_tokens":   totalTokens,
+					"tools":         len(toolSet.Defs),
 				},
 			)})
 		res, err := a.ChatWithTools(ctx, workflow.LLMChatRequest{
@@ -261,12 +307,20 @@ func (a *App) runAssistant(convID, userText string) {
 			return
 		}
 		totalTokens += res.TokensIn + res.TokensOut
+		a.updateChatProgress(convID, func(p *ChatProgress) {
+			p.Step = step + 1
+			p.UsedTokens = totalTokens
+		})
 		a.Bus.EmitNoErr(model.Event{Stream: model.ConvStream(convID), Type: "llm.finished",
 			Payload: a.mustPayload(
 				map[string]any{
-					"model":      res.Model,
-					"usage":      map[string]any{"in": res.TokensIn, "out": res.TokensOut},
-					"cost_micro": res.CostMicro,
+					"model":         res.Model,
+					"usage":         map[string]any{"in": res.TokensIn, "out": res.TokensOut},
+					"cost_micro":    res.CostMicro,
+					"step":          step + 1,
+					"max_steps":     settings.AgentMaxSteps,
+					"budget_tokens": settings.AgentBudgetTokens,
+					"used_tokens":   totalTokens,
 				},
 			)})
 		assistant := res.Message
