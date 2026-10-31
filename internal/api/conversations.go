@@ -46,6 +46,8 @@ func (s *Server) handleGetConversation(w http.ResponseWriter, r *http.Request) {
 	var progress any
 	if p, ok := s.app.ChatProgress(conv.ID); ok {
 		progress = p
+	} else if p, ok := s.app.ChatLastProgress(r.Context(), conv.ID); ok {
+		progress = p
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"conversation": conv,

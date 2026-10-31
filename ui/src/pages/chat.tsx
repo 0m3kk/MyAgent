@@ -603,10 +603,12 @@ export function ChatPage({ conversationId }: { conversationId: string }) {
   const idleStepText = unlimitedSteps ? 'Unlimited steps' : `${limits.max_steps} steps`
   const limitText = showProgress
     ? `${stepText} · ${formatTokens(limits.used_tokens)}/${formatTokens(limits.budget_tokens)} tokens`
-    : `${idleStepText} · ${formatTokens(limits.budget_tokens)} tokens`
+    : `${idleStepText} · ${formatTokens(limits.used_tokens)} tokens used`
   const limitTitle = showProgress
-    ? `${limits.used_tokens.toLocaleString()} of ${limits.budget_tokens.toLocaleString()} tokens used in ${unlimitedSteps ? `step ${limits.step} (unlimited steps)` : `step ${limits.step} of ${limits.max_steps}`}`
-    : `Per-run limits: ${unlimitedSteps ? 'unlimited steps' : `${limits.max_steps} steps`} and ${limits.budget_tokens.toLocaleString()} tokens`
+    ? `${limits.used_tokens.toLocaleString()} of ${limits.budget_tokens.toLocaleString()} tokens in the last model call, ${unlimitedSteps ? `step ${limits.step} (unlimited steps)` : `step ${limits.step} of ${limits.max_steps}`}`
+    : limits.used_tokens > 0
+      ? `Last model call: ${limits.used_tokens.toLocaleString()} tokens · budget ${limits.budget_tokens.toLocaleString()} · ${unlimitedSteps ? 'unlimited steps' : `${limits.max_steps} steps`}`
+      : `No token usage yet · ${unlimitedSteps ? 'unlimited steps' : `${limits.max_steps} steps`} · budget ${limits.budget_tokens.toLocaleString()} tokens`
 
   return (
     <div className="chat-page">

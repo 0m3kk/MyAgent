@@ -166,6 +166,23 @@ func (a *App) ChatProgress(conversationID string) (ChatProgress, bool) {
 	return p, ok
 }
 
+// ChatLastProgress reconstructs the last token usage from persisted messages
+// so the chat header can show it after the agent has finished (and after a
+// restart).
+func (a *App) ChatLastProgress(ctx context.Context, conversationID string) (ChatProgress, bool) {
+	tokensIn, tokensOut, createdAt, ok, err := a.Store.LastAssistantUsage(ctx, conversationID)
+	if err != nil || !ok {
+		return ChatProgress{}, false
+	}
+	settings := a.GetSettings()
+	return ChatProgress{
+		MaxSteps:     settings.AgentMaxSteps,
+		UsedTokens:   tokensIn + tokensOut,
+		BudgetTokens: settings.AgentBudgetTokens,
+		StartedAt:    createdAt,
+	}, true
+}
+
 func (a *App) startChatProgress(conversationID string) {
 	settings := a.GetSettings()
 	a.chatMu.Lock()
@@ -253,7 +270,7 @@ func (a *App) runAssistant(convID, userText string) {
 	}
 	system := a.chatSystemPrompt(ctx, toolSet)
 	settings := a.GetSettings()
-	totalTokens := 0
+	lastTokens := 0
 	streamedThisTurn := ""
 	for step := 0; settings.AgentMaxSteps == AgentStepsUnlimited || step < settings.AgentMaxSteps; step++ {
 		if ctx.Err() != nil {
@@ -263,7 +280,7 @@ func (a *App) runAssistant(convID, userText string) {
 		streamedThisTurn = ""
 		a.updateChatProgress(convID, func(p *ChatProgress) {
 			p.Step = step + 1
-			p.UsedTokens = totalTokens
+			p.UsedTokens = lastTokens
 		})
 		a.Bus.EmitNoErr(model.Event{Stream: model.ConvStream(convID), Type: "llm.request",
 			Payload: a.mustPayload(
@@ -273,7 +290,7 @@ func (a *App) runAssistant(convID, userText string) {
 					"step":          step + 1,
 					"max_steps":     settings.AgentMaxSteps,
 					"budget_tokens": settings.AgentBudgetTokens,
-					"used_tokens":   totalTokens,
+					"used_tokens":   lastTokens,
 					"tools":         len(toolSet.Defs),
 				},
 			)})
@@ -306,10 +323,10 @@ func (a *App) runAssistant(convID, userText string) {
 			a.saveAssistantText(convID, text, nil, prof.ID, 0, 0, 0)
 			return
 		}
-		totalTokens += res.TokensIn + res.TokensOut
+		lastTokens = res.TokensIn + res.TokensOut
 		a.updateChatProgress(convID, func(p *ChatProgress) {
 			p.Step = step + 1
-			p.UsedTokens = totalTokens
+			p.UsedTokens = lastTokens
 		})
 		a.Bus.EmitNoErr(model.Event{Stream: model.ConvStream(convID), Type: "llm.finished",
 			Payload: a.mustPayload(
@@ -320,7 +337,7 @@ func (a *App) runAssistant(convID, userText string) {
 					"step":          step + 1,
 					"max_steps":     settings.AgentMaxSteps,
 					"budget_tokens": settings.AgentBudgetTokens,
-					"used_tokens":   totalTokens,
+					"used_tokens":   lastTokens,
 				},
 			)})
 		assistant := res.Message
@@ -413,10 +430,10 @@ func (a *App) runAssistant(convID, userText string) {
 		messages = append(messages, assistant)
 		messages = append(messages, toolMessages...)
 		_ = msg
-		if totalTokens > settings.AgentBudgetTokens {
+		if lastTokens >= settings.AgentBudgetTokens {
 			a.saveAssistantText(
 				convID,
-				"_I stopped because the conversation reached its token budget._",
+				"_I stopped because the model context reached its token budget._",
 				nil,
 				prof.ID,
 				0,

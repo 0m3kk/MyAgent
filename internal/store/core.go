@@ -263,6 +263,30 @@ func (s *Store) DeleteConversation(ctx context.Context, id string) error {
 	return err
 }
 
+// LastAssistantUsage returns the usage of the most recent assistant LLM call
+// that reported tokens. It is used to keep the chat status chip populated
+// while the agent is idle.
+func (s *Store) LastAssistantUsage(
+	ctx context.Context,
+	conversationID string,
+) (tokensIn, tokensOut int, createdAt int64, ok bool, err error) {
+	err = s.db.QueryRowContext(
+		ctx,
+		`SELECT tokens_in, tokens_out, created_at
+		 FROM messages
+		 WHERE conversation_id = ? AND role = 'assistant' AND (tokens_in > 0 OR tokens_out > 0)
+		 ORDER BY seq DESC LIMIT 1`,
+		conversationID,
+	).Scan(&tokensIn, &tokensOut, &createdAt)
+	if isNoRows(err) {
+		return 0, 0, 0, false, nil
+	}
+	if err != nil {
+		return 0, 0, 0, false, err
+	}
+	return tokensIn, tokensOut, createdAt, true, nil
+}
+
 func (s *Store) AppendMessage(ctx context.Context, m model.Message) (model.Message, error) {
 	if m.ID == "" {
 		m.ID = ids.New()

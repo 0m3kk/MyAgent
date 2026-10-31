@@ -226,7 +226,7 @@ function GeneralTab({ onNeedModels }: { onNeedModels: () => void }) {
                 </label>
               </div>
             </Field>
-            <Field label="Chat token budget" hint="The agent stops a conversation that exceeds this.">
+            <Field label="Chat context budget" hint="Maximum prompt + completion tokens for one model call. The agent stops when a call exceeds this.">
               <TextInput type="number" min={1000} step={1000} value={form.agent_budget_tokens} onChange={(e) => setForm({ ...form, agent_budget_tokens: Number(e.target.value) })} />
             </Field>
             <Field label="Run retention (days)" hint="Feedback and eval runs are kept longer.">
