@@ -39,6 +39,18 @@ gofmt -w $(find cmd internal -name '*.go' -type f)
 golines -w --max-len=100 cmd internal
 """
 
+[tasks.format-check]
+description = "Check Go formatting without writing"
+run = """
+files="$(gofmt -l $(find cmd internal -name '*.go' -type f))"
+files="$files$(golines -l --max-len=100 cmd internal)"
+if [ -n "$files" ]; then
+  echo "Unformatted Go files:"
+  echo "$files"
+  exit 1
+fi
+"""
+
 [tasks.test]
 description = "Run Go tests and the UI typecheck"
 run = """

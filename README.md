@@ -10,6 +10,7 @@
 </p>
 
 <p align="center">
+  <img src="https://img.shields.io/github/actions/workflow/status/0m3kk/MyAgent/ci.yml?branch=main&style=flat-square&label=CI" alt="CI" />
   <img src="https://img.shields.io/badge/macOS-13%2B-111111?logo=apple&logoColor=white&style=flat-square" alt="macOS 13+" />
   <img src="https://img.shields.io/badge/Go-1.27.3-00ADD8?logo=go&logoColor=white&style=flat-square" alt="Go 1.27.3" />
   <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=111111&style=flat-square" alt="React 19" />
@@ -108,6 +109,7 @@ All commands live in `.mise.toml`.
 | ⚙️ | `mise run api` | Build `agentd` and `agentctl` |
 | 🏗️ | `mise run build` | Build UI and Go binaries |
 | ✨ | `mise run format` | Format Go with gofmt and golines |
+| 🔎 | `mise run format-check` | Check Go formatting without writing |
 | ▶️ | `mise run run` | Serve production UI on `127.0.0.1:8787` |
 | 📱 | `mise run app` | Build `dist/MyAgent.app` |
 | 🚀 | `mise run release` | Package a macOS release zip and appcast |
@@ -201,6 +203,8 @@ mise run e2e       # Playwright smoke tests
 ```
 
 Coverage includes schema and expression validation, workflow DAG execution (retry, approval, resume), AES-GCM secrets and redaction, tool manifests and Starlark execution, proxy allowlists and mocks, LLM SSE streaming and tool calls, plus an end-to-end approval flow.
+
+CI runs formatting checks, tests, Playwright e2e and a native app build on every push to `main` via `.github/workflows/ci.yml`.
 
 ## 🤖 Dependency updates
 

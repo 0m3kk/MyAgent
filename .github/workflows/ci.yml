@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test and build
+    runs-on: macos-14
+    timeout-minutes: 30
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install toolchain
+        uses: jdx/mise-action@v2
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('ui/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: Install UI dependencies
+        run: mise run deps
+
+      - name: Check formatting
+        run: mise run format-check
+
+      - name: Run tests
+        run: mise run test
+
+      - name: Install Playwright browser
+        run: cd ui && pnpm exec playwright install chromium
+
+      - name: Run e2e tests
+        run: mise run e2e
+
+      - name: Build app
+        run: mise run app
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            ui/test-results
+            ui/playwright-report
+          if-no-files-found: ignore
