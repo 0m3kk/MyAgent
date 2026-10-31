@@ -173,8 +173,14 @@ input[type="checkbox"] { accent-color: var(--accent); }
 }
 .brand-copy { display: flex; flex-direction: column; line-height: 1.15; }
 .brand-copy strong { font-size: calc(15px * var(--font-scale)); letter-spacing: -0.02em; }
-.sidebar-actions { display: flex; gap: 7px; justify-content: flex-end; }
-.sidebar-icon { width: 36px !important; height: 36px !important; }
+.command-trigger {
+  display: flex; align-items: center; gap: 8px; width: 100%; height: 36px; padding: 0 10px;
+  border: 1px solid var(--border-soft); background: var(--surface-2); color: var(--muted);
+  border-radius: var(--radius-sm); font-size: calc(12px * var(--font-scale)); text-align: left;
+  transition: background 0.15s var(--ease), border-color 0.15s, color 0.15s;
+}
+.command-trigger:hover { background: var(--surface-3); border-color: var(--border-strong); color: var(--text); }
+.command-trigger kbd { margin-left: auto; font-family: var(--font-sans); font-size: calc(9.5px * var(--font-scale)); color: var(--faint); border: 1px solid var(--border); border-radius: 4px; padding: 1px 4px; background: var(--surface); }
 .nav { display: flex; flex-direction: column; gap: 2px; margin-top: 16px; }
 .nav-item {
   display: flex; align-items: center; gap: 10px; height: 35px; padding: 0 10px;
@@ -1114,7 +1120,8 @@ input[type="checkbox"] { accent-color: var(--accent); }
   .sidebar { align-items: center; padding: 14px 8px; }
   .brand { padding: 12px 0 14px; }
   .brand-copy, .nav-item span, .nav-count, .sidebar-recent, .model-card > div, .model-status, .dev-key-dot, .approval-button span:not(.approval-dot):not(.badge) { display: none; }
-  .sidebar-actions { flex-direction: column; justify-content: center; }
+  .command-trigger { width: 36px; height: 36px; padding: 0; justify-content: center; }
+  .command-trigger span, .command-trigger kbd { display: none; }
   .nav-item { width: 46px; justify-content: center; padding: 0; }
   .nav-item.slim { width: 40px; }
   .sidebar-foot { width: 100%; align-items: center; }

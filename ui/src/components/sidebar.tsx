@@ -15,7 +15,7 @@ import clsx from 'clsx'
 import { formatRelative } from '../format'
 import { href, navigate, useRoute } from '../router'
 import { useApp } from '../store'
-import { Badge, IconButton } from './ui'
+import { Badge } from './ui'
 
 export function Sidebar({
   onCommand,
@@ -49,11 +49,11 @@ export function Sidebar({
             <strong>MyAgent</strong>
           </span>
         </a>
-        <div className="sidebar-actions">
-          <IconButton label="Command palette (⌘K)" onClick={onCommand} className="sidebar-icon">
-            <Command size={16} />
-          </IconButton>
-        </div>
+        <button className="command-trigger" onClick={onCommand} title="Command palette (⌘K)">
+          <Command size={15} />
+          <span>Command</span>
+          <kbd>⌘K</kbd>
+        </button>
       </div>
 
       <nav className="nav">
