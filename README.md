@@ -1,122 +1,111 @@
-# MyAgent
+<p align="center">
+  <img src="docs/icon.png" width="112" alt="MyAgent icon" />
+</p>
 
-A local-first macOS desktop agent. Chat with an agent that uses tools, builds reusable tools and workflows, runs them without chat, waits for approval before risky actions, and improves from real runs.
+<h1 align="center">MyAgent</h1>
 
-The implementation follows `DESIGN.md`: Go is the source of truth, every state change is an event, tools and workflows are versioned data, and secrets never enter prompts.
+<p align="center">
+  <strong>A local-first macOS agent that gets real work done.</strong><br />
+  Chat, use tools, build reusable workflows, approve risky actions, and improve from every run.
+</p>
 
-## What is implemented
+<p align="center">
+  <img src="https://img.shields.io/badge/macOS-13%2B-111111?logo=apple&logoColor=white&style=flat-square" alt="macOS 13+" />
+  <img src="https://img.shields.io/badge/Go-1.27-00ADD8?logo=go&logoColor=white&style=flat-square" alt="Go 1.27" />
+  <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=111111&style=flat-square" alt="React 19" />
+  <img src="https://img.shields.io/badge/SQLite-local-003B57?logo=sqlite&logoColor=white&style=flat-square" alt="SQLite" />
+  <img src="https://img.shields.io/badge/LLM-OpenAI--compatible-7C6CFF?style=flat-square" alt="OpenAI-compatible" />
+</p>
 
-### Desktop app
-- Native macOS shell (`app/main.swift`, WebKit) that starts the Go core and loads the React UI.
-- `mise run app` produces `dist/MyAgent.app`; closing the window quits the app and stops the core (schedules/watchers run only while it is open).
-- Local HTTP + SSE bridge on loopback, session token/cookie, no cloud dependency.
-- Geist Mono throughout, with adjustable text size: sidebar control, Settings → General, or `⌘+` / `⌘−` / `⌘0`.
-- Appearance modes in Settings → General: Light, Dark, or System (follows macOS).
+---
 
-### Chat agent
-- Streaming markdown chat with collapsible tool cards, approval cards, run links and stop/retry.
-- Agent loop with a hard step cap, token budget, context truncation and stop control.
-- Meta-tools: `search_tools`, `describe_tool`, `list_workflows`, `get_workflow`, `validate_workflow`, `save_workflow_draft`, `dry_run_workflow`, `run_workflow`, `get_run`, `wait_run`, `list_runs`, `read_run`, `compare_runs`, `get_feedback`, `list_secrets`, `get_environment`, `create_tool_draft`, `write_tool_file`, `read_tool_file`, `list_tool_files`, `run_tool_tests`, `probe_permissions`, `request_tool_approval`, `ask_user`, `remember`, `propose_trigger`, `propose_patch`, `run_eval`.
-- “Save as workflow” from a conversation (planner-assisted when a planner is configured, deterministic fallback offline).
+MyAgent is a native macOS desktop app with a Go core. Everything runs on your Mac: the database, tools, secrets, workflow engine, traces and model gateway. There is no cloud account, no background SaaS, and no hidden execution path.
 
-### Workflows
-- Strict YAML schema (`schema: 1`) with `tool`, `llm`, `agent`, `set`, `branch`, `map`, `parallel`, `approval` and subworkflow steps.
-- Static validator with E001–E011 and W001–W004 diagnostics, cycle detection, ancestor-reference checks, tool schema checks, secret-binding checks and self-repair-friendly errors.
-- DAG engine with parallel branches, map concurrency, retries/backoff, timeouts, cancel, pause/resume, per-run budget, idempotency keys, output artifacts and resume after crash.
-- Live React Flow canvas with node status colors, animated active edges, step inspector (input, output, logs, trace, cost) and approval cards.
-- Run history with filters, feedback, rerun and side-by-side comparison.
-- Versioning, approval tied to content hash, and rollback.
-
-### Tools
-- Built-ins: `fs.list`, `fs.read_text`, `fs.write_text`, `fs.stat`, `fs.delete`, `http.fetch`, `shell.exec`, `workspace.info`, `text.stats`.
-- Starlark tools (`go.starlark.net`) with `json`, `http`, `secret`, `log` helpers, execution-step limits and HTTP mocks.
-- Python/Node/shell/binary tools through `sandbox-exec` with deny-by-default writes, private-IP blocking and a local HTTP/CONNECT proxy for domain allowlists, header secrets and test mocks.
-- Manifest validation, tests (passing + invalid-input), version lifecycle (`draft → tested → active`), content-hash invalidation and approval cards.
-- Tool inspector: manifest, schema tables, permissions, secret bindings, code editor, test results, versions and inline run terminal.
-
-### Secrets and safety
-- AES-256-GCM with random nonces and `secret_id` as associated data; ciphertext in SQLite, master key outside the DB.
-- Master-key providers: `file` (development, 0600) and `keychain` (Security.framework via cgo; opt in with `MYAGENT_KEY_PROVIDER=keychain`).
-- API keys for model profiles live in the same secret store.
-- Redactor replaces raw, URL-encoded and base64 forms in events, logs, tool results, LLM input/output, artifacts and messages.
-- Secret paste detection in chat, secret-name-only visibility for the agent, access log, expiry, overwrite, delete.
-- Approval-first writes/external actions, first-run tool approval, version approval, trigger approval.
-- Path checks and symlink resolution keep filesystem tools inside the workspace.
-- Loopback-only API with session token/SameSite cookie; webhook triggers require a per-trigger token.
-
-### Triggers and runs without chat
-- Workflow runs share one start path for manual, chat, schedule, watcher, webhook, CLI and replay; single-tool runs use the same run/event model.
-- Cron schedules, folder watchers (FSEvents via fsnotify), local webhook endpoints, CLI (`agentctl`).
-- Per-workflow concurrency policies (`queue`, `skip`, `cancel-previous`) and a global run cap. Interrupted runs are paused and resumable.
-- Unattended policies (`allow`, `ask`, `deny`), approval expiry, macOS notifications.
-
-### Tuning and eval
-- 👍/👎 feedback, eval suites created from real runs with recorded tool I/O.
-- Deterministic replay: side-effect tools use recorded outputs and dry-run mocks; LLM steps run live.
-- Tuner proposal with diagnosis, diff, accept/reject/rollback and eval run support.
-
-### Models
-- Any OpenAI Chat Completions-compatible endpoint: OpenAI, OpenRouter, Ollama, LM Studio, vLLM, Groq, DeepSeek, etc.
-- Roles: planner, executor, judge, cheap; default profile for chat.
-- Capability probe (streaming, tool calling, JSON mode, latency), retryable error classification, usage/cost accounting and fallback role selection.
-- OpenCode Go preset (`https://opencode.ai/zen/go/v1`) with automatic `x-opencode-session` headers. The value is a stable per-conversation (chat) or per-run (workflow) UUID, not a shared static value.
-
-## Requirements
-
-- macOS 13+ (tested on macOS 27 arm64)
-- Go 1.27+
-- Node 26+ / npm 11+
-- Xcode Command Line Tools (`swiftc`, `codesign`) for the native shell
-
-The repository includes `.mise.toml` for Go 1.27.3, Node 26.12.1 and all project tasks.
+- **Approval first.** Writes, external actions and first runs wait for you.
+- **Reusable by design.** A successful chat becomes a versioned workflow; missing capabilities become versioned tools.
+- **Observable.** Every state change is a persisted event. Runs, traces, cost and eval replay share one source of truth.
+- **Bring your own model.** Any OpenAI Chat Completions-compatible endpoint works, including local runtimes.
 
 ## Quick start
 
-```bash
-mise run deps   # install UI dependencies once
-mise run dev    # Go core + Vite hot reload
-```
-
-`mise run dev` prints a local URL with a session token. Open it; the UI reads the token, stores it in `localStorage`, and API calls use it. The Vite dev server proxies `/api` to the Go core and exposes a dev-only token endpoint.
-
-Production build:
+Requirements: macOS 13+, [mise](https://mise.jdx.dev/), Xcode Command Line Tools.
 
 ```bash
-mise run build  # UI + bin/agentd + bin/agentctl
-mise run run    # serve the production UI on 127.0.0.1:8787
+mise install       # Go 1.27.3 + Node 26.12.1 from .mise.toml
+mise run deps      # install UI dependencies
+mise run dev       # Go core + Vite with HMR
 ```
 
-Native app bundle:
+The dev command prints a loopback URL with a session token. The UI stores it locally; the Vite server proxies `/api` to the Go core.
+
+### Native app
 
 ```bash
 mise run app
 open dist/MyAgent.app
 ```
 
-The app bundle contains the Go core, UI and native WebKit shell. It is ad-hoc signed for local use. Distribution requires Developer ID signing and notarization.
+Closing the window quits the app and stops the core. Scheduled and watched runs only execute while the app is open.
 
-### Release
-
-Build a local release zip:
-
-```bash
-VERSION=v1.0.0 mise run release
-```
-
-Artifacts are written to `dist/release/` (zip + SHA-256). The GitHub workflow `.github/workflows/release.yml` runs the same task on `macos-14` when a `v*` tag is pushed, uploads the artifact, and publishes a GitHub release. Manual `workflow_dispatch` runs upload the artifact without publishing a release.
-
-The release zip is ad-hoc signed, so Gatekeeper may warn on other Macs. Add Developer ID signing/notarization before public distribution.
-
-## First run
+### First run
 
 - Data: `~/Library/Application Support/MyAgent`
 - Workspace: `~/MyAgent Workspace`
 - Override with `MYAGENT_DATA_DIR` and `MYAGENT_WORKSPACE`.
-- Development (`mise run dev`) uses `./.data` by default.
 
-A fresh install starts with the built-in tools only. Add any OpenAI-compatible model in **Settings → Models** to use chat; local endpoints do not need an API key. Workflows, conversations and workspace files are created by you.
+A fresh install starts with built-in tools only. Add a model in **Settings → Models** to use chat. Workflows, conversations and workspace files are created by you.
 
-### Useful CLI
+## What's inside
+
+| Area | Capabilities |
+| --- | --- |
+| **Chat agent** | Streaming markdown, collapsible tool cards, approval cards, stop, run links, “Save as workflow”, meta-tools and budget/step limits. |
+| **Workflows** | Strict YAML schema, structured validator, DAG engine, parallel/map/branch/agent steps, retries, timeouts, pause/resume, crash resume, budget limits. |
+| **Canvas** | Live React Flow graph, status colors, animated active edges, per-step inspector for input, output, logs, trace and cost. |
+| **Tools** | Built-ins, Starlark, Python/Node/shell/binary sandbox, manifests, tests, version lifecycle, code inspector and inline terminal. |
+| **Safety** | AES-256-GCM secret store, master key outside SQLite, redaction everywhere, path checks, loopback-only API, per-trigger tokens. |
+| **Runs** | History, filters, feedback, rerun, side-by-side comparison, live events and resumable interrupted runs. |
+| **Tuning** | Eval suites from real runs, deterministic replay, tuner diagnosis, diff review, accept/reject/rollback. |
+| **Triggers** | Cron, folder watchers, local webhooks, CLI, unattended policies and concurrency policies. |
+| **Desktop** | Native Swift/WebKit shell, Geist Mono UI, adjustable text size, Light/Dark/System appearance. |
+
+## Models
+
+Any OpenAI-compatible endpoint works: OpenAI, OpenRouter, Ollama, LM Studio, vLLM, Groq, DeepSeek and others.
+
+| Preset | Base URL |
+| --- | --- |
+| OpenAI | `https://api.openai.com/v1` |
+| OpenRouter | `https://openrouter.ai/api/v1` |
+| OpenCode Go | `https://opencode.ai/zen/go/v1` |
+| Ollama | `http://127.0.0.1:11434/v1` |
+| LM Studio | `http://127.0.0.1:1234/v1` |
+| DeepSeek | `https://api.deepseek.com/v1` |
+| Groq | `https://api.groq.com/openai/v1` |
+
+**OpenCode Go** automatically sends `x-opencode-session` with a stable per-conversation UUID (chat) or per-run UUID (workflow). The value is never a shared static session. For other gateways, set a custom **Session header** in the model profile.
+
+Model roles: `planner`, `executor`, `judge`, `cheap`. Probe a profile to verify streaming and tool calling before assigning it to workflow authoring.
+
+## Tasks
+
+All project commands live in `.mise.toml`:
+
+| Task | What it does |
+| --- | --- |
+| `mise run deps` | Install UI dependencies |
+| `mise run dev` | Go core + Vite dev server |
+| `mise run ui` | Build the production UI |
+| `mise run api` | Build `bin/agentd` and `bin/agentctl` |
+| `mise run build` | Build UI and Go binaries |
+| `mise run run` | Serve the production UI on `127.0.0.1:8787` |
+| `mise run app` | Build `dist/MyAgent.app` |
+| `mise run release` | Build and package a macOS release zip |
+| `mise run test` | Go tests + UI typecheck |
+| `mise run e2e` | Playwright smoke tests |
+| `mise run clean` | Remove build output and local data |
+
+## CLI
 
 ```bash
 bin/agentctl workflows
@@ -127,92 +116,87 @@ bin/agentctl cancel <run-id>
 bin/agentctl tools
 ```
 
-`agentctl` reads the loopback URL and session token from `<data-dir>/api.json` (0600) and talks to the same API as the UI.
+`agentctl` reads the loopback URL and session token from `<data-dir>/api.json` (mode `0600`) and talks to the same local API as the UI.
 
 ## Architecture
 
-```
+```text
 Native macOS shell (Swift + WKWebView)
         │ starts core, loads http://127.0.0.1:<random>/?token=…
         ▼
-Go core (one process)
-  API (stdlib HTTP, token/cookie auth, SSE replay)
-  Event bus ──► SQLite events + live UI + trace + eval
-  Agent runtime · Workflow engine · Tool registry
+Go core
+  HTTP API + SSE replay · event bus · SQLite projections
+  Agent runtime · workflow engine · tool registry
   LLM gateway · Starlark/subprocess sandbox · local proxy
-  Secret store (AES-GCM + key provider) · cron/watchers · tuner
+  Secret store · cron/watchers · tuner
         │
         ▼
 SQLite (WAL, STRICT, UUIDv7, migrations in code)
 ```
 
-The native shell is intentionally thin. The Go core has no WebKit dependency and can also run headless with `agentd` + `agentctl`.
+The native shell is intentionally thin. The Go core has no WebKit dependency and can run headless with `agentd` + `agentctl`.
 
-### Repository layout
+### Repository map
 
-```
-core packages live under internal/
-  agent loop + meta-tools        internal/app
-  LLM gateway                    internal/llm
-  workflow schema/validator/DAG  internal/workflow
-  tools + sandbox + proxy        internal/tools
-  SQLite store                   internal/store
-  events                         internal/eventbus
-  secrets                        internal/secrets
-  HTTP/SSE API                   internal/api
-  schema validation              internal/schema
-app/          Swift native shell + Info.plist
-ui/           React + TypeScript + Vite + React Flow
-cmd/agentd    server
-cmd/agentctl  CLI
-scripts/      dev + macOS bundle build
+```text
+internal/app        agent loop, meta-tools, chat, runs, triggers
+internal/llm        OpenAI-compatible gateway, probe, cost
+internal/workflow   schema, validator, expressions, DAG engine
+internal/tools      registry, builtins, Starlark/script sandbox, proxy
+internal/store      SQLite schema and queries
+internal/eventbus   persisted events + live fan-out
+internal/secrets    AES-GCM store, key providers, redaction
+internal/api        HTTP/SSE handlers
+internal/schema     JSON Schema validation
+app/                Swift native shell + Info.plist + icon
+ui/                 React + TypeScript + Vite + React Flow
+cmd/agentd          local core server
+cmd/agentctl        CLI
 ```
 
-## Events
+## Security
 
-Every persisted state change is an event with a per-stream contiguous `seq`, written to SQLite before broadcast. Ephemeral `*.delta` events are UI-only. Clients reconnect with `GET /api/events?stream=run:<id>&after=<seq>` (or `Last-Event-ID`). The UI loads persisted state through REST and then follows the stream; a gap forces a replay.
+- **Secrets** are AES-256-GCM encrypted in SQLite. The master key is outside the DB: a 0600 dev file or macOS Keychain (`MYAGENT_KEY_PROVIDER=keychain`).
+- **Redaction** covers raw, URL-encoded and base64 forms in events, logs, tool results, messages, artifacts and model I/O.
+- **Approvals** are required for writes, external actions, new tools, version changes and trigger creation. Approval is tied to the content hash.
+- **Filesystem tools** resolve symlinks and stay inside the workspace.
+- **Subprocess tools** run under `sandbox-exec`, deny the app data directory and common credential stores, and only write where declared.
+- **Network tools** use a loopback HTTP/CONNECT proxy with domain allowlists, private-IP blocking and header-secret injection for plain HTTP.
+- **The API** listens on loopback only, requires a per-launch token or SameSite cookie, and webhook triggers require their own token.
 
-Event types include `run.*`, `step.*`, `llm.*`, `tool.call.*`, `approval.*`, `secret.*`, `workflow.*`, `tool.*`, `trigger.*`, `tuning.*`, `eval.*`, `message.created` and `conversation.updated`.
+## Release
 
-## Security notes
+```bash
+VERSION=v1.0.0 mise run release
+```
 
-- Tools run with the least privilege declared in the manifest. Built-in HTTP blocks loopback/private/link-local addresses.
-- Subprocess tools use `sandbox-exec` with broad system reads (language runtimes need this), but explicit denies for the app data directory, Keychain, `~/.ssh`, `~/.aws`, `~/.config`, `~/.gnupg` and workspace writes only when declared. The workspace and tool directory are re-allowed even in development where they live under the data dir.
-- Network allowlists are enforced by a loopback HTTP/CONNECT proxy. Plain HTTP header secrets are injected by the proxy. HTTPS CONNECT is domain-checked but cannot have headers injected without a MITM certificate; prefer env/file injection or the Starlark HTTP helper for header secrets.
-- The sandbox denies direct network by default. When a manifest declares domains, raw sockets can still bypass the proxy; treat script tools as code you approve and review their source. Starlark tools are in-process and only get the HTTP helper.
-- Secrets are decrypted only at the tool boundary and redacted on the way out. The agent only sees names and status.
-- The local API is protected by a per-launch random token and a SameSite cookie. It refuses non-loopback listen addresses.
-- The development file key provider is convenient but not the release story; use `MYAGENT_KEY_PROVIDER=keychain` with a signed build for the Keychain provider.
+Artifacts go to `dist/release/` as a zip plus SHA-256. The GitHub workflow `.github/workflows/release.yml` builds on `macos-14` for `v*` tags, uploads the artifact and publishes a GitHub release. Manual `workflow_dispatch` runs upload the artifact without publishing.
+
+The local release is ad-hoc signed. Public distribution still needs Developer ID signing and notarization.
 
 ## Tests
 
 ```bash
 mise run test      # Go tests + UI typecheck
-mise run e2e       # Playwright smoke tests (needs: cd ui && npx playwright install chromium)
+mise run e2e       # Playwright smoke tests
 ```
 
-Includes unit tests for schema validation, expression evaluation, workflow validation and DAG execution (retry, approval, resume), AES-GCM secrets and redaction, tool manifests/Starlark execution, proxy allowlists/mocks, LLM SSE streaming/tool-call parsing, and an end-to-end API test that authors a workflow, runs it through human approval, persists appearance settings and tests a freshly created Starlark tool.
+Coverage includes schema/expression validation, workflow validation and DAG execution (retry, approval, resume), AES-GCM secrets and redaction, tool manifests/Starlark execution, proxy allowlists/mocks, LLM SSE streaming and tool calls, and an end-to-end API test that authors a workflow, runs it through human approval, persists appearance settings and tests a freshly created tool.
 
 ## Status and limitations
 
-Implemented in this repository:
+### Implemented
 
-- Chat agent + tool loop + approval cards
-- Workflow authoring/validation/engine/canvas/history
-- Tool authoring/testing/sandbox/approval/versioning
-- Secrets, redaction, budgets, model profiles and probes
-- Manual/scheduled/watched/webhook/CLI runs
-- Feedback, eval replay, tuning proposals and rollback
-- Native app bundle and CLI
+Chat agent and tool loop · workflow authoring, engine, canvas and history · tool authoring, testing, sandbox and versioning · secrets and redaction · models and probes · manual, scheduled, watched, webhook and CLI runs · eval replay and tuning · native app and CLI.
 
-Not included yet:
+### Not included yet
 
-- MCP server client/import UI (manifests reserve the `mcp` kind)
+- MCP server client and import UI (the `mcp` tool kind is reserved)
 - OAuth refresh flows and `op://` 1Password references
 - Developer ID signing, notarization, Sparkle auto-update and crash reporting
 - Windows/Linux, multi-user/cloud sync and marketplace
 - MITM header injection for HTTPS script traffic
-- A true menubar/login-item agent (the native app keeps the core alive while running, but does not auto-start at login)
-- Full retention/compaction policy for old events and artifacts
+- Menubar/login-item background agent (runs only while the app is open)
+- Automatic retention/compaction for old events and artifacts
 
-The design document remains the reference for the target architecture and roadmap.
+The full design reference and roadmap live in [`DESIGN.md`](DESIGN.md).

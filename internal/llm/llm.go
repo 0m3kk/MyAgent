@@ -404,7 +404,7 @@ func (c *Client) mock(ctx context.Context, p Profile, req ChatRequest, onDelta f
 		args, _ := json.Marshal(map[string]any{"yaml": yaml, "change_note": "Demo model draft"})
 		return c.mockToolCall(ctx, "save_workflow_draft", string(args), lastUser, onDelta), nil
 	}
-	if toolNames["run_workflow"] && (strings.Contains(lower, "run ") || strings.Contains(lower, "weekly report") || strings.Contains(lower, "chạy")) {
+	if toolNames["run_workflow"] && (strings.Contains(lower, "run ") || strings.Contains(lower, "weekly report")) {
 		name := "workspace-digest"
 		if strings.Contains(lower, "weekly") || strings.Contains(lower, "report") {
 			name = "weekly-report"
@@ -420,7 +420,7 @@ func (c *Client) mock(ctx context.Context, p Profile, req ChatRequest, onDelta f
 
 	text := "I'm the offline demo model. Add an OpenAI-compatible model in Settings to enable real reasoning. " +
 		"Everything else in the app already works: you can run example workflows, inspect runs, author tools and tune results."
-	if strings.Contains(lower, "hello") || strings.Contains(lower, "xin chào") {
+	if strings.Contains(lower, "hello") {
 		text = "Hello! This is the offline demo model. Open Settings → Models and add any OpenAI-compatible endpoint (OpenAI, OpenRouter, Ollama, LM Studio, vLLM…) to start chatting with a real model. The seeded workflows run without a model."
 	}
 	if toolNames["fs__list"] {

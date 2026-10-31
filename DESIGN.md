@@ -1,157 +1,165 @@
-# Desktop Agent App — Thiết kế, Kiến trúc, Roadmap
+# MyAgent — Desktop Agent Design, Architecture and Roadmap
 
-Phiên bản 1 · macOS · Go + Wails + React · OpenAI-compatible
+Version 1 · macOS · Go core + native shell + React · OpenAI-compatible
 
-## 1. Tầm nhìn và nguyên tắc
+> The current implementation uses a thin Swift/WebKit shell instead of Wails. The Go core is shell-agnostic; Wails remains a viable alternative wrapper.
 
-**Mục tiêu:** người dùng chat với agent để hoàn thành công việc. Agent tự dựng tool và workflow, chạy chúng, và cải thiện dần qua các lần chạy thử.
+## 1. Vision and principles
 
-**Nguyên tắc thiết kế**
+**Goal:** the user chats with an agent to get work done. The agent builds its own tools and workflows, runs them, and improves over repeated runs.
 
-1. **Go là nguồn sự thật duy nhất.** UI chỉ subscribe sự kiện và render, không chứa business logic.
-2. **Mọi thứ agent tạo ra đều là dữ liệu có version.** Tool, workflow, prompt đều diff được và rollback được.
-3. **Minh bạch.** Mọi bước chạy đều nhìn thấy, dừng được, duyệt được, sửa được.
-4. **An toàn mặc định.** Tool mới chạy trong sandbox và cần người dùng duyệt ở lần đầu.
-5. **Không khóa model.** Chỉ cần `base_url` + `api_key` + tên model (Chat Completions).
-6. **Dùng thư viện cho thứ không tạo khác biệt** (chat UI, đồ thị, editor). **Tự viết phần lõi** (workflow engine, vòng tuning).
+**Design principles**
 
-**Ngoài phạm vi MVP:** đa người dùng, đồng bộ cloud, marketplace, Windows/Linux, mobile.
+1. **Go is the single source of truth.** The UI only subscribes to events and renders state. Business logic lives in Go.
+2. **Everything the agent creates is versioned data.** Tools, workflows and prompts are diffable and rollbackable.
+3. **Transparency.** Every run step is visible, stoppable, approvable and editable.
+4. **Safe by default.** New tools run in a sandbox and require user approval on first use.
+5. **No model lock-in.** Only `base_url` + `api_key` + model name are required (Chat Completions).
+6. **Use libraries where they do not define the product** (chat UI, graph, editor). **Build the core ourselves** (workflow engine, tuning loop).
 
-## 2. Mô hình dữ liệu cốt lõi
+**Out of scope for the MVP:** multi-user, cloud sync, marketplace, Windows/Linux, mobile.
 
-| Thực thể | Mô tả |
+## 2. Core data model
+
+| Entity | Description |
 | --- | --- |
-| Workspace | Một không gian làm việc: chat, tool, workflow, thư mục được cấp quyền |
-| Conversation / Message | Hội thoại với agent, gồm cả tool call và kết quả |
-| Tool | id, version, loại (builtin, mcp, starlark, script), manifest, schema vào/ra, code, quyền, test |
-| Workflow | id, version, YAML, schema input, ghi chú thay đổi |
-| Run | Một lần chạy workflow: phiên bản, input, trạng thái, thời gian, chi phí |
-| StepRun | Một bước trong Run: input, output, log, lỗi, số lần retry |
-| Event | Nhật ký append-only (có `run_id`, `seq`, `ts`). Là nguồn cho UI, trace và eval |
-| Feedback | 👍/👎 + ghi chú cho Run hoặc StepRun |
-| EvalSuite / EvalCase | Bộ test tạo từ các run thật: input cố định + assertion |
-| ModelProfile | base\_url, tên model, vai trò (planner, executor, judge). API key tham chiếu tới bảng secrets |
+| Workspace | A working space: chats, tools, workflows and authorized folders |
+| Conversation / Message | A conversation with the agent, including tool calls and results |
+| Tool | id, version, type (builtin, mcp, starlark, script), manifest, input/output schema, code, permissions, tests |
+| Workflow | id, version, YAML, input schema, change notes |
+| Run | One workflow execution: version, inputs, status, timing, cost |
+| StepRun | One step inside a Run: input, output, logs, errors, retry count |
+| Event | Append-only log (`run_id`, `seq`, `ts`). Source for UI, trace and eval |
+| Feedback | Thumbs up/down plus a note for a Run or StepRun |
+| EvalSuite / EvalCase | Test suites built from real runs: fixed input + assertions |
+| ModelProfile | base_url, model name, role (planner, executor, judge), API key reference to secrets |
 
-Hai thực thể bổ sung: **Secret** (tên, loại, mô tả, các tool được phép dùng, hạn dùng; **giá trị được mã hóa (AES-256-GCM) rồi lưu trong SQLite**, khóa chủ nằm ngoài DB) và **Trigger** (cách khởi chạy một workflow hoặc tool: thủ công, lịch, file watcher, phím tắt, CLI, webhook). Mỗi lần kích hoạt tạo một Run có trường `source` (chat, manual, schedule, watcher, cli).
+Two additional entities: **Secret** (name, type, description, allowed tools, expiry; **the value is encrypted with AES-256-GCM and stored in SQLite**, with the master key outside the database) and **Trigger** (how a workflow or tool starts: manual, schedule, file watcher, shortcut, CLI, webhook). Each activation creates a Run with a `source` field (chat, manual, schedule, watcher, cli).
 
-## 3. Thiết kế UX
+## 3. UX design
 
-### 3.1 Bố cục chính
+### 3.1 Main layout
 
-Ba vùng: **sidebar trái** (Chats, Workflows, Tools, Runs, Settings), **chat ở giữa**, **panel phải** theo ngữ cảnh (canvas workflow, inspector tool, trace). Có Command Palette (Cmd+K), dark mode, hiệu ứng vibrancy kiểu macOS, phím tắt cho mọi thao tác chính.
+Three regions: **left sidebar** (Chats, Workflows, Tools, Runs, Settings), **chat in the center**, **contextual right panel** (workflow canvas, tool inspector, trace). A Command Palette (Cmd+K), dark mode, macOS-style vibrancy and keyboard shortcuts for the main actions are included.
 
-### 3.2 Các màn hình
+### 3.2 Screens
 
-1. **Chat.** Streaming markdown. Mỗi tool call là một card thu gọn được (tên, tham số, kết quả, thời gian). Yêu cầu duyệt hiện thành card có nút Cho phép / Từ chối / Sửa. Sau một tác vụ nhiều bước thành công, có nút **Lưu thành workflow**. Khi workflow đang chạy, một mini-graph hiện ngay trong chat.
-2. **Workflow canvas (React Flow).** Hai chế độ Edit và Run. Node là các step, cạnh là phụ thuộc. Khi chạy, node đổi màu theo trạng thái và cạnh có hiệu ứng dòng chảy ở step đang active. Bấm node mở inspector bên phải với các tab: Input, Output, Logs, Trace, Chi phí. Có thể chat để sửa workflow (agent đề xuất diff, người dùng duyệt).
-3. **Tool inspector.** Code (CodeMirror), schema, quyền khai báo, test, lịch sử version kèm diff, output dạng terminal (xterm.js) khi chạy thử.
-4. **Run history.** Bảng lọc theo workflow, trạng thái, ngày. Chấm 👍/👎, so sánh hai run cạnh nhau, chạy lại từ một step.
-5. **Tuning.** Danh sách đề xuất cải thiện của agent: nguyên nhân (dựa trên trace), diff, kết quả eval trước và sau, nút Accept / Reject / Rollback.
-6. **Settings.** Model profile và vai trò, bấm kiểm tra khả năng tool calling, quyền truy cập thư mục, chính sách duyệt, ngân sách token.
+1. **Chat.** Streaming markdown. Every tool call is a collapsible card (name, arguments, result, duration). Approval requests appear as cards with Allow / Deny / Edit. After a successful multi-step task, a **Save as workflow** button appears. While a workflow is running, a mini-graph appears inside the chat.
+2. **Workflow canvas (React Flow).** Edit and Run modes. Nodes are steps; edges are dependencies. During a run, nodes change color by status and active edges animate. Clicking a node opens the right inspector with tabs: Input, Output, Logs, Trace, Cost. The user can also chat to edit the workflow; the agent proposes a diff and the user approves it.
+3. **Tool inspector.** Code (CodeMirror), schema, declared permissions, tests, version history with diffs, and terminal-style output (xterm.js) for trial runs.
+4. **Run history.** Table filtered by workflow, status and date. Thumbs up/down, compare two runs side by side, and rerun from a step.
+5. **Tuning.** A list of the agent's improvement proposals: root cause (from trace), diff, eval results before/after, and Accept / Reject / Rollback.
+6. **Settings.** Model profiles and roles, capability probing, authorized folders, approval policy and token budgets.
 
-### 3.3 Màu trạng thái node
+### 3.3 Node status colors
 
-| Trạng thái | Biểu hiện |
+| Status | Appearance |
 | --- | --- |
-| Chờ | Xám |
-| Đang chạy | Xanh dương, pulse nhẹ |
-| Thành công | Xanh lá |
-| Lỗi | Đỏ, hiện tóm tắt lỗi ngay trên node |
-| Chờ duyệt | Vàng, có badge |
-| Bỏ qua | Xám nhạt, viền đứt |
+| Pending | Gray |
+| Running | Blue, subtle pulse |
+| Succeeded | Green |
+| Failed | Red, with an error summary on the node |
+| Waiting for approval | Amber, with a badge |
+| Skipped | Light gray, dashed border |
 
-### 3.4 Các luồng chính
+### 3.4 Main flows
 
-- **A. Chat → Workflow:** mô tả việc cần làm → agent làm thử từng bước trong chat → bấm Lưu thành workflow → agent tổng quát hóa thành YAML với input tham số hóa → validator kiểm tra → hiển thị trên canvas.
-- **B. Chạy và theo dõi:** chọn workflow, nhập input, xem node sáng dần, bấm node xem log live, có thể Pause, Cancel, Retry step.
-- **C. Tạo tool:** agent thiếu tool → viết manifest + code + test → chạy test trong sandbox → hiện card duyệt (quyền cần xin, code, kết quả test) → người dùng duyệt → tool active.
-- **D. Cải thiện:** run lỗi hoặc bị 👎 → agent đọc trace, đề xuất patch → replay trên eval suite → so sánh → người dùng Accept hoặc tự động nâng version nếu đủ điều kiện.
+- **A. Chat to workflow:** describe the task → the agent performs each step in chat → click Save as workflow → the agent generalizes it into parameterized YAML → the validator checks it → the canvas opens.
+- **B. Run and observe:** choose a workflow, enter inputs, watch nodes light up, click a node to inspect live logs, Pause, Cancel, Retry a step.
+- **C. Create a tool:** the agent needs a missing tool → writes manifest + code + tests → runs tests in the sandbox → shows an approval card (requested permissions, code, test result) → the user approves → the tool becomes active.
+- **D. Improve:** a run fails or receives a thumbs-down → the agent reads the trace, proposes a patch → replays it on the eval suite → compares results → the user accepts, or the version is promoted automatically when the threshold is met.
 
-Nguyên tắc UI: tiết lộ dần (mặc định gọn, bấm mới mở chi tiết), luôn cho người dùng quyền can thiệp, không có thao tác nào có tác dụng phụ mà không báo trước.
+UI principles: progressive disclosure (collapsed by default, expand on demand), always leave the user in control, and never perform a side effect without warning first.
 
-### 3.5 Chạy không cần chat và quản lý secret
+### 3.5 Runs without chat and secret management
 
-Sau khi tool hoặc workflow được duyệt, chat không còn là cửa duy nhất: nó chỉ là một cách khởi chạy trong số nhiều cách.
+Once a tool or workflow is approved, chat is no longer the only entry point; it is just one way to start work.
 
-- **Nút Run** ở danh sách, canvas workflow và tool inspector. Bấm mở form **tự sinh từ schema input** (kiểu dữ liệu, giá trị mặc định, validate tại chỗ, nhớ lần nhập trước, lưu preset). Chạy xong chuyển ngay sang view Run live giống khi chạy từ chat.
-- **Chạy lẻ một tool:** trong tool inspector, nhập input và bấm Run để thử mà không cần workflow hay agent. Kết quả hiện ở terminal và tab Output.
-- **Truy cập nhanh:** Command Palette (gõ tên workflow), phím tắt toàn cục, menubar, Shortcuts của macOS, và lệnh `agentctl run <tên> --input k=v`.
-- **Tự động:** lịch (cron), file watcher, webhook cục bộ, cấu hình ở tab Triggers của workflow.
-- **Chạy không người trông:** run tự động gặp bước cần duyệt thì dừng ở trạng thái Chờ duyệt và gửi thông báo macOS; quá thời hạn thì hết hạn và hủy.
-- **Nguồn của Run** (Chat, Manual, Schedule, Watcher, CLI) hiện trong Run history và lọc được.
+- **Run button** in the list, workflow canvas and tool inspector. It opens a form **generated from the input schema** (types, defaults, inline validation, remembered previous values, saved presets). After starting, the UI switches to a live Run view identical to a chat-started run.
+- **Run a single tool:** in the tool inspector, enter input and press Run without a workflow or agent. The result appears in the terminal and the Output tab.
+- **Quick access:** Command Palette (type a workflow name), global shortcut, menubar, macOS Shortcuts and `agentctl run <name> --input k=v`.
+- **Automation:** schedule (cron), file watcher, local webhook, configured in the workflow's Triggers tab.
+- **Unattended runs:** if an automated run reaches a step that needs approval, it stops in Waiting for approval and sends a macOS notification; after the deadline it expires and is cancelled.
+- **Run source** (Chat, Manual, Schedule, Watcher, CLI) is visible and filterable in Run history.
 
-**Màn Secrets** (trong Settings) liệt kê từng secret: tên, loại, tool đang dùng, lần dùng cuối, trạng thái (đã có, thiếu, sắp hết hạn). Có thêm, ghi đè, xoay vòng, xóa. Giá trị luôn ẩn và không xem lại được, chỉ ghi đè.
+**Secrets screen** (inside Settings) lists each secret: name, type, tools using it, last use and status (present, missing, expiring soon). Add, overwrite, rotate and delete are supported. Values are always hidden and cannot be read back; they can only be overwritten.
 
-**Thiếu secret khi chạy:** hiện hộp nhập ngay lúc đó (lưu vào kho secret hoặc dùng một lần), rồi chạy tiếp từ step đang chờ, không chạy lại từ đầu. Với run tự động thì dừng ở trạng thái Chờ secret và báo qua thông báo.
+**Missing secret at run time:** show an input box immediately (store the value in the secret vault or use it once), then continue from the waiting step without restarting the run. For automated runs, stop in Waiting for secret and notify the user.
 
-**Agent tạo tool cần secret:** agent chỉ khai báo tên secret trong manifest. Card duyệt hiện rõ: tool nào, secret nào, gửi tới domain nào. Người dùng nhập giá trị vào ô riêng của app, không gõ vào chat.
+**Agent-created tools that need a secret:** the agent only declares the secret name in the manifest. The approval card shows which tool, which secret and which domain will receive it. The user enters the value in a dedicated app field, never in chat.
 
-## 4. Kiến trúc
+## 4. Architecture
 
-```
-┌──────────────────── Wails app (1 binary) ────────────────────┐
-│ WKWebView: React + TS                                        │
-│   assistant-ui · React Flow · CodeMirror · xterm.js          │
-│        ▲ commands (HTTP/bindings)     ▲ events (SSE)         │
-├──────────────────────────────────────────────────────────────┤
-│ Go core                                                      │
-│  API (huma, OpenAPI)                                         │
-│  Event bus ──► UI · Trace store · Eval                       │
-│  Agent runtime · Workflow engine · Tool registry             │
-│  LLM gateway (openai-go) · MCP client · Sandbox manager      │
-│  Store (SQLite) · Keychain · Scheduler                       │
-└──────────────────────────────────────────────────────────────┘
+```text
+┌──────────────────── Native app (one process) ────────────────────┐
+│ WKWebView: React + TypeScript                                   │
+│   assistant-ui · React Flow · CodeMirror · xterm.js             │
+│        ▲ commands (HTTP/bindings)     ▲ events (SSE)            │
+├─────────────────────────────────────────────────────────────────┤
+│ Go core                                                         │
+│  API (huma, OpenAPI)                                            │
+│  Event bus ──► UI · Trace store · Eval                          │
+│  Agent runtime · Workflow engine · Tool registry                │
+│  LLM gateway (openai-go) · MCP client · Sandbox manager         │
+│  Store (SQLite) · Keychain · Scheduler                          │
+└─────────────────────────────────────────────────────────────────┘
        │ subprocess / wasm                │ HTTPS
-   sandbox-exec · wazero · starlark   LLM providers (OpenAI-compatible)
+  sandbox-exec · wazero · starlark   LLM providers (OpenAI-compatible)
 ```
 
-**Cấu trúc repo**
+**Repository structure**
 
+```text
+/cmd
+  /agentd     Go core daemon: HTTP API, SSE, scheduler
+  /agentctl   CLI client for runs and automation
+/internal
+  /api        HTTP handlers and SSE
+  /app        services: chat, workflows, approvals, runs, tuning
+  /llm        gateway, probing, OpenCode Go session headers
+  /workflow   schema, validator, engine, expressions
+  /tools      registry, manifests, built-in tools, sandbox, proxy
+  /store      SQLite schema, migrations, event store
+  /eventbus   typed event bus
+  /secrets    encrypted secret store and key providers
+  /schema     JSON schema helpers
+  /model      shared domain types
+/app          native Swift/WebKit shell: window, menu, Dock icon
+/ui           React: chat, canvas, inspectors, settings
+/scripts      development and release helpers
 ```
-/core
-  /llm        gateway, probe, cost
-  /agent      loop, prompts, meta-tools
-  /workflow   schema, validator, engine, scheduler
-  /tools      registry, manifest, mcp, builtin
-  /sandbox    starlark, wazero, subprocess
-  /store      sqlite, migrations, sqlc
-  /events     bus, types, replay
-  /eval       replay, judge, suites, tuner
-/app          Wails glue: window, menu, dialog, keychain
-/ui           React: chat, canvas, inspectors, tuning
-```
 
-**Event bus là xương sống.** Mọi thay đổi trạng thái (`run.started`, `step.started`, `step.output.delta`, `step.finished`, `tool.approval_requested`, `llm.delta`...) là một event có kiểu, ghi vào SQLite rồi mới phát ra UI. UI mất kết nối thì replay từ `seq` cuối. Trace, eval và UI dùng chung một luồng nên không bao giờ lệch nhau.
+**The event bus is the backbone.** Every state change (`run.started`, `step.started`, `step.output.delta`, `step.finished`, `tool.approval_requested`, `llm.delta`, etc.) is a typed event. It is written to SQLite before being broadcast to the UI. If the UI disconnects, it replays from the last `seq`. Trace, eval and UI consume the same stream, so they can never diverge.
 
-**Cầu nối Go ↔ UI.** Khuyến nghị: HTTP + SSE trên `127.0.0.1` (cổng ngẫu nhiên, kèm token mỗi phiên), định nghĩa bằng `huma` rồi sinh client TS bằng `orval` hoặc `openapi-typescript`. Cách này cho dev trên trình duyệt, HMR đầy đủ, test e2e bằng Playwright. Wails chỉ dùng cho phần native: cửa sổ, menu, file dialog, thông báo, Keychain. Luồng chat phát theo AI SDK UI message stream protocol để dùng thẳng assistant-ui.
+**Go ↔ UI bridge.** Recommended: HTTP + SSE on `127.0.0.1` (random port, per-session token), defined with `huma` and generated into a TypeScript client with `orval` or `openapi-typescript`. This enables browser development, full HMR and Playwright e2e tests. Use the native shell only for native concerns: windows, menus, file dialogs, notifications and Keychain. The chat stream follows the AI SDK UI message stream protocol so assistant-ui can render it directly.
 
-## 5. Chi tiết các module
+## 5. Module details
 
 ### 5.1 LLM gateway
 
-- `openai-go` với `base_url` tùy chỉnh. Hỗ trợ OpenAI, OpenRouter, Ollama, LM Studio, vLLM, Groq, DeepSeek...
-- **Probe năng lực** khi thêm model: streaming, tool calling, nhiều tool call song song, JSON schema output, độ dài context. Kết quả quyết định model nào được gán vai trò nào.
-- **Vai trò:** planner (mạnh, dùng để sinh workflow/tool), executor (rẻ, chạy step), judge (chấm điểm eval), cheap (tóm tắt, đặt tên).
-- Retry với backoff, rate limit, fallback model, đếm token và chi phí theo từng call, giới hạn ngân sách theo run.
+- `openai-go` with a custom `base_url`. Supports OpenAI, OpenRouter, Ollama, LM Studio, vLLM, Groq, DeepSeek and other compatible providers.
+- **Capability probe** when adding a model: streaming, tool calling, parallel tool calls, JSON schema output, context length. The result determines which roles a model can fill.
+- **Roles:** planner (strong, authors workflows/tools), executor (cheap, runs steps), judge (scores evals), cheap (summaries, titles).
+- Retry with backoff, rate limiting, fallback models, token/cost accounting per call, and per-run budget limits.
 
 ### 5.2 Agent runtime
 
-- Vòng lặp tự viết (\~200 dòng): gọi LLM → thực thi tool call → đưa kết quả lại → lặp. Tự viết để kiểm soát hoàn toàn trace, duyệt, hủy và giới hạn bước. Có thể tham khảo Eino nếu muốn.
-- **Meta-tool của agent:** `create_tool`, `update_tool`, `test_tool`, `create_workflow`, `update_workflow`, `validate_workflow`, `run_workflow`, `read_trace`, `ask_user`.
-- **Tool built-in:** đọc/ghi file trong thư mục được cấp, HTTP fetch, shell qua sandbox. Về sau thêm browser.
-- **Quản lý context:** cắt ngắn kết quả tool dài (lưu bản đầy đủ ra file, đưa tham chiếu), nén hội thoại khi gần đầy, bộ nhớ dài hạn dạng ghi chú theo workspace.
-- Giới hạn cứng: số bước, thời gian, token mỗi lượt.
+- A hand-written loop (~200 lines): call LLM → execute tool calls → feed results back → repeat. Built in-house to fully control trace, approvals, cancellation and step limits. Eino is a reference if desired.
+- **Agent meta-tools:** `create_tool`, `update_tool`, `test_tool`, `create_workflow`, `update_workflow`, `validate_workflow`, `run_workflow`, `read_trace`, `ask_user`.
+- **Built-in tools:** read/write files in authorized folders, HTTP fetch, sandboxed shell. Browser support comes later.
+- **Context management:** truncate long tool results (save the full result to a file and return a reference), compact conversations near the limit, and keep long-term workspace notes.
+- Hard limits: steps, time and tokens per turn.
 
-### 5.3 Hệ thống tool
+### 5.3 Tool system
 
-- **Các loại:** builtin (Go), MCP (server ngoài qua MCP Go SDK), Starlark (logic thuần, sandbox sẵn), script (Python/shell chạy trong sandbox).
-- **Manifest** (YAML) khai báo tên, mô tả, schema input/output, quyền cần (domain mạng, đường dẫn file, secret chỉ khai báo bằng tên logic, xem 5.9), và các test case.
-- **Vòng đời:** draft → tested → approved → active → deprecated. Sửa manifest hoặc quyền thì quay về cần duyệt lại.
-- Agent chỉ thấy mô tả ngắn và schema của tool, không thấy secret.
+- **Types:** builtin (Go), MCP (external server through the MCP Go SDK), Starlark (pure logic, sandboxed by default), script (Python/shell in a sandbox).
+- **Manifest** (YAML) declares name, description, input/output schema, required permissions (network domains, file paths, secrets referenced only by logical name, see 5.9) and test cases.
+- **Lifecycle:** draft → tested → approved → active → deprecated. Editing the manifest or permissions requires re-approval.
+- The agent sees only the short description and schema of a tool, never a secret.
 
 ### 5.4 Workflow engine
 
-Workflow là **dữ liệu** (YAML) do agent sinh, engine do mình viết. Ví dụ:
+A workflow is **data** (YAML) authored by the agent; the engine is ours. Example:
 
 ```yaml
 name: weekly-report
@@ -165,10 +173,10 @@ steps:
   - id: summarize
     llm:
       role: executor
-      prompt: 'Tóm tắt các file sau: ${steps.list.output}'
+      prompt: 'Summarize these files: ${steps.list.output}'
     needs: [list]
   - id: review
-    approval: { message: 'Gửi báo cáo này?' }
+    approval: { message: 'Send this report?' }
     needs: [summarize]
   - id: send
     tool: mail.send
@@ -177,187 +185,187 @@ steps:
     retry: { max: 3, backoff: exp }
 ```
 
-- **Loại step:** `tool`, `llm`, `agent` (vòng lặp con với bộ tool giới hạn), `branch`, `map` (lặp), `parallel`, `approval`, `subworkflow`.
-- **Biểu thức:** CEL (`cel-go`) cho điều kiện và nội suy, an toàn và có kiểu.
-- **Validator tĩnh trước khi chạy:** đúng JSON Schema, không có chu trình, tham chiếu step và tool tồn tại, kiểu input khớp. Lỗi trả về agent theo dạng có cấu trúc để nó tự sửa (vòng self-repair, tối đa vài lần).
-- **Thực thi:** scheduler DAG bằng goroutine, lưu trạng thái sau mỗi step để **resume** sau crash, có timeout, retry/backoff, cancel qua `context`, idempotency key cho step có tác dụng phụ.
-- Chạy lại từ một step bất kỳ dùng output đã lưu của các step trước.
+- **Step types:** `tool`, `llm`, `agent` (a sub-loop with a limited tool set), `branch`, `map` (iteration), `parallel`, `approval`, `subworkflow`.
+- **Expressions:** CEL (`cel-go`) for conditions and interpolation; typed and safe.
+- **Static validator before running:** valid JSON Schema, no cycles, referenced steps/tools exist, input types match. Errors are returned to the agent in a structured form so it can self-repair (a few attempts).
+- **Execution:** goroutine DAG scheduler, state persisted after every step so a crash can **resume**, timeouts, retry/backoff, cancellation through `context`, idempotency keys for steps with side effects.
+- Rerun from any step using the saved outputs of earlier steps.
 
-### 5.5 Sandbox và bảo mật
+### 5.5 Sandbox and security
 
-| Mức | Công nghệ | Dùng cho |
+| Level | Technology | Used for |
 | --- | --- | --- |
-| L0 | Starlark (`go.starlark.net`) | Biến đổi dữ liệu thuần, không file/mạng |
-| L1 | wazero (WASM, pure Go) | Code cần cách ly chặt, không cần hệ điều hành đầy đủ |
-| L2 | Subprocess + profile `sandbox-exec` sinh từ manifest | Python/shell/CLI cần file hoặc mạng giới hạn |
+| L0 | Starlark (`go.starlark.net`) | Pure data transforms, no file/network access |
+| L1 | wazero (WASM, pure Go) | Code that needs strict isolation without a full OS |
+| L2 | Subprocess + `sandbox-exec` profile generated from the manifest | Python/shell/CLI that needs limited file or network access |
 
-- `sandbox-exec` đã bị Apple đánh dấu deprecated nhưng vẫn dùng được và nhiều công cụ đang dựa vào. Nên đóng gói sau interface `Sandbox` để thay thế được (ví dụ bằng Apple Containerization nếu bản macOS mục tiêu hỗ trợ; cần kiểm tra khi triển khai).
-- **Chính sách duyệt:** lần chạy đầu của tool mới, mọi thay đổi quyền, và các hành động rủi ro (xóa, gửi ra ngoài, chi tiền) luôn hỏi, bất kể đã duyệt trước đó hay chưa.
-- **Secret** được mã hóa trong SQLite (khóa chủ ở Keychain), chỉ inject vào tool khai báo cần, không bao giờ đưa vào prompt (chi tiết ở 5.9).
-- **Prompt injection:** coi mọi kết quả tool và nội dung web là không đáng tin. Không cho dữ liệu từ nguồn không tin cậy tự kích hoạt tool nhạy cảm mà không qua duyệt.
-- **Phân phối:** bản notarized ngoài App Store (App Store yêu cầu App Sandbox, gần như không tương thích với agent chạy subprocess).
+- `sandbox-exec` is marked deprecated by Apple but still works and is used by many tools. Keep it behind a `Sandbox` interface so it can be replaced (for example with Apple Containerization if the target macOS version supports it; verify at implementation time).
+- **Approval policy:** first run of a new tool, every permission change, and risky actions (delete, send externally, spend money) always ask, regardless of previous approvals.
+- **Secrets** are encrypted in SQLite (master key in Keychain), injected only into tools that declare them, and never placed in prompts (details in 5.9).
+- **Prompt injection:** treat every tool result and web page as untrusted. Do not let untrusted data trigger sensitive tools without approval.
+- **Distribution:** notarized outside the App Store. App Store distribution requires App Sandbox and is nearly incompatible with an agent that runs subprocesses.
 
-### 5.6 Lưu trữ
+### 5.6 Storage
 
-SQLite (`modernc.org/sqlite`, không cần cgo) + `sqlc` + migration. Bảng chính: `workspaces`, `conversations`, `messages`, `tools`, `tool_versions`, `workflows`, `workflow_versions`, `runs`, `step_runs`, `events`, `feedback`, `eval_suites`, `eval_cases`, `eval_results`, `model_profiles`. Artifact lớn (output dài, file) lưu trên đĩa, DB chỉ giữ tham chiếu.
+SQLite (`modernc.org/sqlite`, no cgo) + `sqlc` + migrations. Main tables: `workspaces`, `conversations`, `messages`, `tools`, `tool_versions`, `workflows`, `workflow_versions`, `runs`, `step_runs`, `events`, `feedback`, `eval_suites`, `eval_cases`, `eval_results`, `model_profiles`. Large artifacts (long outputs, files) live on disk; the database stores references.
 
-### 5.7 Quan sát và vòng tuning
+### 5.7 Observability and the tuning loop
 
-**Tín hiệu chấm điểm:** 👍/👎 của người dùng, assertion cứng (output đúng schema, có/không chứa gì), LLM-as-judge, chi phí, độ trễ, số lần retry.
+**Scoring signals:** user thumbs up/down, hard assertions (output matches schema, contains/does not contain something), LLM-as-judge, cost, latency and retry count.
 
-**Vòng lặp cải thiện**
+**Improvement loop**
 
-1. **Phát hiện:** tỉ lệ lỗi hoặc 👎 của một workflow vượt ngưỡng.
-2. **Chẩn đoán:** agent đọc trace các run lỗi, xác định step và nguyên nhân.
-3. **Đề xuất:** patch dưới dạng diff trên workflow, tool hoặc prompt.
-4. **Replay:** chạy bản mới trên eval suite (tạo từ các run thật, đã gắn 👍 hoặc đã sửa tay), nhiều lần mỗi case.
-5. **So sánh:** tỉ lệ pass, chi phí, độ trễ so với bản hiện tại, kèm bộ hold-out để tránh overfit.
-6. **Quyết định:** tốt hơn và không regression thì lên version mới, ngược lại bỏ. Giai đoạn đầu luôn cần người dùng bấm Accept.
+1. **Detect:** the error rate or thumbs-down rate for a workflow crosses a threshold.
+2. **Diagnose:** the agent reads traces from failed runs and identifies the step and root cause.
+3. **Propose:** a patch as a diff on the workflow, tool or prompt.
+4. **Replay:** run the new version on an eval suite (built from real runs, marked with thumbs-up or manually corrected), multiple times per case.
+5. **Compare:** pass rate, cost and latency against the current version, with a hold-out set to avoid overfitting.
+6. **Decide:** promote a new version when it is better with no regressions; otherwise discard. In the first phase the user always clicks Accept.
 
-**Replay xác định được:** ghi lại input/output của tool ở run gốc để phát lại. Tool có tác dụng phụ luôn bị mock khi replay.
+**Deterministic replay:** record tool inputs/outputs from the source run. Tools with side effects are always mocked during replay.
 
-**Chốt chặn:** giới hạn số vòng, ngân sách token cho mỗi đợt tuning, không tự áp dụng thay đổi cho tool có tác dụng phụ nếu chưa được duyệt.
+**Guardrails:** cap tuning rounds and token budget per tuning session; never auto-apply changes to a tool with side effects without approval.
 
-### 5.8 Trigger và chạy không qua chat
+### 5.8 Triggers and non-chat execution
 
-Mọi cách khởi chạy đi qua **một cửa duy nhất**: `RunService.Start(target, inputs, source)`. Chat, nút Run, CLI và lịch đều gọi nó, nên engine, trace, duyệt và eval không phân biệt nguồn.
+Every start path goes through **one entry point**: `RunService.Start(target, inputs, source)`. Chat, the Run button, CLI and schedules all call it, so the engine, trace, approvals and eval do not care about the source.
 
-- **Đối tượng chạy được:** workflow (version cố định hoặc `latest-approved`) và tool lẻ. Chỉ bản đã duyệt mới chạy được từ trigger; bản draft chỉ chạy ở chế độ Thử trong UI.
-- **Input:** validate theo JSON Schema, form UI sinh từ chính schema đó. Trigger tự động lưu input cố định hoặc biểu thức (ví dụ đường dẫn file vừa thay đổi).
-- **Trigger registry:** bảng `triggers` (workflow, loại, cấu hình, bật/tắt, lần chạy cuối). Loại: thủ công, cron, file watcher (FSEvents), webhook cục bộ (chỉ `127.0.0.1`, có token, mặc định tắt), phím tắt, CLI.
-- **CLI và IPC:** `agentctl` là binary Go nhỏ nói chuyện với app qua Unix domain socket (quyền 0600) trong thư mục dữ liệu. Cùng cổng này phục vụ Shortcuts/App Intents và URL scheme. URL scheme và webhook luôn cần token hoặc bước xác nhận, vì đây là đường để trang web độc hại kích hoạt workflow.
-- **Duyệt khi không có người:** mỗi workflow khai báo `unattended: allow | ask | deny`, mặc định `ask` (dừng ở Chờ duyệt, gửi thông báo, hết hạn sau N phút). Bước có tác dụng phụ rủi ro cao (xóa, gửi ra ngoài, chi tiền) chỉ tự chạy khi được cho phép rõ ràng ở cấp trigger, kèm giới hạn số lần mỗi giờ và ngân sách token.
-- **Đồng thời:** mỗi workflow có `concurrency` (mặc định 1; chính sách `queue | skip | cancel-previous`) và có trần số run song song toàn cục. Hàng đợi lưu trong SQLite nên sống qua restart.
-- **Run bị bỏ lỡ:** app tắt lúc đến lịch thì khi mở lại hỏi bù hay bỏ (mặc định bỏ).
-- **Chạy nền:** trigger cần tiến trình đang sống. Dùng login item / menubar agent (`SMAppService`) để core chạy tiếp khi đóng cửa sổ.
-- **Agent không tự bật trigger:** tạo hoặc sửa trigger tự động là hành động cần người dùng duyệt.
+- **Runnable targets:** a workflow (fixed version or `latest-approved`) and a single tool. Only approved versions can start from a trigger; drafts can only run in the UI's Try mode.
+- **Inputs:** validated against JSON Schema; the UI form is generated from that schema. Automated triggers store fixed inputs or expressions (for example, the path that just changed).
+- **Trigger registry:** table `triggers` (workflow, type, config, enabled, last fired). Types: manual, cron, file watcher (FSEvents), local webhook (only `127.0.0.1`, token required, off by default), shortcut, CLI.
+- **CLI and IPC:** `agentctl` is a small Go binary that talks to the app over a Unix domain socket (mode `0600`) in the data directory. The same port serves Shortcuts/App Intents and a URL scheme. URL schemes and webhooks always require a token or confirmation because a malicious website could otherwise start a workflow.
+- **Approval without a person:** each workflow declares `unattended: allow | ask | deny`, default `ask` (stop in Waiting for approval, notify, expire after N minutes). Steps with high-risk side effects (delete, send externally, spend money) only run unattended when explicitly allowed at the trigger level, with per-hour limits and a token budget.
+- **Concurrency:** each workflow has `concurrency` (default 1; policies `queue | skip | cancel-previous`) and there is a global parallel-run cap. The queue is stored in SQLite and survives restarts.
+- **Missed runs:** if the app was closed at the scheduled time, ask whether to catch up or skip on next launch (default skip).
+- **Background execution:** triggers need a live process. Use a login item or menubar agent (`SMAppService`) so the core keeps running when the window is closed.
+- **The agent never enables triggers itself:** creating or editing an automatic trigger requires user approval.
 
-### 5.9 Quản lý secret
+### 5.9 Secret management
 
-Secret lưu trong SQLite dưới dạng mã hóa, khóa chủ nằm trong **macOS Keychain**. Tool chỉ nhận giá trị lúc chạy và chỉ khi đã được duyệt dùng. Agent và LLM không bao giờ thấy giá trị, chỉ thấy tên và trạng thái (ví dụ `GITHUB_TOKEN: đã có`).
+Secrets are stored encrypted in SQLite, with the master key in the **macOS Keychain**. A tool receives a value only at run time and only after it has been approved to use it. The agent and LLM never see values, only names and status (for example, `GITHUB_TOKEN: present`).
 
-- **Lưu trữ:** Mỗi secret được mã hóa bằng AES-256-GCM (nonce ngẫu nhiên mỗi lần ghi, secret\_id làm associated data để không hoán đổi được ciphertext giữa các dòng) rồi lưu ở cột ciphertext của bảng secrets. Khóa chủ 32 byte do app sinh ở lần chạy đầu và nằm ngoài DB: một mục Keychain duy nhất, ACL chỉ cho chính app, có thể bật Touch ID khi mở app. Dùng `keybase/go-keychain` hoặc Security.framework; không gọi CLI `security` kèm khóa trên dòng lệnh vì lộ qua danh sách tiến trình. Metadata nằm cạnh ciphertext (`id`, tên, loại, `created_at`, `last_used_at`, `expires_at`); không lưu hash của giá trị. API key của model profile dùng chung kho này.
-- **Khai báo trong manifest:** tool khai báo bằng tên logic, không chứa giá trị.
+- **Storage:** each secret is encrypted with AES-256-GCM (random nonce per write, `secret_id` as associated data so ciphertext cannot be swapped between rows) and stored in the `ciphertext` column of `secrets`. The 32-byte master key is generated on first launch and stored outside the database: one Keychain item, ACL restricted to the app, optionally protected by Touch ID. Use `keybase/go-keychain` or Security.framework; never call the `security` CLI with the key on the command line because it leaks through the process list. Metadata lives next to the ciphertext (`id`, name, type, `created_at`, `last_used_at`, `expires_at`); never store a hash of the value. Model profile API keys use the same store.
+- **Declared in the manifest:** tools declare secrets by logical name, never by value.
 
 ```yaml
 secrets:
   - name: GITHUB_TOKEN
-    description: Token đọc repo
+    description: Read-only repository token
     inject: env          # env | header | file
     scope: { domains: [api.github.com] }
     required: true
 ```
 
-- **Ánh xạ:** người dùng nối tên logic của tool với một secret trong kho (một secret dùng cho nhiều tool). Ánh xạ nằm ở bảng `tool_secret_bindings`; đổi ánh xạ hoặc scope domain phải duyệt lại như đổi quyền.
-- **Inject lúc chạy:** giải mã từ DB ngay trước khi chạy, truyền qua biến môi trường hoặc file tạm 0600 trên RAM disk, xóa sau khi xong. Với tool gọi HTTP, ưu tiên **inject ở proxy**: tool gọi `fetch`, tầng Go gắn header Authorization, nên code tool không thấy giá trị.
-- **Chặn đánh cắp:** tool do agent viết có thể cố gửi secret ra ngoài. Vì vậy mạng của sandbox chỉ đi qua proxy cục bộ có allowlist domain theo manifest, và secret chỉ dùng cho domain đã khai báo. Tool L2 không được đọc Keychain hay file DB trực tiếp (sandbox không cấp quyền vào thư mục dữ liệu của app).
-- **Không rò rỉ:** (1) không đưa secret vào prompt hay messages; (2) **redactor** quét stdout/stderr, log, event, trace, tool result và nội dung gửi tới LLM, thay giá trị đã biết bằng `[REDACTED:TÊN]` (kể cả dạng base64 và URL-encode); (3) không lưu secret trong YAML workflow, version tool, file export hay eval fixture, export chỉ mang tên logic; (4) replay và eval dùng secret giả hoặc mock.
-- **Người dùng dán secret vào chat:** nhận diện theo mẫu khóa API phổ biến, chặn trước khi gửi tới LLM và đề nghị lưu vào kho Secrets.
-- **Duyệt:** lần đầu tool dùng một secret, và mỗi lần đổi scope hay ánh xạ, hiện card nói rõ secret nào, domain nào, tool nào. Secret nhạy cảm có thể đặt chế độ hỏi mỗi lần chạy.
-- **Vòng đời:** xoay vòng (ghi đè, mọi tool tự dùng bản mới), cảnh báo trước khi hết hạn, thu hồi (xóa là chặn mọi tool ngay), nhật ký truy cập (run nào dùng secret nào, lúc nào).
-- **Làm sau:** OAuth cho dịch vụ lớn (refresh token trong kho secret, app tự làm mới access token) và tham chiếu `op://` tới 1Password CLI.
+- **Binding:** the user maps a tool's logical name to a secret in the vault (one secret can serve many tools). The mapping lives in `tool_secret_bindings`; changing the mapping or domain scope requires re-approval, just like a permission change.
+- **Injection at run time:** decrypt immediately before the run, pass through an environment variable or a `0600` file on a RAM disk, and delete it afterwards. For HTTP tools, prefer **proxy injection**: the tool calls `fetch`, the Go layer attaches the Authorization header, and the tool code never sees the value.
+- **Theft prevention:** tools written by the agent may try to exfiltrate secrets. Therefore the sandbox network only goes through a local proxy with a per-manifest domain allowlist, and a secret is only usable on its declared domains. L2 tools cannot read the Keychain or the app database directly (the sandbox does not grant access to the app data directory).
+- **No leaks:** (1) never put secrets in prompts or messages; (2) a **redactor** scans stdout/stderr, logs, events, traces, tool results and content sent to the LLM, replacing known values with `[REDACTED:NAME]` (including base64 and URL-encoded forms); (3) never store secrets in workflow YAML, tool versions, exports or eval fixtures; exports carry logical names only; (4) replay and eval use fake secrets or mocks.
+- **User pastes a secret into chat:** detect common API-key patterns, block it before it reaches the LLM, and offer to store it in the Secrets screen.
+- **Approval:** the first time a tool uses a secret, and on every scope or binding change, show a card that names the secret, domain and tool. Sensitive secrets can require approval on every run.
+- **Lifecycle:** rotation (overwrite; every tool uses the new value), expiry warnings, revocation (deleting a secret blocks every tool immediately) and an access log (which run used which secret, and when).
+- **Later:** OAuth for major services (refresh tokens in the secret store; the app refreshes access tokens) and `op://` references to the 1Password CLI.
 
-**Quản lý khóa chủ và phạm vi bảo vệ**
+**Master key management and protection scope**
 
-- **Hai lớp, một cài đặt:** `SecretStore` (Put, Get, Delete, List) mã hóa và đọc ghi trong SQLite; `KeyProvider` chỉ làm một việc là đưa ra khóa chủ. Có `keychain` (mặc định cho bản phát hành), `file` (chỉ cho dev, file 0600 trong thư mục dữ liệu, UI hiện cảnh báo) và có thể thêm `passphrase` sau này mà không phải đổi DB.
-- **Lần chạy đầu:** sinh 32 byte từ `crypto/rand`, lưu vào Keychain. Khi khởi động đọc một lần, giữ trong bộ nhớ, không ghi ra log hay crash dump.
-- **Bản dev:** build ký ad-hoc hoặc chưa notarize thường bị macOS hỏi mật khẩu Keychain liên tục. Dùng `file` provider khi dev, `keychain` khi chạy bản ký chính thức.
-- **Xoay khóa:** cột `key_version` cho phép đổi khóa chủ rồi giải mã và mã hóa lại từng dòng trong một transaction, làm được ở màn Settings.
-- **Backup và chuyển máy:** file DB chỉ mang ciphertext nên vô dụng nếu thiếu khóa chủ. Muốn chuyển máy thì export khóa chủ (bọc bằng mật khẩu) hoặc nhập lại secret. Mất khóa chủ nghĩa là mất toàn bộ secret, nên UI cảnh báo rõ trước khi reset.
-- **Chặn được:** lộ qua file DB, Time Machine, iCloud, hoặc khi gửi DB để debug.
-- **Không chặn được:** malware chạy cùng quyền người dùng và đọc được mục Keychain của app. Giảm rủi ro bằng ACL gắn với chữ ký code của app, sandbox cho tool (tool không thấy thư mục dữ liệu), và redactor ở mọi đầu ra.
+- **Two layers, one setting:** `SecretStore` (Put, Get, Delete, List) encrypts and reads/writes SQLite; `KeyProvider` only supplies the master key. Provide `keychain` (release default), `file` (dev only, a `0600` file in the data directory; the UI warns) and later `passphrase` without changing the database.
+- **First run:** generate 32 bytes with `crypto/rand` and store them in Keychain. Read once at startup, keep in memory, never write to logs or crash dumps.
+- **Dev builds:** ad-hoc-signed or unnotarized builds often cause repeated Keychain password prompts. Use the `file` provider during development and `keychain` for signed releases.
+- **Key rotation:** `key_version` allows changing the master key and re-encrypting every row in one transaction from Settings.
+- **Backup and migration:** the database file only contains ciphertext, so it is useless without the master key. To move machines, export the master key wrapped with a password or re-enter secrets. Losing the master key means losing all secrets, so warn clearly before resetting.
+- **What it protects against:** leaked database files, Time Machine/iCloud backups, or sending the database for debugging.
+- **What it cannot prevent:** malware running with the same user privileges that can read the app's Keychain item. Reduce risk with a code-signing-bound ACL, tool sandboxing (tools cannot see the data directory) and the redactor on every output path.
 
-## 6. Công nghệ
+## 6. Technology
 
-| Lớp | Lựa chọn |
+| Layer | Choice |
 | --- | --- |
-| Shell | Wails (kiểm tra v3 đã stable chưa, nếu chưa dùng v2 và đóng gói sau lớp `/app`) |
+| Shell | Thin Swift/WebKit wrapper (Wails optional; verify Wails v3 stability, otherwise v2 behind `/app`) |
 | Backend | Go, `openai-go`, MCP Go SDK, `cel-go`, `huma`, `sqlc`, `modernc.org/sqlite` |
 | Sandbox | `go.starlark.net`, `wazero`, `sandbox-exec` |
 | Frontend | React, Vite, TypeScript, Tailwind, shadcn/ui, Zustand, TanStack Query |
-| Chat | assistant-ui (hoặc Vercel AI Elements) |
+| Chat | assistant-ui (or Vercel AI Elements) |
 | Workflow UI | React Flow + elkjs/dagre + Motion |
-| Editor/terminal | CodeMirror (hoặc Monaco), xterm.js |
-| Test | Go test, Playwright, bộ eval nội bộ (có thể thêm Promptfoo cho so sánh model) |
-| Phát hành | Notarization, Sparkle auto-update |
+| Editor/terminal | CodeMirror (or Monaco), xterm.js |
+| Testing | Go test, Playwright, internal eval harness (Promptfoo for model comparisons if useful) |
+| Distribution | Notarization, Sparkle auto-update |
 
-Phiên bản thư viện thay đổi nhanh, hãy kiểm tra docs trước khi cài.
+Library versions change quickly; check the docs before installing.
 
 ## 7. Roadmap
 
-Ước tính cho một lập trình viên làm toàn thời gian, tổng khoảng 14 đến 19 tuần.
+Estimate for one full-time developer: about 14–19 weeks.
 
-### Phase 0 — Nền móng (1 tuần)
+### Phase 0 — Foundations (1 week)
 
-Skeleton Wails + React, event bus, SQLite + migration, một LLM streaming vào chat. **Điều kiện xong:** chat streaming chạy với cả model cloud và model local.
+Swift/WebKit + React skeleton, event bus, SQLite + migrations, one LLM streaming into chat. **Done when:** streaming chat works with both a cloud model and a local model.
 
-### Phase 1 — Chat agent (2–3 tuần)
+### Phase 1 — Chat agent (2–3 weeks)
 
-Agent loop, tool built-in, MCP client, card duyệt, màn Settings với model profile và probe, kho secret mã hóa trong SQLite (khóa chủ ở Keychain) (API key của model cũng nằm đây) cùng màn Secrets, giới hạn bước và ngân sách. **Điều kiện xong:** agent hoàn thành tác vụ nhiều bước bằng tool có sẵn, các hành động rủi ro đều hỏi duyệt.
+Agent loop, built-in tools, MCP client, approval cards, Settings with model profiles and probing, encrypted secret store (master key in Keychain; model API keys also live there) with the Secrets screen, step and budget limits. **Done when:** the agent completes a multi-step task with existing tools and every risky action asks for approval.
 
-### Phase 2 — Workflow (3–4 tuần)
+### Phase 2 — Workflow (3–4 weeks)
 
-Schema YAML, validator, engine (DAG, lưu trạng thái, resume, retry, cancel), `create_workflow` / `validate_workflow` / `run_workflow` cho agent, canvas React Flow chạy live, inspector node, Run history, chạy thủ công không qua chat (nút Run, form sinh từ schema input, lệnh agentctl). **Điều kiện xong:** chat → Lưu thành workflow → chạy → xem live trên canvas; kill app giữa chừng vẫn resume được; mở app, chọn workflow, bấm Run là chạy được mà không cần mở chat.
+YAML schema, validator, engine (DAG, state persistence, resume, retry, cancel), `create_workflow` / `validate_workflow` / `run_workflow` for the agent, live React Flow canvas, node inspector, Run history, manual runs without chat (Run button, schema-generated form, `agentctl`). **Done when:** chat → Save as workflow → run → live canvas works; killing the app mid-run still resumes; opening the app, choosing a workflow and pressing Run works without opening chat.
 
-### Phase 3 — Tool tự tạo (3–4 tuần)
+### Phase 3 — Tool creation (3–4 weeks)
 
-Manifest, Starlark và subprocess sandbox, test tự động, luồng duyệt quyền (gồm quyền dùng secret), ánh xạ secret cho tool, versioning, tool inspector kèm diff. **Điều kiện xong:** agent tự viết tool còn thiếu, test pass trong sandbox, người dùng duyệt, workflow dùng được ngay. Thử bằng cả các trường hợp tool cố truy cập thứ không được phép (phải bị chặn), và secret không xuất hiện trong prompt, log, trace.
+Manifest, Starlark and subprocess sandboxes, automated tests, permission approval (including secret use), secret bindings for tools, versioning, tool inspector with diffs. **Done when:** the agent writes a missing tool, tests pass in the sandbox, the user approves it and a workflow uses it immediately. Test both tools that try to access forbidden resources (must be blocked) and secrets that must never appear in prompts, logs or traces.
 
-### Phase 4 — Tuning (3–4 tuần)
+### Phase 4 — Tuning (3–4 weeks)
 
-Feedback 👍/👎, trace viewer, eval suite từ run thật, replay có mock, judge, vòng chẩn đoán → đề xuất → so sánh → accept, màn diff. **Điều kiện xong:** trên một bộ test cố định, tỉ lệ thành công của workflow tăng đo được sau khi tuning, và có rollback hoạt động.
+Thumbs up/down, trace viewer, eval suites from real runs, replay with mocks, judge, the diagnose → propose → compare → accept loop, and the diff screen. **Done when:** on a fixed test set, workflow success rate measurably improves after tuning, and rollback works.
 
-### Phase 5 — Hoàn thiện và phát hành (2–3 tuần)
+### Phase 5 — Polish and release (2–3 weeks)
 
-Onboarding, trigger tự động (cron, file watcher, phím tắt, Shortcuts) dùng chung RunService với chạy thủ công, ký và notarize, auto-update, crash report, tối ưu hiệu năng. **Điều kiện xong:** cài sạch trên máy mới, chạy được workflow đầu tiên trong vài phút.
+Onboarding, automatic triggers (cron, file watcher, shortcut, Shortcuts) through the shared RunService, signing and notarization, auto-update, crash reporting, performance tuning. **Done when:** a clean install on a new machine can run its first workflow within minutes.
 
-### Sau MVP
+### After the MVP
 
-Browser/computer-use tool, webhook trigger, import/export và template workflow, bộ nhớ dài hạn (RAG cục bộ), plugin, UI SwiftUI thay thế nếu cần (nhờ lõi Go tách biệt).
+Browser/computer-use tools, webhook triggers, workflow import/export and templates, long-term memory (local RAG), plugins, and an optional SwiftUI UI thanks to the separate Go core.
 
-### Chỉ số thành công
+### Success metrics
 
-- Tỉ lệ workflow chạy thành công, và mức tăng sau mỗi đợt tuning.
-- Thời gian từ lần chat đầu đến workflow đầu tiên chạy được.
-- Tỉ lệ tool do agent tạo vượt test ở lần thử đầu.
-- Chi phí token trung bình mỗi run.
-- Khởi động dưới 1 giây, RAM khi rảnh dưới khoảng 150MB.
+- Workflow success rate and its improvement after each tuning round.
+- Time from the first chat to the first successful workflow run.
+- Percentage of agent-created tools that pass tests on the first attempt.
+- Average token cost per run.
+- Startup under 1 second and idle RAM under about 150 MB.
 
-## 8. Rủi ro và cách giảm
+## 8. Risks and mitigations
 
-| Rủi ro | Giảm thiểu |
+| Risk | Mitigation |
 | --- | --- |
-| Model yếu về tool calling | Probe khi thêm model, gán vai trò theo năng lực, cảnh báo rõ trong UI |
-| Agent sinh workflow sai | Validator tĩnh, vòng self-repair, few-shot và template mẫu |
-| Tool lọt sandbox hoặc bị prompt injection | Quyền khai báo tối thiểu, duyệt lần đầu, coi dữ liệu ngoài là không tin cậy, test thoát sandbox |
-| `sandbox-exec` bị bỏ trong tương lai | Đặt sau interface `Sandbox`, theo dõi Apple Containerization |
-| Wails v3 chưa ổn định | Ghim phiên bản, giữ lớp `/app` mỏng, lõi Go không phụ thuộc Wails |
-| Overfit khi tuning | Bộ hold-out, giới hạn vòng lặp, người dùng duyệt ở giai đoạn đầu |
-| Chi phí token tăng vọt | Ngân sách theo run và theo đợt tuning, model rẻ cho executor |
-| Scope creep | Bám đúng thứ tự phase, mỗi phase có điều kiện xong rõ ràng |
+| Weak tool-calling models | Probe when adding models, assign roles by capability, warn clearly in the UI |
+| Agent generates invalid workflows | Static validator, self-repair loop, few-shot examples and templates |
+| Tool escapes the sandbox or is prompt-injected | Least-privilege manifests, first-run approval, treat external data as untrusted, sandbox escape tests |
+| `sandbox-exec` is removed in the future | Put it behind a `Sandbox` interface and track Apple Containerization |
+| Native shell coupling | Keep `/app` thin and the Go core shell-agnostic behind HTTP + SSE |
+| Overfitting during tuning | Hold-out sets, round limits, user approval in the first phase |
+| Token costs explode | Per-run and per-tuning budgets, cheap executor models |
+| Scope creep | Follow the phase order and each phase's exit criteria |
 
-## 9. Quyết định còn mở
+## 9. Open decisions
 
-- HTTP + SSE hay Wails bindings cho toàn bộ cầu nối (mặc định đề xuất: HTTP + SSE).
-- CEL hay một ngôn ngữ biểu thức nhẹ hơn (`expr`) cho workflow.
-- Step `agent` cho phép tự do đến đâu so với step `tool` cố định (càng tự do càng khó tuning và khó dự đoán chi phí).
-- Secret dùng chung toàn app hay tách theo workspace (đề xuất mặc định: dùng chung, ánh xạ theo tool).
-- Có cần chế độ chạy nền (menubar app) sớm hay để sau Phase 5.
+- HTTP + SSE or in-process bindings for the entire bridge (current implementation: HTTP + SSE).
+- CEL or a lighter expression language (`expr`) for workflows.
+- How much freedom an `agent` step gets compared with a fixed `tool` step (more freedom makes tuning and cost prediction harder).
+- App-wide secrets or per-workspace secrets (default recommendation: app-wide, mapped per tool).
+- Whether to add a menubar/background mode early or defer it to Phase 5.
 
-## 10. Việc làm tuần đầu
+## 10. First-week checklist
 
-- [ ] Khởi tạo repo theo cấu trúc `/core`, `/app`, `/ui`, chạy được hello world Wails + React.
-- [ ] Định nghĩa kiểu Event (Go struct) và sinh kiểu TS tương ứng.
-- [ ] Bus + SQLite lưu event, endpoint SSE có replay theo `seq`.
-- [ ] LLM gateway tối thiểu: một profile, streaming, đếm token.
-- [ ] Nối assistant-ui vào luồng streaming, chat được với một model cloud và một model local (Ollama hoặc LM Studio).
-- [ ] Dựng harness e2e Playwright đầu tiên để các phase sau luôn có test hồi quy.
+- [ ] Initialize the repo with `/cmd`, `/internal`, `/app`, `/ui` and a hello-world Swift/WebKit + React app.
+- [ ] Define the Event Go structs and generate matching TypeScript types.
+- [ ] Event bus + SQLite event storage; SSE endpoint with replay by `seq`.
+- [ ] Minimal LLM gateway: one profile, streaming, token accounting.
+- [ ] Wire assistant-ui into the stream; chat with one cloud model and one local model (Ollama or LM Studio).
+- [ ] Build the first Playwright e2e harness so later phases always have regression tests.
 
-## 11. Phụ lục A — Schema SQLite
+## 11. Appendix A — SQLite schema
 
-Một file SQLite duy nhất, bảng `STRICT`, id dạng UUIDv7 (TEXT, sắp xếp được theo thời gian), thời gian là unix ms (INTEGER), tiền là micro-USD (INTEGER, tránh số thực). Cột JSON có `CHECK (json_valid(...))`. Truy cập qua `sqlc`, migration bằng `goose` hoặc `atlas`.
+One SQLite file, `STRICT` tables, UUIDv7 IDs (TEXT, time-sortable), timestamps in Unix ms (INTEGER), money in micro-USD (INTEGER, avoiding floats). JSON columns have `CHECK (json_valid(...))`. Access through `sqlc`; migrate with `goose` or `atlas`.
 
-**Thiết lập kết nối:** chế độ WAL, một goroutine ghi duy nhất (hàng đợi ghi) cộng một pool đọc, để tránh `SQLITE_BUSY`.
+**Connection setup:** WAL mode, one writer goroutine (write queue) plus a read pool to avoid `SQLITE_BUSY`.
 
 ```sql
 PRAGMA journal_mode = WAL;
@@ -366,33 +374,33 @@ PRAGMA foreign_keys = ON;
 PRAGMA busy_timeout = 5000;
 ```
 
-### A.1 Các bảng
+### A.1 Tables
 
-| Nhóm | Bảng | Cột chính | Ghi chú |
+| Group | Table | Main columns | Notes |
 | --- | --- | --- | --- |
-| Cấu hình | `workspaces` | id, name, root\_path | root\_path là thư mục được cấp quyền |
-|  | `model_profiles` | id, base\_url, model, role, params, capabilities, secret\_id | capabilities lấy từ probe; API key tham chiếu `secrets` |
-|  | `secrets` | id, name, kind, description, expires\_at, last\_used\_at, ciphertext, nonce, key\_version, ask\_each\_run | Giá trị chỉ tồn tại ở dạng ciphertext (AES-256-GCM, associated data = id). Khóa chủ nằm trong Keychain, không nằm trong DB |
-| Chat | `conversations` | id, workspace\_id, title |  |
-|  | `messages` | id, conversation\_id, seq, role, content, model\_profile\_id, tokens\_in, tokens\_out, cost\_micro | content là JSON gồm text và tool call |
-| Tool | `tools` | id, workspace\_id, name, kind, current\_version\_id | kind: builtin, mcp, starlark, script |
-|  | `tool_versions` | xem bên dưới | Bất biến sau khi tạo, chỉ đổi status |
-|  | `tool_secret_bindings` | tool\_id, logical\_name, secret\_id, scope\_hash, approved\_at | Đổi scope\_hash thì mất duyệt |
-| Workflow | `workflows` | id, workspace\_id, name, current\_version\_id |  |
-|  | `workflow_versions` | id, workflow\_id, version, yaml, input\_schema, content\_hash, status, change\_note, parent\_id, created\_by | created\_by: agent, user, tuner |
-|  | `triggers` | id, workflow\_id, kind, config, inputs, enabled, unattended, concurrency, last\_fired\_at, approved\_at | Tạo hoặc sửa phải có approved\_at |
-| Chạy | `runs` | xem bên dưới |  |
-|  | `step_runs` | xem bên dưới | Mỗi lần retry là một dòng (attempt) |
-|  | `events` | xem Phụ lục B | Nhật ký append-only, nguồn sự thật |
-|  | `approvals` | id, run\_id, step\_run\_id, kind, request, status, expires\_at, decided\_at | kind: tool, step, secret, trigger |
-|  | `artifacts` | id, run\_id, step\_run\_id, path, sha256, size, mime | File thật nằm trên đĩa, DB giữ tham chiếu |
-| Tuning | `feedback` | id, target\_kind, target\_id, rating, note | rating: up, down |
-|  | `eval_suites` / `eval_cases` | case: suite\_id, source\_run\_id, inputs, assertions, recorded\_io\_ref, split | split: train hoặc holdout |
-|  | `eval_results` | id, eval\_run\_id, case\_id, target\_ver, passed, score, judge, cost\_micro, latency\_ms |  |
-|  | `tuning_proposals` | id, target\_kind, target\_id, base\_version\_id, diagnosis, patch, status, eval\_before, eval\_after | status: proposed, testing, accepted, rejected, rolled\_back |
-| Bảo mật | `secret_access_log` | id, secret\_id, run\_id, tool\_version\_id, ts | Chỉ ghi tên và id, không ghi giá trị |
+| Config | `workspaces` | id, name, root_path | root_path is the authorized folder |
+|  | `model_profiles` | id, base_url, model, role, params, capabilities, secret_id | capabilities come from probing; API key references `secrets` |
+|  | `secrets` | id, name, kind, description, expires_at, last_used_at, ciphertext, nonce, key_version, ask_each_run | Values only exist as ciphertext (AES-256-GCM, associated data = id). Master key lives in Keychain, not in the DB |
+| Chat | `conversations` | id, workspace_id, title |  |
+|  | `messages` | id, conversation_id, seq, role, content, model_profile_id, tokens_in, tokens_out, cost_micro | content is JSON containing text and tool calls |
+| Tool | `tools` | id, workspace_id, name, kind, current_version_id | kind: builtin, mcp, starlark, script |
+|  | `tool_versions` | see below | Immutable after creation; only status changes |
+|  | `tool_secret_bindings` | tool_id, logical_name, secret_id, scope_hash, approved_at | Changing scope_hash invalidates approval |
+| Workflow | `workflows` | id, workspace_id, name, current_version_id |  |
+|  | `workflow_versions` | id, workflow_id, version, yaml, input_schema, content_hash, status, change_note, parent_id, created_by | created_by: agent, user, tuner |
+|  | `triggers` | id, workflow_id, kind, config, inputs, enabled, unattended, concurrency, last_fired_at, approved_at | Create/edit requires approved_at |
+| Run | `runs` | see below |  |
+|  | `step_runs` | see below | Every retry is a row (attempt) |
+|  | `events` | see Appendix B | Append-only log, source of truth |
+|  | `approvals` | id, run_id, step_run_id, kind, request, status, expires_at, decided_at | kind: tool, step, secret, trigger |
+|  | `artifacts` | id, run_id, step_run_id, path, sha256, size, mime | Files live on disk; the DB stores references |
+| Tuning | `feedback` | id, target_kind, target_id, rating, note | rating: up, down |
+|  | `eval_suites` / `eval_cases` | case: suite_id, source_run_id, inputs, assertions, recorded_io_ref, split | split: train or holdout |
+|  | `eval_results` | id, eval_run_id, case_id, target_ver, passed, score, judge, cost_micro, latency_ms |  |
+|  | `tuning_proposals` | id, target_kind, target_id, base_version_id, diagnosis, patch, status, eval_before, eval_after | status: proposed, testing, accepted, rejected, rolled_back |
+| Security | `secret_access_log` | id, secret_id, run_id, tool_version_id, ts | Names and ids only; never values |
 
-### A.2 DDL các bảng cốt lõi
+### A.2 DDL for core tables
 
 ```sql
 CREATE TABLE tool_versions (
@@ -400,7 +408,7 @@ CREATE TABLE tool_versions (
   tool_id      TEXT NOT NULL REFERENCES tools(id) ON DELETE CASCADE,
   version      INTEGER NOT NULL,
   manifest     TEXT NOT NULL,            -- YAML
-  code_path    TEXT,                     -- thư mục mã nguồn
+  code_path    TEXT,                     -- source directory
   content_hash TEXT NOT NULL,            -- sha256(manifest + code)
   status       TEXT NOT NULL CHECK (status IN
                ('draft','tested','approved','active','deprecated')),
@@ -414,11 +422,11 @@ CREATE TABLE tool_versions (
 CREATE TABLE runs (
   id              TEXT PRIMARY KEY,
   target_kind     TEXT NOT NULL CHECK (target_kind IN ('workflow','tool')),
-  target_ver      TEXT NOT NULL,          -- workflow_versions.id hoặc tool_versions.id
+  target_ver      TEXT NOT NULL,          -- workflow_versions.id or tool_versions.id
   source          TEXT NOT NULL,          -- chat|manual|schedule|watcher|cli|webhook|replay
   trigger_id      TEXT REFERENCES triggers(id),
   conversation_id TEXT REFERENCES conversations(id),
-  parent_run_id   TEXT REFERENCES runs(id),   -- run gốc khi replay hoặc chạy lại từ step
+  parent_run_id   TEXT REFERENCES runs(id),   -- source run when replaying or retrying a step
   inputs          TEXT NOT NULL CHECK (json_valid(inputs)),
   status          TEXT NOT NULL,          -- queued|running|paused|waiting_approval|
                                           -- waiting_secret|succeeded|failed|cancelled|expired
@@ -434,146 +442,146 @@ CREATE INDEX runs_target ON runs (target_ver, started_at DESC);
 CREATE TABLE step_runs (
   id          TEXT PRIMARY KEY,
   run_id      TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
-  step_id     TEXT NOT NULL,              -- id của step trong YAML
+  step_id     TEXT NOT NULL,              -- step id in YAML
   attempt     INTEGER NOT NULL DEFAULT 1,
   status      TEXT NOT NULL,              -- pending|running|succeeded|failed|skipped|waiting_*
-  input_ref   TEXT,                       -- JSON nhỏ inline, hoặc id artifact nếu lớn
+  input_ref   TEXT,                       -- small JSON inline, or an artifact id if large
   output_ref  TEXT,
   error       TEXT,
-  idem_key    TEXT,                       -- idempotency cho step có tác dụng phụ
+  idem_key    TEXT,                       -- idempotency for side-effecting steps
   started_at  INTEGER,
   finished_at INTEGER,
   UNIQUE (run_id, step_id, attempt)
 ) STRICT;
 ```
 
-### A.3 Quy ước
+### A.3 Conventions
 
-- **Trạng thái trong `runs` và `step_runs` là phép chiếu của `events`.** Cả hai được cập nhật trong cùng một transaction với việc ghi event, nên không bao giờ lệch.
-- **Phiên bản bất biến.** Sửa tool hoặc workflow là tạo dòng version mới, không `UPDATE` nội dung. Việc duyệt gắn với `content_hash`: hash đổi thì phải duyệt lại.
-- **Rollback** chỉ là đổi `current_version_id` về bản cũ và ghi một event.
-- **Dung lượng:** payload hơn khoảng 64KB (output dài, file) đi vào `artifacts`, DB giữ tham chiếu. Có chính sách dọn: giữ events và runs theo số ngày hoặc số run mỗi workflow, riêng run có feedback hoặc thuộc eval suite thì giữ lại.
-- **Sao lưu:** dùng `VACUUM INTO` hoặc backup API của SQLite, không chép file khi đang ghi.
+- **Statuses in `runs` and `step_runs` are projections of `events`.** Both are updated in the same transaction as the event write, so they never diverge.
+- **Versions are immutable.** Editing a tool or workflow creates a new version row; content is never `UPDATE`d. Approval is tied to `content_hash`: if the hash changes, approval must be repeated.
+- **Rollback** is only a change of `current_version_id` to an older version plus an event.
+- **Size:** payloads over about 64 KB (long outputs, files) go to `artifacts`; the DB stores references. Define a cleanup policy: retain events and runs by days or run count per workflow, but keep runs with feedback or eval membership.
+- **Backups:** use `VACUUM INTO` or the SQLite backup API; never copy the file while it is being written.
 
-## 12. Phụ lục B — Kiểu Event
+## 12. Appendix B — Event types
 
-Event là hợp đồng giữa core Go, UI, trace và eval. Định nghĩa một lần bằng Go struct, sinh kiểu TypeScript từ đó (OpenAPI qua `huma`, hoặc `tygo`).
+Events are the contract between the Go core, UI, trace and eval. Define them once as Go structs and generate TypeScript types (OpenAPI via `huma`, or `tygo`).
 
 ### B.1 Envelope
 
 ```go
 type Event struct {
-    ID        int64           // tăng toàn cục theo thứ tự ghi
+    ID        int64           // global, increasing in write order
     Stream    string          // run:<id> | conv:<id> | sys
-    Seq       int64           // tăng dần trong từng stream, không có lỗ hổng
-    Type      string          // ví dụ step.finished
-    TS        int64           // unix ms
+    Seq       int64           // increasing per stream, no gaps
+    Type      string          // for example step.finished
+    TS        int64           // Unix ms
     RunID     string
     StepID    string
-    SchemaVer int             // tăng khi đổi cấu trúc payload
-    Payload   json.RawMessage // đã qua redactor
+    SchemaVer int             // bumped when the payload structure changes
+    Payload   json.RawMessage // already passed through the redactor
 }
 ```
 
-Payload của từng loại là struct riêng, đăng ký trong một registry (`type → struct`) để vừa serialize vừa sinh kiểu TS.
+Each payload type is its own struct, registered in a registry (`type → struct`) for serialization and TypeScript generation.
 
-### B.2 Danh mục event
+### B.2 Event catalog
 
-| Nhóm | Type | Payload chính |
+| Group | Type | Main payload |
 | --- | --- | --- |
-| Run | `run.queued` | target, source, inputs, trigger\_id |
+| Run | `run.queued` | target, source, inputs, trigger_id |
 |  | `run.started` / `run.paused` / `run.resumed` | — |
-|  | `run.finished` | status (succeeded, failed, cancelled, expired), tokens, cost\_micro, error |
-| Step | `step.started` | step\_id, attempt, kind |
-|  | `step.log` | stream (stdout, stderr), text (đã redact) |
-|  | `step.output.delta` | chunk (không lưu, chỉ gửi UI) |
-|  | `step.retrying` | attempt, reason, delay\_ms |
-|  | `step.finished` | status, output\_ref, duration\_ms |
-|  | `step.skipped` | lý do (điều kiện when sai) |
-| LLM | `llm.request` | model\_profile\_id, role, tokens ước tính |
-|  | `llm.delta` | text hoặc tool\_call chunk (không lưu) |
-|  | `llm.finished` | usage, finish\_reason, cost\_micro |
-| Tool | `tool.call.started` | tool\_version\_id, args (đã redact) |
-|  | `tool.call.finished` | result\_ref, duration\_ms |
-|  | `tool.sandbox.denied` | tài nguyên bị chặn (file, domain), tool\_version\_id |
-| Duyệt | `approval.requested` | approval\_id, kind, mô tả, expires\_at |
-|  | `approval.resolved` | approval\_id, decision, decided\_by (user, timeout) |
-| Secret | `secret.requested` | tên logic bị thiếu |
-|  | `secret.accessed` | secret\_id, tool\_version\_id (không có giá trị) |
-|  | `secret.redacted` | số lần thay thế trong event hoặc output |
-| Soạn thảo | `tool.version.created` / `tool.test.finished` / `tool.version.approved` | version\_id, kết quả test |
-|  | `workflow.version.created` / `workflow.validation.failed` | version\_id, danh sách lỗi có cấu trúc |
-|  | `trigger.created` / `trigger.fired` / `trigger.skipped` | trigger\_id, lý do bỏ qua (concurrency, hết hạn) |
-| Tuning | `tuning.proposal.created` | proposal\_id, diagnosis, diff |
-|  | `eval.case.finished` / `eval.run.finished` | pass, score, so với bản gốc |
-|  | `tuning.proposal.decided` | accepted, rejected, rolled\_back |
-| Chat | `message.created` | message\_id, role |
+|  | `run.finished` | status (succeeded, failed, cancelled, expired), tokens, cost_micro, error |
+| Step | `step.started` | step_id, attempt, kind |
+|  | `step.log` | stream (stdout, stderr), text (redacted) |
+|  | `step.output.delta` | chunk (not stored, UI only) |
+|  | `step.retrying` | attempt, reason, delay_ms |
+|  | `step.finished` | status, output_ref, duration_ms |
+|  | `step.skipped` | reason (when condition was false) |
+| LLM | `llm.request` | model_profile_id, role, estimated tokens |
+|  | `llm.delta` | text or tool_call chunk (not stored) |
+|  | `llm.finished` | usage, finish_reason, cost_micro |
+| Tool | `tool.call.started` | tool_version_id, args (redacted) |
+|  | `tool.call.finished` | result_ref, duration_ms |
+|  | `tool.sandbox.denied` | blocked resource (file, domain), tool_version_id |
+| Approval | `approval.requested` | approval_id, kind, description, expires_at |
+|  | `approval.resolved` | approval_id, decision, decided_by (user, timeout) |
+| Secret | `secret.requested` | missing logical name |
+|  | `secret.accessed` | secret_id, tool_version_id (no value) |
+|  | `secret.redacted` | number of replacements in an event or output |
+| Authoring | `tool.version.created` / `tool.test.finished` / `tool.version.approved` | version_id, test result |
+|  | `workflow.version.created` / `workflow.validation.failed` | version_id, structured error list |
+|  | `trigger.created` / `trigger.fired` / `trigger.skipped` | trigger_id, skip reason (concurrency, expired) |
+| Tuning | `tuning.proposal.created` | proposal_id, diagnosis, diff |
+|  | `eval.case.finished` / `eval.run.finished` | pass, score, comparison with baseline |
+|  | `tuning.proposal.decided` | accepted, rejected, rolled_back |
+| Chat | `message.created` | message_id, role |
 
-### B.3 Quy tắc
+### B.3 Rules
 
-1. **Ghi trước, phát sau.** Event được ghi vào SQLite (và cập nhật phép chiếu) rồi mới phát ra UI qua SSE.
-2. **Event ephemeral** (`*.delta`) chỉ phát cho UI, gộp theo khung 30 đến 50ms để đỡ tải, và không lưu. Trạng thái cuối nằm ở event `finished`.
-3. **Event đã ghi là bất biến.** Sửa lỗi bằng event mới, không sửa event cũ.
-4. **Redact trước khi ghi.** Mọi payload đi qua redactor secret trước khi vào DB hoặc ra UI.
-5. **Reconnect:** UI gọi `GET /events?stream=run:<id>&after=<seq>` (hoặc header `Last-Event-ID`) để nhận phần còn thiếu, rồi chuyển sang luồng live. Vì `seq` không có lỗ hổng, UI phát hiện mất event và tự tải lại.
-6. **Tương thích:** chỉ thêm trường mới (optional), muốn đổi nghĩa thì tăng `SchemaVer` và giữ bộ đọc cho bản cũ. Eval và replay đọc event cũ nên điều này bắt buộc.
-7. **Một run, một luồng.** Subagent hoặc subworkflow ghi vào cùng stream của run cha, phân biệt bằng `StepID` dạng đường dẫn (`parent.child`).
+1. **Write first, broadcast second.** An event is written to SQLite (and projections updated) before it is sent to the UI over SSE.
+2. **Ephemeral events** (`*.delta`) are UI-only, coalesced in 30–50 ms frames and never stored. The final state is in the `finished` event.
+3. **Stored events are immutable.** Fix mistakes with a new event, never by editing an old one.
+4. **Redact before writing.** Every payload passes through the secret redactor before it reaches the DB or the UI.
+5. **Reconnect:** the UI calls `GET /events?stream=run:<id>&after=<seq>` (or sends `Last-Event-ID`) to receive the missing range, then switches to live. Because `seq` has no gaps, the UI can detect missing events and reload.
+6. **Compatibility:** only add optional fields. To change meaning, bump `SchemaVer` and keep readers for older versions. Eval and replay read old events, so this is mandatory.
+7. **One run, one stream.** Subagents and subworkflows write to the parent run's stream, distinguished by a path-like `StepID` (`parent.child`).
 
-### B.4 Ánh xạ sang UI
+### B.4 UI mapping
 
-- **Canvas:** `step.*` đổi trạng thái node, `step.retrying` hiện badge số lần thử, `approval.requested` đổi node sang vàng, `tool.sandbox.denied` đánh dấu đỏ kèm tài nguyên bị chặn.
-- **Inspector:** `step.log` và `step.output.delta` đổ vào terminal, `tool.call.*` và `llm.*` vào tab Trace, `llm.finished` cộng vào tab Chi phí.
-- **Chat:** `llm.delta`, `tool.call.*`, `approval.*` được bộ chuyển đổi ở Go đổi sang các part của AI SDK UI message stream (text, tool input, tool output, finish) để assistant-ui render trực tiếp. Kiểm tra tên part theo phiên bản đang dùng.
-- **Run history và Tuning:** đọc từ phép chiếu (`runs`, `step_runs`) cho danh sách, đọc `events` khi mở chi tiết hoặc khi agent chẩn đoán.
+- **Canvas:** `step.*` changes node state; `step.retrying` shows the attempt badge; `approval.requested` turns the node amber; `tool.sandbox.denied` marks it red with the blocked resource.
+- **Inspector:** `step.log` and `step.output.delta` feed the terminal; `tool.call.*` and `llm.*` feed the Trace tab; `llm.finished` adds to the Cost tab.
+- **Chat:** `llm.delta`, `tool.call.*` and `approval.*` are converted in Go into AI SDK UI message stream parts (text, tool input, tool output, finish) for assistant-ui to render directly. Verify part names against the version in use.
+- **Run history and Tuning:** lists read from projections (`runs`, `step_runs`); details and agent diagnosis read `events`.
 
-## 13. Phụ lục C — Schema workflow (YAML)
+## 13. Appendix C — Workflow schema (YAML)
 
-Agent sinh file này, validator kiểm tra, engine chạy. Schema **nghiêm ngặt**: field lạ là lỗi, không bỏ qua im lặng. Mỗi file có `schema: 1` để nâng cấp về sau.
+The agent generates this file; the validator checks it; the engine runs it. The schema is **strict**: unknown fields are errors, never silently ignored. Every file has `schema: 1` for future upgrades.
 
-### C.1 Cấu trúc tổng thể
+### C.1 Overall structure
 
-| Khóa | Ý nghĩa |
+| Key | Meaning |
 | --- | --- |
-| `schema`, `name`, `description` | Phiên bản schema, tên, mô tả ngắn |
-| `inputs` | Map tên → `{type, description, default, enum, format}`. Là tập con của JSON Schema (string, number, integer, boolean, array, object). `format` gợi ý widget form: `path`, `url`, `email`, `datetime`, `text` |
-| `outputs` | Map tên → biểu thức, lấy từ kết quả các step |
-| `settings` | `unattended` (allow, ask, deny), `concurrency` (`max`, `policy`: queue, skip, cancel-previous), `budget` (`max_cost_usd`, `max_tokens`), `timeout` toàn run |
-| `defaults` | `timeout`, `retry`, `role` mặc định cho mọi step |
-| `steps` | Danh sách step (có thể lồng trong `map`, `branch`, `parallel`) |
+| `schema`, `name`, `description` | Schema version, name, short description |
+| `inputs` | Map name → `{type, description, default, enum, format}`. A subset of JSON Schema (string, number, integer, boolean, array, object). `format` suggests a form widget: `path`, `url`, `email`, `datetime`, `text` |
+| `outputs` | Map name → expression, taken from step results |
+| `settings` | `unattended` (allow, ask, deny), `concurrency` (`max`, `policy`: queue, skip, cancel-previous), `budget` (`max_cost_usd`, `max_tokens`), whole-run `timeout` |
+| `defaults` | Default `timeout`, `retry`, `role` for every step |
+| `steps` | List of steps (can be nested inside `map`, `branch`, `parallel`) |
 
-**Trường chung của mọi step:** `id` (bắt buộc, `[a-z][a-z0-9_]*`), `name`, `needs` (danh sách id), `when` (biểu thức bool), `timeout`, `retry` (`max`, `backoff`: fixed hoặc exp, `delay`), `on_error` (`fail` mặc định, hoặc `continue`), `side_effect` (`none`, `read`, `write`, `external`; mặc định lấy từ tool, step chỉ được nâng chứ không hạ).
+**Common fields for every step:** `id` (required, `[a-z][a-z0-9_]*`), `name`, `needs` (list of ids), `when` (boolean expression), `timeout`, `retry` (`max`, `backoff`: fixed or exp, `delay`), `on_error` (`fail` by default, or `continue`), `side_effect` (`none`, `read`, `write`, `external`; default comes from the tool, and a step may raise but not lower it).
 
-### C.2 Các loại step
+### C.2 Step types
 
-| Loại | Khóa chính | Output |
+| Type | Main keys | Output |
 | --- | --- | --- |
-| tool | `tool` (`ten` hoặc `ten@3`), `with` | Kết quả theo `output_schema` của tool |
-| llm | `llm.role`, `prompt`, `system`, `output_schema` | Text, hoặc object nếu có `output_schema` |
-| agent | `agent.role`, `goal`, `tools` (allowlist bắt buộc), `max_steps`, `output_schema` | Kết quả cuối của vòng lặp con |
-| set | `set: {khóa: biểu thức}` | Object, biến đổi dữ liệu không cần tool |
-| branch | `branch.cases[]` (`when`, `do`), `else` | Output của nhánh được chọn |
-| map | `map.over`, `as`, `do`, `concurrency` | Mảng output theo đúng thứ tự `over` |
-| parallel | `parallel.do` | Object theo id của các step con |
+| tool | `tool` (`name` or `name@3`), `with` | Result according to the tool's `output_schema` |
+| llm | `llm.role`, `prompt`, `system`, `output_schema` | Text, or an object when `output_schema` is present |
+| agent | `agent.role`, `goal`, `tools` (required allowlist), `max_steps`, `output_schema` | Final result of the sub-loop |
+| set | `set: {key: expression}` | Object, data transformation without a tool |
+| branch | `branch.cases[]` (`when`, `do`), `else` | Output of the selected branch |
+| map | `map.over`, `as`, `do`, `concurrency` | Array of outputs in the same order as `over` |
+| parallel | `parallel.do` | Object keyed by child step id |
 | approval | `approval.message`, `show`, `timeout` | `{approved, comment}` |
-| workflow | `workflow` (`ten@ver`), `with` | `outputs` của workflow con |
+| workflow | `workflow` (`name@ver`), `with` | Child workflow `outputs` |
 
-Bước song song xuất hiện tự nhiên từ `needs`: các step không phụ thuộc nhau chạy cùng lúc. `parallel` chỉ là cách gom nhóm cho dễ đọc. Step `agent` cố tình hạn chế (allowlist tool, trần số bước, trần ngân sách) vì nó khó dự đoán và khó tuning nhất; ưu tiên `tool` và `llm`.
+Parallel steps appear naturally through `needs`: independent steps run at the same time. `parallel` is only a grouping convenience. The `agent` step is intentionally constrained (tool allowlist, step cap, budget cap) because it is the hardest to tune and predict; prefer `tool` and `llm` steps.
 
-### C.3 Biểu thức
+### C.3 Expressions
 
-Dùng CEL. Trong chuỗi, `${...}` là nội suy. Nếu **cả chuỗi** chỉ là một `${...}` thì giữ nguyên kiểu (số, mảng, object), không ép thành chuỗi.
+Use CEL. Inside strings, `${...}` is interpolation. If **the whole string** is a single `${...}`, preserve the original type (number, array, object) instead of coercing it to a string.
 
-Biến có sẵn: `inputs`, `steps.<id>.output`, `steps.<id>.status`, `item` và `index` (trong `map`), `run.id`, `run.source`. **Không có biến `secrets`**: secret không bao giờ xuất hiện trong biểu thức, chỉ được inject ở tầng tool (mục 5.9).
+Available variables: `inputs`, `steps.<id>.output`, `steps.<id>.status`, `item` and `index` (inside `map`), `run.id`, `run.source`. **There is no `secrets` variable**: secrets never appear in expressions; they are injected only at the tool boundary (section 5.9).
 
-### C.4 Ví dụ đầy đủ
+### C.4 Full example
 
 ```yaml
 schema: 1
 name: weekly-report
-description: Tổng hợp tài liệu trong thư mục thành báo cáo tuần và gửi mail sau khi duyệt
+description: Summarize documents in a folder into a weekly report and send it after approval
 inputs:
-  folder:    { type: string, format: path, description: Thư mục chứa tài liệu }
-  to:        { type: string, format: email, description: Người nhận }
+  folder:    { type: string, format: path, description: Folder containing the documents }
+  to:        { type: string, format: email, description: Recipient }
   max_files: { type: integer, default: 20 }
 outputs:
   report: ${steps.summarize.output.text}
@@ -603,7 +611,7 @@ steps:
     llm:
       role: executor
       prompt: |
-        Tóm tắt các tài liệu sau thành báo cáo tuần:
+        Summarize the following documents into a weekly report:
         ${steps.read_each.output}
       output_schema:
         type: object
@@ -612,7 +620,7 @@ steps:
   - id: review
     needs: [summarize]
     approval:
-      message: Gửi báo cáo này tới ${inputs.to}?
+      message: Send this report to ${inputs.to}?
       show: ${steps.summarize.output.text}
       timeout: 24h
   - id: send
@@ -620,71 +628,71 @@ steps:
     when: ${steps.review.output.approved}
     tool: mail.send
     side_effect: external
-    with: { to: '${inputs.to}', subject: Báo cáo tuần, body: '${steps.summarize.output.text}' }
+    with: { to: '${inputs.to}', subject: Weekly report, body: '${steps.summarize.output.text}' }
 ```
 
-### C.5 Luật của validator
+### C.5 Validator rules
 
-Validator chạy trước khi lưu version và trước mỗi lần chạy. Lỗi trả về dạng có cấu trúc để agent tự sửa:
+The validator runs before saving a version and before every run. Errors are returned in a structured form so the agent can repair them:
 
 ```yaml
 - code: E005
   path: steps[3].with.path
-  message: Tham chiếu steps.read nhưng step này không phụ thuộc vào read
-  hint: Thêm read vào needs, hoặc đổi sang steps.list.output
+  message: References steps.read but this step does not depend on read
+  hint: Add read to needs, or use steps.list.output
   suggest: [steps.list.output]
 ```
 
-| Mã | Kiểm tra |
+| Code | Check |
 | --- | --- |
-| E001 | Field lạ hoặc sai kiểu so với schema |
-| E002 | `id` sai định dạng hoặc trùng |
-| E003 | `needs` trỏ tới step không tồn tại |
-| E004 | Có chu trình phụ thuộc |
-| E005 | Tham chiếu `steps.X` nhưng X không phải tổ tiên (qua `needs`) |
-| E006 | Dùng input chưa khai báo |
-| E007 | Tool hoặc workflow con không tồn tại, hoặc chưa được duyệt |
-| E008 | `with` không khớp `input_schema` của tool (thiếu trường, sai kiểu) |
-| E009 | Biểu thức CEL không compile hoặc sai kiểu |
-| E010 | Tool cần secret nhưng chưa có ánh xạ (lỗi khi bật trigger, cảnh báo khi còn là draft) |
-| W001 | Step `write` hoặc `external` không có `approval` phía trước và workflow không bật `unattended: allow` |
-| W002 | Step gọi mạng mà không có `timeout` hoặc `retry` |
-| W003 | Step `agent` thiếu `max_steps` hoặc ngân sách |
-| W004 | Input hoặc output thiếu `description` |
+| E001 | Unknown field or wrong type according to the schema |
+| E002 | Invalid or duplicate `id` |
+| E003 | `needs` points to a step that does not exist |
+| E004 | Dependency cycle |
+| E005 | References `steps.X` but X is not an ancestor through `needs` |
+| E006 | Uses an undeclared input |
+| E007 | Tool or child workflow does not exist, or is not approved |
+| E008 | `with` does not match the tool's `input_schema` (missing field, wrong type) |
+| E009 | CEL expression does not compile or has a type error |
+| E010 | Tool needs a secret with no mapping (error when enabling a trigger, warning for drafts) |
+| W001 | `write` or `external` step has no preceding `approval` and the workflow does not set `unattended: allow` |
+| W002 | Network step has no `timeout` or `retry` |
+| W003 | `agent` step lacks `max_steps` or a budget |
+| W004 | Input or output is missing a description |
 
-Có lỗi E thì không lưu và không chạy. Cảnh báo W vẫn cho lưu nhưng hiện trong UI.
+An E-code prevents saving and running. Warnings are allowed but shown in the UI.
 
-### C.6 Ngữ nghĩa khi chạy
+### C.6 Runtime semantics
 
-- **Step bị bỏ qua** (`when` sai) coi như thành công với output `null`. **Step thất bại** làm các step phụ thuộc bị bỏ qua, trừ khi `on_error: continue`.
-- **Retry** chỉ áp dụng cho lỗi có thể thử lại (timeout, mạng, rate limit, 5xx). Lỗi validate hoặc lỗi logic không retry. Step có tác dụng phụ nhận `idem_key` do engine sinh từ `run_id` và `step_id`, tool hỗ trợ thì dùng để chống chạy trùng.
-- **Resume sau crash:** step đã thành công không chạy lại. Step đang chạy dở mà `side_effect` là `none` hoặc `read` thì chạy lại; nếu là `write` hoặc `external` thì chuyển sang Chờ xác nhận để người dùng quyết định, trừ khi tool có idempotency.
-- **Vượt ngân sách** thì run dừng với lỗi `budget_exceeded`, giữ nguyên trạng thái để xem và chạy lại.
-- **Khóa phiên bản (lock):** lúc `run.started`, engine phân giải mọi tool không ghim phiên bản thành bản `latest-approved` và ghi kết quả vào event. Replay và eval dùng đúng bản đã khóa.
+- **Skipped step** (`when` is false) counts as success with output `null`. **A failed step** causes dependent steps to be skipped, unless `on_error: continue`.
+- **Retry** applies only to retryable errors (timeout, network, rate limit, 5xx). Validation and logic errors are not retried. Side-effecting steps receive an `idem_key` generated by the engine from `run_id` and `step_id`; tools that support it use it to prevent duplicate work.
+- **Resume after a crash:** a step that already succeeded never runs again. A step that was running when the app stopped is rerun if `side_effect` is `none` or `read`; if it is `write` or `external`, move to Waiting for confirmation and let the user decide, unless the tool is idempotent.
+- **Budget exceeded:** stop the run with a `budget_exceeded` error and keep the state inspectable and rerunnable.
+- **Version locking:** at `run.started`, the engine resolves every unpinned tool to `latest-approved` and records the result in an event. Replay and eval use the locked versions.
 
-## 14. Phụ lục D — Manifest tool
+## 14. Appendix D — Tool manifest
 
-Mỗi tool là một thư mục gồm `manifest.yaml`, mã nguồn, fixture và test. Agent chỉ nhìn thấy `name`, `description` và schema; phần còn lại dành cho runtime và validator.
+Every tool is a directory with `manifest.yaml`, source code, fixtures and tests. The agent sees only `name`, `description` and schema; the rest is for the runtime and validator.
 
-### D.1 Ví dụ manifest
+### D.1 Example manifest
 
 ```yaml
 schema: 1
 name: github.list_issues
-description: Liệt kê issue đang mở của một repo GitHub
+description: List open issues for a GitHub repository
 kind: script                  # builtin | starlark | script | mcp
 runtime:
   language: python            # python | node | shell | binary
   version: '3.12'
   entry: main.py
-  deps: requirements.lock     # đã pin hash, cài trước vào môi trường riêng
+  deps: requirements.lock     # pinned by hash, installed ahead of time in a private environment
 side_effect: read             # none | read | write | external
 input_schema:
   type: object
   additionalProperties: false
   required: [repo]
   properties:
-    repo:  { type: string, description: 'Dạng owner/name' }
+    repo:  { type: string, description: 'owner/name' }
     limit: { type: integer, default: 30 }
 output_schema:
   type: object
@@ -699,99 +707,99 @@ permissions:
   exec: []
 secrets:
   - name: GITHUB_TOKEN
-    description: Token chỉ đọc repo
+    description: Read-only repository token
     inject: header
     header: 'Authorization: Bearer ${value}'
     scope: { domains: [api.github.com] }
     required: true
 limits: { timeout_s: 30, memory_mb: 256, output_kb: 512 }
 tests:
-  - name: repo hợp lệ
+  - name: valid repository
     input: { repo: octocat/hello-world }
     mocks:
       - match: GET https://api.github.com/repos/octocat/hello-world/issues
         respond: { file: fixtures/issues.json }
     expect: ['size(output.issues) > 0']
-  - name: thiếu repo
+  - name: missing repository
     input: {}
     expect_error: invalid_input
 ```
 
-### D.2 Giao thức chạy theo loại
+### D.2 Execution protocol by type
 
-- **script:** nhận một JSON object trên stdin gồm `input` và `ctx` (`run_id`, `idem_key`). Trả kết quả bằng một JSON object trên stdout, hoặc `error` có `kind` và `message`. Log đi ra stderr. File sinh ra ghi vào thư mục `OUT_DIR` và được đăng ký thành artifact. Mã thoát khác 0 mà không có JSON hợp lệ bị coi là lỗi `crashed`.
-- **starlark:** định nghĩa `def run(input, ctx)` trả về dict. Chỉ có thư viện chuẩn giới hạn (json, math, time) cộng các helper do app cung cấp như `http.get` đi qua proxy có allowlist. Không có file hay mạng trực tiếp.
-- **mcp:** manifest khai báo cách khởi chạy server (lệnh hoặc URL), danh sách tool được phép dùng (allowlist) và `permissions` áp lên tiến trình server. Các annotation kiểu `readOnlyHint` của MCP chỉ là gợi ý, **không dùng làm căn cứ** cho `side_effect`; người dùng hoặc validator quyết định.
-- **builtin:** viết bằng Go trong repo, vẫn có manifest để agent và validator xử lý đồng nhất.
+- **script:** receives a JSON object on stdin containing `input` and `ctx` (`run_id`, `idem_key`). Returns a JSON object on stdout, or an `error` with `kind` and `message`. Logs go to stderr. Generated files are written to `OUT_DIR` and registered as artifacts. A non-zero exit without valid JSON is a `crashed` error.
+- **starlark:** defines `def run(input, ctx)` returning a dict. Only a restricted standard library is available (json, math, time) plus app helpers such as `http.get`, which goes through the allowlisted proxy. No direct file or network access.
+- **mcp:** the manifest declares how to start the server (command or URL), the allowed tool list and `permissions` applied to the server process. MCP annotations such as `readOnlyHint` are suggestions only and are **not** used to derive `side_effect`; the user or validator decides.
+- **builtin:** written in Go in the repository, but still has a manifest so the agent and validator treat it uniformly.
 
-### D.3 Luật của validator
+### D.3 Validator rules
 
-- `input_schema` và `output_schema` là JSON Schema hợp lệ, input có `additionalProperties: false`, mỗi trường có `description` (agent dựa vào đó để chọn và điền tool). `description` của tool tối đa khoảng 200 ký tự.
-- Quyền tối thiểu: domain mạng liệt kê tường minh (cấm `*` trừ khi người dùng duyệt riêng), đường dẫn file nằm trong thư mục workspace hoặc là tham số do người gọi truyền vào, `exec` chỉ liệt kê binary cụ thể.
-- **`side_effect` được cưỡng chế lúc chạy, không chỉ khai báo.** Tool khai `read` thì sandbox mount file chỉ đọc và proxy chặn các method ghi (POST, PUT, PATCH, DELETE). Nhờ đó khai sai sẽ bị chặn chứ không âm thầm vượt quyền.
-- Dependency phải pin phiên bản và hash, cài trước khi chạy. Lúc chạy không có đường mạng nào ngoài allowlist.
-- `secrets`: tên dạng `UPPER_SNAKE`, `inject` là `env`, `header` hoặc `file`; `inject: header` bắt buộc có `scope.domains` nằm trong `permissions.network.domains`.
-- Có ít nhất một test thành công và một test lỗi (input sai). Test dùng mock mạng nên chạy xác định và không cần secret thật.
+- `input_schema` and `output_schema` are valid JSON Schema. Input must set `additionalProperties: false`, and every field must have a `description` (the agent relies on it to choose and fill tools). Tool `description` should stay under about 200 characters.
+- Least privilege: network domains are explicit (wildcards are forbidden unless the user approves them separately), file paths stay inside the workspace or are passed as arguments by the caller, and `exec` lists specific binaries.
+- **`side_effect` is enforced at run time, not just declared.** A tool that declares `read` gets read-only file mounts and a proxy that blocks write methods (POST, PUT, PATCH, DELETE). A wrong declaration is blocked rather than silently granted.
+- Dependencies are pinned by version and hash and installed before execution. At run time there is no network path outside the allowlist.
+- `secrets`: names use `UPPER_SNAKE`, `inject` is `env`, `header` or `file`; `inject: header` requires `scope.domains` inside `permissions.network.domains`.
+- At least one passing test and one invalid-input test. Tests use network mocks so they are deterministic and do not need real secrets.
 
-### D.4 Quy trình khi agent tạo hoặc sửa tool
+### D.4 Agent tool creation flow
 
-1. **Lint** manifest theo luật D.3.
-2. **Quét tĩnh** mã nguồn: gọi tiến trình ngoài danh sách `exec`, đọc đường dẫn nhạy cảm (`~/.ssh`, Keychain), `eval` và tải mã từ xa bị cảnh báo hoặc chặn.
-3. **Dựng môi trường** từ `deps` đã pin, trong thư mục riêng.
-4. **Chạy test** trong sandbox với mock. Trạng thái chuyển `draft → tested` khi pass.
-5. **Chạy thăm dò quyền** (chế độ học): ghi lại các truy cập bị chặn để đề xuất khai báo thêm hoặc thu hẹp. Agent không tự mở rộng quyền, chỉ đưa vào báo cáo.
-6. **Card duyệt** cho người dùng: diff manifest so với bản trước, quyền và secret xin dùng, kết quả test, các truy cập bị chặn. Người dùng duyệt thì `tested → approved → active`.
+1. **Lint** the manifest against D.3.
+2. **Static scan** the source: spawning processes outside `exec`, reading sensitive paths (`~/.ssh`, Keychain), `eval` and fetching remote code are warned about or blocked.
+3. **Build the environment** from pinned `deps` in a private directory.
+4. **Run tests** in the sandbox with mocks. Status moves `draft → tested` when they pass.
+5. **Permission probe** (learning mode): record blocked accesses to suggest additional declarations or narrower scope. The agent may not widen permissions itself; it only includes them in the report.
+6. **Approval card** for the user: manifest diff, requested permissions and secrets, test result, blocked accesses. When the user approves, `tested → approved → active`.
 
-Sửa mã hay manifest tạo `content_hash` mới nên phải đi lại bước 1 đến 6.
+Changing code or the manifest creates a new `content_hash`, so steps 1–6 run again.
 
-### D.5 Đặt tên và tương thích
+### D.5 Naming and compatibility
 
-- Tên dạng `nhom.ten` (ví dụ `github.list_issues`). Workflow tham chiếu bằng `ten` (lấy `latest-approved` rồi khóa lúc chạy) hoặc `ten@3` (ghim).
-- **Thay đổi không tương thích** (đổi hoặc xóa trường bắt buộc của input, đổi nghĩa output) phải là tên mới hoặc major version mới. Workflow đã ghim không bị ảnh hưởng, workflow chưa ghim nhận cảnh báo ở validator.
-- Vòng tuning (`created_by: tuner`) chỉ được tạo thay đổi tương thích ngược. Muốn phá tương thích thì phải đề xuất tên mới và người dùng duyệt.
-- Tool bị `deprecated` vẫn chạy được trong workflow đã ghim, nhưng validator báo cảnh báo khi dùng tool này ở workflow mới.
+- Names use `group.name` (for example `github.list_issues`). Workflows reference `name` (resolve `latest-approved`, then lock at run time) or `name@3` (pin).
+- **Breaking changes** (changing or removing a required input field, changing output meaning) require a new name or a new major version. Pinned workflows are unaffected; unpinned workflows get a validator warning.
+- The tuning loop (`created_by: tuner`) may only create backward-compatible changes. Breaking changes must propose a new name and be approved by the user.
+- A `deprecated` tool still runs inside pinned workflows, but the validator warns when a new workflow uses it.
 
-## 15. Phụ lục E — Prompt và meta-tool của agent
+## 15. Appendix E — Agent prompts and meta-tools
 
-Chất lượng hai thứ này quyết định agent có sinh ra workflow và tool đúng hay không. Nguyên tắc xuyên suốt: **prompt không phải ranh giới bảo mật**. Ranh giới thật là duyệt, sandbox, redactor và validator (đã nằm trong code Go). Prompt chỉ giúp agent làm đúng việc ngay từ đầu.
+The quality of these two things determines whether the agent writes correct workflows and tools. The rule throughout: **a prompt is not a security boundary.** The real boundaries are approval, the sandbox, the redactor and the validator (all in Go). Prompts only help the agent get it right the first time.
 
-### E.1 Nguyên tắc thiết kế
+### E.1 Design principles
 
-1. **Một vòng lặp agent, nhiều chế độ (mode).** Mỗi mode có system prompt và bộ tool riêng theo nguyên tắc quyền tối thiểu, thay vì nhiều agent độc lập.
-2. **Validator dẫn đường.** Agent không tự tin là mình đúng: luôn validate, test, dry-run rồi mới trình người dùng. Lỗi trả về có cấu trúc (cùng định dạng ở Phụ lục C) để agent tự sửa.
-3. **Tra cứu thay vì nhồi prompt.** Prompt chỉ có bản tóm tắt cố định. Schema chi tiết của tool và workflow lấy qua `describe_tool` và `get_workflow` khi cần, để tiết kiệm context.
-4. **Prompt là dữ liệu có version.** Lưu trong bảng `prompt_versions` (name, version, content, status, created\_by). Tuner được phép đề xuất sửa prompt, nhưng phải qua eval và duyệt như workflow.
-5. **System prompt viết bằng tiếng Anh**, trả lời theo ngôn ngữ của người dùng. Hầu hết model làm theo chỉ dẫn tiếng Anh ổn định hơn, và cùng một prompt dùng được cho nhiều model.
-6. **Dữ liệu ngoài là dữ liệu.** Kết quả tool, nội dung file và trang web được bọc bằng delimiter rõ ràng và ghi chú là không đáng tin. Việc chặn hành động nhạy cảm vẫn do duyệt, không dựa vào việc model nghe lời.
+1. **One agent loop, many modes.** Each mode has its own system prompt and tool set under least privilege instead of many independent agents.
+2. **The validator leads.** The agent does not assume it is correct: always validate, test and dry-run before showing the user. Errors come back in the structured format from Appendix C so the agent can repair them.
+3. **Look things up instead of stuffing the prompt.** The prompt contains a fixed summary only. Detailed tool and workflow schemas come from `describe_tool` and `get_workflow` when needed, saving context.
+4. **Prompts are versioned data.** Store them in `prompt_versions` (name, version, content, status, created_by). The tuner may propose prompt changes, but they go through eval and approval like workflows.
+5. **Write system prompts in English and answer in the user's language.** Most models follow English instructions more reliably, and one prompt works across models.
+6. **External data is data.** Tool results, file contents and web pages are wrapped in clear delimiters and marked untrusted. Blocking sensitive actions still relies on approval, not on the model obeying instructions.
 
-### E.2 Các mode
+### E.2 Modes
 
-| Mode | Mục đích | Tool được dùng | Role model |
+| Mode | Purpose | Tools | Model role |
 | --- | --- | --- | --- |
-| Assist | Làm việc trực tiếp bằng tool đã active; đề xuất lưu thành workflow | `search_tools`, `describe_tool`, các tool active, `run_workflow`, `ask_user`, `delegate` | executor (planner khi việc khó) |
-| Workflow author | Sinh hoặc sửa workflow | nhóm Khám phá, nhóm Soạn workflow, `ask_user` | planner |
-| Tool author | Tạo hoặc sửa tool | nhóm Khám phá, nhóm Soạn tool, `ask_user` | planner |
-| Tuner | Chẩn đoán run lỗi, đề xuất bản vá | nhóm Phân tích, `propose_patch`, `run_eval` | planner |
-| Judge | Chấm điểm theo rubric, trả JSON | không có tool | judge |
+| Assist | Work directly with active tools; suggest saving as a workflow | `search_tools`, `describe_tool`, active tools, `run_workflow`, `ask_user`, `delegate` | executor (planner for hard work) |
+| Workflow author | Create or edit workflows | Discovery group, Workflow authoring group, `ask_user` | planner |
+| Tool author | Create or edit tools | Discovery group, Tool authoring group, `ask_user` | planner |
+| Tuner | Diagnose failed runs and propose patches | Analysis group, `propose_patch`, `run_eval` | planner |
+| Judge | Score against a rubric and return JSON | no tools | judge |
 
-**Chuyển giao:** Assist gọi `delegate(mode, brief, refs)`. Mode con nhận bản tóm tắt yêu cầu và tham chiếu tới các event liên quan, **không nhận toàn bộ hội thoại**, để giữ context sạch và rẻ. Kết quả trả về là một tham chiếu tới draft (version id), không phải nội dung dài.
+**Hand-off:** Assist calls `delegate(mode, brief, refs)`. The child mode receives a summary of the request and references to relevant events, **not the entire conversation**, keeping context clean and cheap. The result is a reference to a draft (version id), not a long body.
 
-### E.3 Bộ biên dịch prompt
+### E.3 Prompt compiler
 
-Prompt được ghép từ các khối, mỗi khối có ngân sách token riêng. Khối ổn định đặt trước, khối thay đổi đặt sau cùng, để tận dụng prompt caching của provider.
+Prompts are assembled from blocks, each with its own token budget. Stable blocks come first and changing blocks last, to maximize provider prompt caching.
 
-1. **Danh tính và quy tắc chung** (cố định, ngắn).
-2. **Quy tắc an toàn** (cố định).
-3. **Chỉ dẫn của mode.**
-4. **Môi trường:** ngày giờ, hệ điều hành, thư mục workspace được cấp quyền, ngôn ngữ người dùng.
-5. **Danh mục tool:** tên cộng mô tả một dòng. Từ khoảng 30 tool trở lên thì chỉ nạp top-k theo BM25 hoặc embedding và để agent dùng `search_tools`.
-6. **Playbook theo tình huống:** các file Markdown ngắn (ví dụ cách viết workflow có approval), nạp theo từ khóa hoặc theo mode.
-7. **Bộ nhớ workspace:** ghi chú về sở thích và quy ước của người dùng, có trần token.
-8. **Ví dụ mẫu (few-shot):** 2 đến 3 workflow hoặc tool đã pass validate, lấy từ thư viện golden (xem E.8).
+1. **Identity and general rules** (fixed, short).
+2. **Safety rules** (fixed).
+3. **Mode instructions.**
+4. **Environment:** date/time, OS, authorized workspace folder, user language.
+5. **Tool catalog:** name plus a one-line description. Above about 30 tools, load only the top-k by BM25 or embedding and let the agent use `search_tools`.
+6. **Playbooks by situation:** short Markdown files (for example, how to write workflows with approval), loaded by keyword or mode.
+7. **Workspace memory:** notes about user preferences and conventions, with a token cap.
+8. **Few-shot examples:** 2–3 validated workflows or tools from the golden library (see E.8).
 
-### E.4 Khung system prompt
+### E.4 System prompt skeleton
 
-Phần chung cho mọi mode:
+Common to every mode:
 
 ```text
 You are the agent inside a desktop app. You help the user get work done
@@ -812,7 +820,7 @@ by using tools, and you can author reusable tools and workflows.
   question with ask_user. Otherwise assume sensibly and state the assumption.
 ```
 
-Mode workflow author:
+Workflow author mode:
 
 ```text
 # Mode: workflow author
@@ -831,7 +839,7 @@ Goal: a workflow that is correct, small and reusable.
 You never approve or activate anything. The user does that in the UI.
 ```
 
-Mode tool author:
+Tool author mode:
 
 ```text
 # Mode: tool author
@@ -847,7 +855,7 @@ Mode tool author:
    can access. Never activate it yourself.
 ```
 
-Mode tuner:
+Tuner mode:
 
 ```text
 # Mode: tuner
@@ -858,54 +866,54 @@ cause per proposal. State the expected effect and how to verify it. Do not
 touch steps that passed.
 ```
 
-### E.5 Danh mục meta-tool
+### E.5 Meta-tool catalog
 
-| Nhóm | Tool | Mô tả |
+| Group | Tool | Description |
 | --- | --- | --- |
-| Khám phá | `search_tools(query, limit)` | Trả tên, mô tả, trạng thái, `side_effect` |
-|  | `describe_tool(name, version?)` | Manifest rút gọn: schema vào/ra, quyền, tên secret và trạng thái, ví dụ |
-|  | `list_workflows`, `get_workflow(name, version?)` | Xem workflow hiện có |
-|  | `list_secrets()` | Chỉ tên, loại, trạng thái. **Không bao giờ có giá trị** |
-|  | `get_environment()` | Thư mục workspace, runtime có sẵn (python, node) |
-| Soạn workflow | `save_workflow_draft(name, yaml, base_version?, change_note)` | Tự validate, có lỗi E thì không lưu |
-|  | `validate_workflow(yaml)` | Chỉ trả chẩn đoán |
-|  | `dry_run_workflow(target, inputs, mocks?)` | Step có `side_effect` từ write trở lên bị mock hoặc bỏ qua |
-|  | `propose_trigger(workflow, kind, config)` | Tạo đề xuất, người dùng duyệt mới bật |
-| Soạn tool | `create_tool_draft(name, manifest_yaml)` | Tạo thư mục và manifest |
-|  | `write_tool_file`, `read_tool_file`, `list_tool_files` | Chỉ trong thư mục của tool, có giới hạn kích thước |
-|  | `run_tool_tests(tool)` | Kết quả từng test, log đã redact |
-|  | `probe_permissions(tool)` | Chạy chế độ học, trả các truy cập bị chặn |
-|  | `request_tool_approval(tool, summary)` | Hiện card duyệt, trả `pending_user` |
-| Chạy | `run_workflow(name, inputs, version?)` | Trả `run_id`, chạy bất đồng bộ |
-|  | `get_run(run_id)`, `wait_run(run_id, timeout)` | Tóm tắt trạng thái, theo từng step |
-|  | tool đã active | Hiện thẳng thành function của model, không qua trung gian |
-| Tương tác | `ask_user(question, kind, options?)` | kind: text, choice, confirm |
-|  | `delegate(mode, brief, refs)` | Chuyển sang mode khác |
-|  | `remember(note)` | Ghi vào bộ nhớ workspace, UI báo cho người dùng biết |
-| Phân tích (Tuner) | `list_runs(filter)`, `read_run(run_id, detail)`, `compare_runs(a, b)`, `get_feedback(run_id)` | `read_run` đi từ tóm tắt đến step rồi tới event, có phân trang |
-|  | `propose_patch(target, base_version, content, rationale)` | Lưu thành `tuning_proposals` |
-|  | `run_eval(suite, target_version)` | Chạy replay, trả kết quả so sánh |
+| Discovery | `search_tools(query, limit)` | Return name, description, status, `side_effect` |
+|  | `describe_tool(name, version?)` | Short manifest: input/output schema, permissions, secret names and status, examples |
+|  | `list_workflows`, `get_workflow(name, version?)` | Inspect existing workflows |
+|  | `list_secrets()` | Names, type and status only. **Never values** |
+|  | `get_environment()` | Workspace folder and available runtimes (python, node) |
+| Workflow authoring | `save_workflow_draft(name, yaml, base_version?, change_note)` | Validate automatically; do not save on E-code errors |
+|  | `validate_workflow(yaml)` | Return diagnostics only |
+|  | `dry_run_workflow(target, inputs, mocks?)` | Steps with `side_effect` of write or higher are mocked or skipped |
+|  | `propose_trigger(workflow, kind, config)` | Create a proposal; the user must approve before enabling |
+| Tool authoring | `create_tool_draft(name, manifest_yaml)` | Create the directory and manifest |
+|  | `write_tool_file`, `read_tool_file`, `list_tool_files` | Only inside the tool directory, with size limits |
+|  | `run_tool_tests(tool)` | Per-test results and redacted logs |
+|  | `probe_permissions(tool)` | Run learning mode and return blocked accesses |
+|  | `request_tool_approval(tool, summary)` | Show the approval card; return `pending_user` |
+| Execution | `run_workflow(name, inputs, version?)` | Return `run_id`; execute asynchronously |
+|  | `get_run(run_id)`, `wait_run(run_id, timeout)` | Run status summary, step by step |
+|  | active tools | Exposed directly as model functions, without a wrapper |
+| Interaction | `ask_user(question, kind, options?)` | kind: text, choice, confirm |
+|  | `delegate(mode, brief, refs)` | Switch to another mode |
+|  | `remember(note)` | Write to workspace memory; the UI tells the user |
+| Analysis (Tuner) | `list_runs(filter)`, `read_run(run_id, detail)`, `compare_runs(a, b)`, `get_feedback(run_id)` | `read_run` goes from summary to step to event, with pagination |
+|  | `propose_patch(target, base_version, content, rationale)` | Store a `tuning_proposals` row |
+|  | `run_eval(suite, target_version)` | Run replay and return the comparison |
 
-**Các thứ agent không bao giờ có tool để làm:** duyệt hoặc kích hoạt tool và workflow, đọc giá trị secret, bật trigger tự động, sửa quyền của tool đã duyệt mà không qua duyệt lại, tắt redactor hay sandbox. Đây là hành động chỉ người dùng thực hiện trong UI.
+**Things the agent never has a tool for:** approving or activating tools/workflows, reading secret values, enabling automatic triggers, changing permissions of an approved tool without re-approval, or disabling the redactor/sandbox. Those are user-only actions in the UI.
 
-### E.6 Quy tắc thiết kế meta-tool
+### E.6 Meta-tool design rules
 
-- **Kết quả luôn có cấu trúc:** `{ok, data, diagnostics[], next_hint}`. `diagnostics` dùng chung định dạng với validator, `next_hint` gợi ý bước tiếp theo giúp model yếu đỡ lạc.
-- **Ít tham số, dùng enum thay cho văn bản tự do, schema phẳng.** Tránh `oneOf` và lồng sâu vì model nhỏ hay sai. Dùng chế độ `strict` của provider khi có.
-- **Ghi có kiểm soát đồng thời:** `base_version` bắt buộc khi sửa bản đã có, tránh ghi đè thay đổi của người dùng hoặc của tuner.
-- **Cắt ngắn có tham chiếu:** kết quả dài trả `truncated: true` kèm cursor hoặc `artifact_id`, không nhét cả vào context.
-- **Bất đồng bộ thật sự:** `request_tool_approval` và `run_workflow` trả ngay. Agent có thể kết thúc lượt, khi người dùng quyết định thì có event đánh thức lại hội thoại.
-- **Mọi lần gọi là event** (`tool.call.*`), nên trace thấy đầy đủ.
+- **Structured results:** `{ok, data, diagnostics[], next_hint}`. `diagnostics` uses the same format as the validator; `next_hint` suggests the next step for weaker models.
+- **Few parameters, enums instead of free text, flat schemas.** Avoid `oneOf` and deep nesting because small models fail on them. Use the provider's `strict` mode when available.
+- **Controlled concurrent writes:** `base_version` is required when editing an existing version, preventing the agent from overwriting user or tuner changes.
+- **Truncate with references:** long results return `truncated: true` plus a cursor or `artifact_id`; never stuff everything into context.
+- **Truly asynchronous:** `request_tool_approval` and `run_workflow` return immediately. The agent may end its turn; an event wakes the conversation when the user decides.
+- **Every call is an event** (`tool.call.*`), so the trace is complete.
 
-Ví dụ định nghĩa một meta-tool:
+Example meta-tool definition:
 
 ```yaml
 name: save_workflow_draft
-description: Lưu YAML workflow thành bản nháp mới. Tự validate; có lỗi E thì không lưu.
+description: Save workflow YAML as a new draft. Validate automatically; do not save on E-code errors.
 input:
   name: string
   yaml: string
-  base_version: integer      # bắt buộc khi sửa workflow đã tồn tại
+  base_version: integer      # required when editing an existing workflow
   change_note: string
 result:
   saved: boolean
@@ -915,27 +923,27 @@ result:
   next_hint: string
 ```
 
-### E.7 Vòng lặp tự sửa và chốt chặn
+### E.7 Self-repair loop and guardrails
 
-- **Vòng soạn thảo:** draft, validate, sửa (tối đa 5 lần), dry-run, trình người dùng.
-- **Phát hiện kẹt:** cùng một lỗi lặp lại 2 lần hoặc cùng một tool call lặp với cùng tham số thì dừng chiến lược hiện tại, đổi cách tiếp cận hoặc dùng `ask_user`.
-- **Nâng cấp model:** executor thất bại liên tiếp thì chuyển lên planner cho phần còn lại, ghi rõ vào trace.
-- **Ngân sách mỗi phiên soạn thảo:** trần số lượt, token và chi phí. Hết thì dừng và báo.
-- **Nén context:** khi trace dài, giữ chẩn đoán gần nhất và bản draft hiện tại, tóm tắt phần còn lại.
+- **Authoring loop:** draft, validate, repair (max 5 attempts), dry-run, present to the user.
+- **Stuck detection:** if the same error appears twice or the same tool call repeats with identical arguments, stop the current strategy, change approach or call `ask_user`.
+- **Model escalation:** if the executor fails repeatedly, move the rest of the turn to the planner and record it in the trace.
+- **Authoring budget:** cap turns, tokens and cost per authoring session. Stop and report when exhausted.
+- **Context compaction:** on long traces, keep the latest diagnosis and current draft, and summarize the rest.
 
-### E.8 Từ chat thành workflow
+### E.8 From chat to workflow
 
-Đây là luồng quan trọng nhất của sản phẩm (nút **Lưu thành workflow**):
+This is the product's most important flow (the **Save as workflow** button):
 
-1. App lấy các tool call **thành công** của tác vụ từ events, bỏ các lần thử sai và lần gọi lặp.
-2. Gửi cho mode Workflow author: yêu cầu gốc của người dùng, chuỗi call đã thành công (tham số và kết quả rút gọn).
-3. Agent tham số hóa (giá trị cụ thể thành input), đổi chuỗi call thành các step, chèn `approval` trước bước có tác dụng phụ, rồi validate.
-4. Dry-run với chính input gốc và so với kết quả của cuộc chat.
-5. Lưu draft, đồng thời **tự tạo một `eval_case`** từ run của cuộc chat (input và kết quả mong đợi). Đây là hạt giống cho bộ test của vòng tuning.
+1. The app takes the **successful** tool calls for the task from events, discarding failed attempts and repeated calls.
+2. It sends the original user request and the successful call chain (arguments and short results) to Workflow author mode.
+3. The agent parameterizes (turns concrete values into inputs), converts the chain into steps, inserts `approval` before side-effecting steps, and validates.
+4. It dry-runs with the original input and compares the result with the chat result.
+5. It saves a draft and **automatically creates an `eval_case`** from the chat run (input and expected result), seeding the tuning suite.
 
-### E.9 Thư viện mẫu và eval cho chính agent
+### E.9 Example library and agent evals
 
-- Thư mục `/core/agent/examples` chứa các workflow và tool mẫu đã được validate trong CI. Chúng vừa là few-shot, vừa là fixture test.
-- **Bộ eval cho khả năng soạn thảo:** khoảng 30 tác vụ mô tả bằng lời kèm môi trường giả. Đo: tỉ lệ workflow hợp lệ ở lần lưu đầu, tỉ lệ pass dry-run, số vòng sửa trung bình, chi phí mỗi tác vụ, tỉ lệ vi phạm quy tắc (hardcode giá trị, thiếu approval, quyền quá rộng).
-- **Chạy bộ eval này mỗi khi đổi prompt hoặc đổi model.** Prompt mới chỉ được lên version nếu không kém bản cũ.
-- **Theo năng lực model** (từ probe ở mục 5.1): model gọi tool tốt dùng function calling gốc; model yếu hơn dùng chế độ JSON có parser và ít tool hơn mỗi lượt; model không đủ sức thì chỉ cho vai trò executor, không cho soạn thảo.
+- `/core/agent/examples` contains example workflows and tools validated in CI. They serve as both few-shot examples and test fixtures.
+- **Authoring eval:** about 30 natural-language tasks with fake environments. Measure valid-workflow rate on first save, dry-run pass rate, average repair rounds, cost per task, and rule violations (hardcoded values, missing approval, excessive permissions).
+- **Run this eval whenever a prompt or model changes.** A new prompt may only be promoted if it is not worse than the current one.
+- **By model capability** (from the probe in section 5.1): strong tool-calling models use native function calling; weaker models use JSON mode with a parser and fewer tools per turn; models that are too weak are limited to the executor role and cannot author.
