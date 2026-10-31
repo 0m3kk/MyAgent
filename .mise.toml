@@ -58,6 +58,14 @@ run = "./scripts/build-macos.sh"
 description = "Build and package a macOS release zip"
 run = "./scripts/release.sh"
 
+[tasks.sparkle-key]
+description = "Print the Sparkle EdDSA public key"
+run = "./scripts/sparkle-key.sh public"
+
+[tasks.sparkle-export]
+description = "Export the Sparkle private key for GitHub Actions"
+run = "./scripts/sparkle-key.sh export"
+
 [tasks.run]
 description = "Run the production build locally"
 depends = ["build"]

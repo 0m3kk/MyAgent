@@ -27,9 +27,11 @@ jobs:
       - name: Install Go and Node
         uses: jdx/mise-action@v2
 
+      # SPARKLE_PRIVATE_KEY signs the update archive and appcast with EdDSA.
       - name: Build release
         env:
           VERSION: ${{ inputs.version || github.ref_name }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: mise run release
 
       - name: Upload workflow artifacts

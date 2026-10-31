@@ -75,7 +75,7 @@ Existing installs using `~/MyAgent Workspace` migrate on the next launch.
 | 📊 | **Runs** | History, filters, feedback, rerun, side-by-side comparison and resumable interrupted runs. |
 | 🎯 | **Tuning** | Eval suites from real runs, deterministic replay, tuner diagnosis, diff review and rollback. |
 | ⏰ | **Triggers** | Cron, folder watchers, local webhooks, CLI, unattended policies and concurrency policies. |
-| 🖥️ | **Desktop** | Native Swift/WebKit shell, Geist Mono, adjustable text size and Light/Dark/System appearance. |
+| 🖥️ | **Desktop** | Native Swift/WebKit shell, Geist Mono, adjustable text size, Light/Dark/System appearance and Sparkle auto-update. |
 
 ## 🧠 Models
 
@@ -110,7 +110,9 @@ All commands live in `.mise.toml`.
 | ✨ | `mise run format` | Format Go with gofmt and golines |
 | ▶️ | `mise run run` | Serve production UI on `127.0.0.1:8787` |
 | 📱 | `mise run app` | Build `dist/MyAgent.app` |
-| 🚀 | `mise run release` | Package a macOS release zip |
+| 🚀 | `mise run release` | Package a macOS release zip and appcast |
+| 🔑 | `mise run sparkle-key` | Print the Sparkle EdDSA public key |
+| 🔐 | `mise run sparkle-export` | Export the Sparkle private key for CI |
 | 🧪 | `mise run test` | Go tests + UI typecheck |
 | 🎭 | `mise run e2e` | Playwright smoke tests |
 | 🧹 | `mise run clean` | Remove build output and local data |
@@ -179,7 +181,17 @@ cmd/agentctl        CLI
 VERSION=v1.0.0 mise run release
 ```
 
-Artifacts go to `dist/release/` as a zip plus SHA-256. The GitHub workflow builds on `macos-14` for `v*` tags and publishes a release. Local builds are ad-hoc signed; public distribution still needs Developer ID signing and notarization.
+Artifacts go to `dist/release/` as a zip, SHA-256 and Sparkle `appcast.xml`. The GitHub workflow builds on `macos-14` for `v*` tags and publishes the release. Local builds are ad-hoc signed; public distribution still needs Developer ID signing and notarization.
+
+### 🔄 Auto-update
+
+MyAgent uses **Sparkle 2**. The app checks GitHub Releases once per day and exposes **Check for Updates…** in the app menu.
+
+- Updates are EdDSA-signed, so auto-update works without an Apple Developer account.
+- The feed is `https://github.com/0m3kk/MyAgent/releases/latest/download/appcast.xml`.
+- Local releases use the Sparkle key in the macOS Keychain under the `com.myagent.desktop` account.
+- GitHub Actions needs the `SPARKLE_PRIVATE_KEY` secret. Run `mise run sparkle-export`, add the contents to the repository secret, then delete the local file.
+- Without Developer ID signing and notarization, the first install or update may show a Gatekeeper warning.
 
 ## 🧪 Tests
 
@@ -200,11 +212,11 @@ Dependabot checks Go modules, UI pnpm packages and GitHub Actions every Monday a
 | --- | --- |
 | Chat agent and tool loop | MCP server client and import UI |
 | Workflow authoring, engine, canvas and history | OAuth refresh and `op://` 1Password references |
-| Tool authoring, testing, sandbox and versioning | Developer ID signing, notarization and auto-update |
+| Tool authoring, testing, sandbox and versioning | Developer ID signing and notarization |
 | Secrets, redaction, models and probes | Windows/Linux, multi-user and cloud sync |
 | Manual, scheduled, watched, webhook and CLI runs | HTTPS MITM header injection for script traffic |
 | Eval replay and tuning | Menubar or login-item background agent |
-| Native app and CLI | Automatic retention/compaction for old events and artifacts |
+| Native app, CLI and auto-update | Automatic retention/compaction for old events and artifacts |
 
 ---
 

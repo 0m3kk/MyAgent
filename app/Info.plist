@@ -32,6 +32,16 @@
   <true/>
   <key>NSHighResolutionCapable</key>
   <true/>
+  <key>SUFeedURL</key>
+  <string>https://github.com/0m3kk/MyAgent/releases/latest/download/appcast.xml</string>
+  <key>SUPublicEDKey</key>
+  <string>Nh7HvR+MVigLqSogmBCH+Baqyy9RjwAPV0ncCqTF0mI=</string>
+  <key>SUEnableAutomaticChecks</key>
+  <true/>
+  <key>SUAllowsAutomaticUpdates</key>
+  <true/>
+  <key>SUScheduledCheckInterval</key>
+  <integer>86400</integer>
   <key>NSAppTransportSecurity</key>
   <dict>
     <key>NSAllowsLocalNetworking</key>

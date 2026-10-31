@@ -21,8 +21,31 @@ rm -f "$ZIP" "$ZIP.sha256"
 ditto -c -k --sequesterRsrc --keepParent "$ROOT/dist/MyAgent.app" "$ZIP"
 (cd "$OUT" && shasum -a 256 "$(basename "$ZIP")" > "$(basename "$ZIP").sha256")
 
+echo "→ generating Sparkle appcast"
+SPARKLE_DIR="$("$ROOT/scripts/sparkle.sh")"
+SPARKLE_ACCOUNT="${SPARKLE_ACCOUNT:-com.myagent.desktop}"
+STAGE="$(mktemp -d "$OUT/.appcast.XXXXXX")"
+trap 'rm -rf "$STAGE"' EXIT
+cp "$ZIP" "$STAGE/"
+rm -f "$OUT/appcast.xml"
+
+if [ -n "${CI:-}" ] && [ -z "${SPARKLE_PRIVATE_KEY:-}" ]; then
+  echo "SPARKLE_PRIVATE_KEY is required to sign updates in CI." >&2
+  exit 1
+fi
+if [ -n "${SPARKLE_PRIVATE_KEY:-}" ]; then
+  printf '%s\n' "$SPARKLE_PRIVATE_KEY" | \
+    "$SPARKLE_DIR/bin/generate_appcast" --ed-key-file - -o "$OUT/appcast.xml" "$STAGE"
+else
+  "$SPARKLE_DIR/bin/generate_appcast" --account "$SPARKLE_ACCOUNT" -o "$OUT/appcast.xml" "$STAGE"
+fi
+rm -rf "$STAGE"
+trap - EXIT
+
 echo
 echo "Release artifacts:"
-ls -lh "$ZIP" "$ZIP.sha256"
+ls -lh "$ZIP" "$ZIP.sha256" "$OUT/appcast.xml"
 echo
-echo "Note: this bundle is ad-hoc signed. Public distribution requires Developer ID signing and notarization."
+echo "Note: this bundle is ad-hoc signed. Auto-update works without an Apple Developer account,"
+echo "but first installs and downloads may show a Gatekeeper warning until the app is signed"
+echo "with a Developer ID certificate and notarized."

@@ -203,7 +203,7 @@ steps:
 - **Approval policy:** first run of a new tool, every permission change, and risky actions (delete, send externally, spend money) always ask, regardless of previous approvals.
 - **Secrets** are encrypted in SQLite (master key in Keychain), injected only into tools that declare them, and never placed in prompts (details in 5.9).
 - **Prompt injection:** treat every tool result and web page as untrusted. Do not let untrusted data trigger sensitive tools without approval.
-- **Distribution:** notarized outside the App Store. App Store distribution requires App Sandbox and is nearly incompatible with an agent that runs subprocesses.
+- **Distribution:** Sparkle 2 auto-update, with Developer ID signing and notarization when available. App Store distribution requires App Sandbox and is nearly incompatible with an agent that runs subprocesses.
 
 ### 5.6 Storage
 
@@ -287,7 +287,7 @@ secrets:
 | Workflow UI | React Flow + elkjs/dagre + Motion |
 | Editor/terminal | CodeMirror (or Monaco), xterm.js |
 | Testing | Go test, Playwright, internal eval harness (Promptfoo for model comparisons if useful) |
-| Distribution | Notarization, Sparkle auto-update |
+| Distribution | Sparkle 2 auto-update; Developer ID signing and notarization when available |
 
 Library versions change quickly; check the docs before installing.
 
@@ -317,7 +317,7 @@ Thumbs up/down, trace viewer, eval suites from real runs, replay with mocks, jud
 
 ### Phase 5 — Polish and release (2–3 weeks)
 
-Onboarding, automatic triggers (cron, file watcher, shortcut, Shortcuts) through the shared RunService, signing and notarization, auto-update, crash reporting, performance tuning. **Done when:** a clean install on a new machine can run its first workflow within minutes.
+Onboarding, automatic triggers (cron, file watcher, shortcut, Shortcuts) through the shared RunService, Developer ID signing and notarization, crash reporting, performance tuning. **Done when:** a clean install on a new machine can run its first workflow within minutes.
 
 ### After the MVP
 

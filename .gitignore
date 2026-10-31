@@ -1,6 +1,7 @@
 # build output
 /bin/
 /dist/
+/.cache/
 /ui/dist/
 /node_modules/
 /ui/node_modules/
