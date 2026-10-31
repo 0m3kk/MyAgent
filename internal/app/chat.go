@@ -738,6 +738,149 @@ func (a *App) emitMessage(convID string, msg model.Message) {
 		Payload: a.mustPayload(map[string]any{"message": msg, "conversation_id": convID})})
 }
 
+func (a *App) RenameConversation(
+	ctx context.Context,
+	conversationID, title string,
+) (model.Conversation, error) {
+	conv, err := a.Store.GetConversation(ctx, conversationID)
+	if err != nil {
+		return conv, err
+	}
+	title = normalizeTitle(title, 120)
+	if title == "" {
+		return conv, errors.New("title is empty")
+	}
+	return a.updateConversationTitle(ctx, conv, title)
+}
+
+func (a *App) GenerateConversationTitle(
+	ctx context.Context,
+	conversationID string,
+) (model.Conversation, error) {
+	conv, err := a.Store.GetConversation(ctx, conversationID)
+	if err != nil {
+		return conv, err
+	}
+	messages, err := a.Store.ListMessages(ctx, conversationID)
+	if err != nil {
+		return conv, err
+	}
+	firstUser, lastAssistant := conversationTitleContext(messages)
+	if firstUser == "" {
+		return conv, errors.New("conversation has no user message to name")
+	}
+	temperature := 0.2
+	res, err := a.ChatWithTools(ctx, workflow.LLMChatRequest{
+		SessionID: conversationID,
+		Role:      "cheap",
+		System: "You name chat conversations. Reply with a concise title of at most 6 words. " +
+			"Use title case, no quotes, no trailing punctuation, and no explanation.",
+		Messages: []llm.Message{{
+			Role: "user",
+			Content: fmt.Sprintf(
+				"First user message:\n%s\n\nLatest assistant reply:\n%s",
+				clipText(firstUser, 2000),
+				clipText(lastAssistant, 2000),
+			),
+		}},
+		MaxTokens:   24,
+		Temperature: &temperature,
+	})
+	if err != nil {
+		return conv, err
+	}
+	title := cleanGeneratedTitle(res.Text)
+	if title == "" {
+		return conv, errors.New("the model returned an empty title")
+	}
+	return a.updateConversationTitle(ctx, conv, title)
+}
+
+func (a *App) ResetConversationTitle(
+	ctx context.Context,
+	conversationID string,
+) (model.Conversation, error) {
+	conv, err := a.Store.GetConversation(ctx, conversationID)
+	if err != nil {
+		return conv, err
+	}
+	messages, err := a.Store.ListMessages(ctx, conversationID)
+	if err != nil {
+		return conv, err
+	}
+	firstUser, _ := conversationTitleContext(messages)
+	title := titleFromText(firstUser)
+	return a.updateConversationTitle(ctx, conv, title)
+}
+
+func (a *App) updateConversationTitle(
+	ctx context.Context,
+	conv model.Conversation,
+	title string,
+) (model.Conversation, error) {
+	if err := a.Store.UpdateConversationTitle(ctx, conv.ID, title); err != nil {
+		return conv, err
+	}
+	updated, err := a.Store.GetConversation(ctx, conv.ID)
+	if err != nil {
+		return conv, err
+	}
+	a.Bus.EmitNoErr(model.Event{
+		Stream: model.ConvStream(conv.ID),
+		Type:   "conversation.updated",
+		Payload: a.mustPayload(
+			map[string]any{"conversation": updated},
+		),
+	})
+	return updated, nil
+}
+
+func conversationTitleContext(messages []model.Message) (string, string) {
+	var firstUser, lastAssistant string
+	for _, m := range messages {
+		var content struct {
+			Text string `json:"text"`
+		}
+		_ = json.Unmarshal(m.Content, &content)
+		text := strings.TrimSpace(content.Text)
+		if text == "" {
+			continue
+		}
+		switch m.Role {
+		case "user":
+			if firstUser == "" {
+				firstUser = text
+			}
+		case "assistant":
+			lastAssistant = text
+		}
+	}
+	return firstUser, lastAssistant
+}
+
+func normalizeTitle(title string, max int) string {
+	title = strings.Join(strings.Fields(strings.TrimSpace(title)), " ")
+	if max > 0 && len([]rune(title)) > max {
+		title = string([]rune(title)[:max])
+	}
+	return title
+}
+
+func cleanGeneratedTitle(title string) string {
+	title = normalizeTitle(title, 80)
+	title = strings.Trim(title, "\"'`")
+	title = strings.TrimRight(title, " .,:;!?")
+	return title
+}
+
+func clipText(text string, max int) string {
+	text = strings.TrimSpace(text)
+	if max > 0 && len([]rune(text)) > max {
+		return string([]rune(text)[:max]) + "…"
+	}
+	return text
+}
+
 func titleFromText(text string) string {
 	text = strings.TrimSpace(strings.Split(text, "\n")[0])
 	text = strings.Join(strings.Fields(text), " ")

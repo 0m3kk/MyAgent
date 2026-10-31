@@ -90,6 +90,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/conversations", s.handleListConversations)
 	s.mux.HandleFunc("POST /api/conversations", s.handleCreateConversation)
 	s.mux.HandleFunc("GET /api/conversations/{id}", s.handleGetConversation)
+	s.mux.HandleFunc("PATCH /api/conversations/{id}", s.handleRenameConversation)
+	s.mux.HandleFunc("POST /api/conversations/{id}/title", s.handleGenerateConversationTitle)
 	s.mux.HandleFunc("DELETE /api/conversations/{id}", s.handleDeleteConversation)
 	s.mux.HandleFunc("POST /api/conversations/{id}/messages", s.handleSendMessage)
 	s.mux.HandleFunc("POST /api/conversations/{id}/stop", s.handleStopChat)

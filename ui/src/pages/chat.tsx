@@ -2,11 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowRight,
   Bot,
+  Check,
   Cpu,
   Gauge,
   MessageSquareText,
   MoreHorizontal,
+  Pencil,
   Plus,
+  RotateCcw,
   Search,
   Send,
   Sparkles,
@@ -14,6 +17,7 @@ import {
   Trash2,
   User,
   Workflow,
+  X,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { api } from '../api'
@@ -293,6 +297,9 @@ export function ChatPage({ conversationId }: { conversationId: string }) {
   const [liveTools, setLiveTools] = useState<Record<string, ToolView>>({})
   const [menuOpen, setMenuOpen] = useState(false)
   const [savingWorkflow, setSavingWorkflow] = useState(false)
+  const [editingTitle, setEditingTitle] = useState(false)
+  const [titleDraft, setTitleDraft] = useState('')
+  const [titleBusy, setTitleBusy] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const pending = useMemo(() => approvalsFor(approvals, conversationId), [approvals, conversationId])
   const defaultModel = data?.model_profiles.find((m) => m.id === data.settings.default_model_id) || data?.model_profiles[0]
@@ -326,6 +333,9 @@ export function ChatPage({ conversationId }: { conversationId: string }) {
     setProgress(null)
     setStreamText('')
     setLiveTools({})
+    setEditingTitle(false)
+    setTitleDraft('')
+    setTitleBusy(false)
     void load()
     void refreshApprovals()
   }, [conversationId, load, refreshApprovals])
@@ -481,6 +491,64 @@ export function ChatPage({ conversationId }: { conversationId: string }) {
     }
   }
 
+  function beginTitleEdit() {
+    setMenuOpen(false)
+    setTitleDraft(conversation?.title || '')
+    setEditingTitle(true)
+  }
+
+  function cancelTitleEdit() {
+    setEditingTitle(false)
+    setTitleDraft('')
+  }
+
+  async function saveTitle() {
+    const title = titleDraft.trim()
+    if (!title || titleBusy) return
+    setTitleBusy(true)
+    try {
+      const updated = await api.renameConversation(conversationId, title)
+      setConversation(updated)
+      setEditingTitle(false)
+      void refresh()
+      toast('Chat renamed', undefined, 'success')
+    } catch (err) {
+      toast('Could not rename the chat', err instanceof Error ? err.message : undefined, 'error')
+    } finally {
+      setTitleBusy(false)
+    }
+  }
+
+  async function generateTitle(mode: 'auto' | 'reset') {
+    setMenuOpen(false)
+    setTitleBusy(true)
+    try {
+      const updated = await api.generateConversationTitle(conversationId, mode)
+      setConversation(updated)
+      void refresh()
+      toast(
+        mode === 'auto' ? 'Chat named by the model' : 'Title reset',
+        mode === 'auto' ? 'You can rename it any time.' : 'Back to the first-message title.',
+        'success',
+      )
+    } catch (err) {
+      toast('Could not update the title', err instanceof Error ? err.message : undefined, 'error')
+    } finally {
+      setTitleBusy(false)
+    }
+  }
+
+  function onTitleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      void saveTitle()
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      cancelTitleEdit()
+    }
+  }
+
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -538,7 +606,36 @@ export function ChatPage({ conversationId }: { conversationId: string }) {
       <header className="chat-head">
         <div className="chat-title-wrap">
           <div className="eyebrow"><MessageSquareText size={12} /> Chats</div>
-          <h1>{conversation?.title || 'Chat'}</h1>
+          {editingTitle ? (
+            <div className="title-editor">
+              <input
+                value={titleDraft}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                onKeyDown={onTitleKeyDown}
+                disabled={titleBusy}
+                autoFocus
+                aria-label="Chat title"
+              />
+              <IconButton label="Save title" onClick={() => void saveTitle()} disabled={titleBusy || !titleDraft.trim()}>
+                {titleBusy ? <Spinner size={14} /> : <Check size={14} />}
+              </IconButton>
+              <IconButton label="Cancel rename" onClick={cancelTitleEdit} disabled={titleBusy}>
+                <X size={14} />
+              </IconButton>
+            </div>
+          ) : (
+            <h1>
+              <button
+                className="chat-title-button"
+                onClick={beginTitleEdit}
+                disabled={titleBusy}
+                title="Rename chat"
+              >
+                <span>{conversation?.title || 'Chat'}</span>
+                {titleBusy ? <Spinner size={13} /> : <Pencil size={13} />}
+              </button>
+            </h1>
+          )}
           <div className="chat-subline">
             <span className="model-chip"><span className="model-orb small" /> {defaultModel?.name || 'No model'}</span>
             <span>{lastAssistant ? `Updated ${formatRelative(lastAssistant.created_at)}` : 'New conversation'}</span>
@@ -559,6 +656,9 @@ export function ChatPage({ conversationId }: { conversationId: string }) {
             </IconButton>
             {menuOpen && (
               <div className="menu-pop">
+                <button onClick={beginTitleEdit} disabled={titleBusy}><Pencil size={14} /> Rename chat</button>
+                <button onClick={() => void generateTitle('auto')} disabled={titleBusy}><Sparkles size={14} /> Auto-name</button>
+                <button onClick={() => void generateTitle('reset')} disabled={titleBusy}><RotateCcw size={14} /> Reset title</button>
                 <button onClick={saveAsWorkflow}><Workflow size={14} /> Save as workflow</button>
                 <button className="danger" onClick={removeConversation}><Trash2 size={14} /> Delete conversation</button>
               </div>

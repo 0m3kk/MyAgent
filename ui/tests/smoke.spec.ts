@@ -35,6 +35,33 @@ test('new chat opens a chat-only composer', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Recent chats' })).toHaveCount(0)
 })
 
+test('chat title can be renamed and reset', async ({ page }) => {
+  await page.goto('/#/chats')
+  await expect(page.getByRole('heading', { name: 'All chats' })).toBeVisible({ timeout: 15_000 })
+  const token = await page.evaluate(async () => {
+    const res = await fetch('/api/dev-token')
+    return ((await res.json()) as { token: string }).token
+  })
+  const response = await page.request.post('/api/chat', {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { text: 'first chat' },
+  })
+  const payload = (await response.json()) as { conversation: { id: string } }
+  await page.goto(`/#/chats/${payload.conversation.id}`)
+
+  const title = page.locator('.chat-title-button span')
+  await expect(title).toHaveText('first chat', { timeout: 10_000 })
+
+  await page.locator('.chat-title-button').click()
+  await page.getByLabel('Chat title').fill('Custom title')
+  await page.getByLabel('Chat title').press('Enter')
+  await expect(title).toHaveText('Custom title')
+
+  await page.getByRole('button', { name: 'Conversation menu' }).click()
+  await page.getByRole('button', { name: 'Reset title' }).click()
+  await expect(title).toHaveText('first chat')
+})
+
 test('text size can be increased and reset in settings', async ({ page }) => {
   await page.goto('/#/settings')
   const control = page.locator('.settings-page .text-size-control')

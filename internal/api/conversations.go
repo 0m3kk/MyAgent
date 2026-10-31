@@ -2,6 +2,8 @@ package api
 
 import (
 	"net/http"
+
+	"myagent/internal/model"
 )
 
 func (s *Server) handleListConversations(w http.ResponseWriter, r *http.Request) {
@@ -51,6 +53,49 @@ func (s *Server) handleGetConversation(w http.ResponseWriter, r *http.Request) {
 		"active":       s.app.ChatActive(conv.ID),
 		"progress":     progress,
 	})
+}
+
+func (s *Server) handleRenameConversation(w http.ResponseWriter, r *http.Request) {
+	body, ok := readJSON(w, r, 1<<20)
+	if !ok {
+		return
+	}
+	title, _ := body["title"].(string)
+	conv, err := s.app.RenameConversation(r.Context(), r.PathValue("id"), title)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error(), nil)
+		return
+	}
+	writeJSON(w, http.StatusOK, conv)
+}
+
+func (s *Server) handleGenerateConversationTitle(w http.ResponseWriter, r *http.Request) {
+	body, ok := readJSON(w, r, 1<<20)
+	if !ok {
+		return
+	}
+	mode, _ := body["mode"].(string)
+	if mode == "" {
+		mode = "auto"
+	}
+	var (
+		conv model.Conversation
+		err  error
+	)
+	switch mode {
+	case "auto":
+		conv, err = s.app.GenerateConversationTitle(r.Context(), r.PathValue("id"))
+	case "reset":
+		conv, err = s.app.ResetConversationTitle(r.Context(), r.PathValue("id"))
+	default:
+		writeError(w, http.StatusBadRequest, "unknown title mode", nil)
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error(), nil)
+		return
+	}
+	writeJSON(w, http.StatusOK, conv)
 }
 
 func (s *Server) handleDeleteConversation(w http.ResponseWriter, r *http.Request) {

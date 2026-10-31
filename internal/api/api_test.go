@@ -348,4 +348,29 @@ func TestConcurrentChats(t *testing.T) {
 			t.Fatalf("unexpected assistant reply: %+v", content)
 		}
 	}
+
+	renamed := c.must(
+		"PATCH",
+		"/api/conversations/"+firstID,
+		map[string]any{"title": "Custom title"},
+	)
+	if renamed["title"] != "Custom title" {
+		t.Fatalf("conversation was not renamed: %+v", renamed)
+	}
+	reset := c.must(
+		"POST",
+		"/api/conversations/"+firstID+"/title",
+		map[string]any{"mode": "reset"},
+	)
+	if reset["title"] != "first chat" {
+		t.Fatalf("conversation title was not reset: %+v", reset)
+	}
+	generated := c.must(
+		"POST",
+		"/api/conversations/"+firstID+"/title",
+		map[string]any{"mode": "auto"},
+	)
+	if generated["title"] != "thinking done" {
+		t.Fatalf("conversation title was not generated: %+v", generated)
+	}
 }
