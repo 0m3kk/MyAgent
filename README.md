@@ -212,7 +212,7 @@ To sign GitHub Actions releases with the same identity, add the base64-encoded `
 base64 -i dist/signing/MyAgent-SelfSigned.p12 | pbcopy
 ```
 
-Without those secrets, CI builds remain ad-hoc signed.
+Without those secrets, CI builds remain ad-hoc signed. On hosted runners the workflow trusts the certificate in the System keychain with `sudo`, because user-domain trust prompts require a GUI session that CI does not have.
 
 Check the active identity:
 

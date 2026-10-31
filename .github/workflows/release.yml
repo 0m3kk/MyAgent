@@ -30,6 +30,7 @@ jobs:
       # Optional: sign CI builds with the same self-signed identity as local
       # builds. Without these secrets the release falls back to ad-hoc signing.
       - name: Import self-signed signing identity
+        timeout-minutes: 10
         env:
           MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
           MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
@@ -46,10 +47,16 @@ jobs:
           security create-keychain -p actions "$KEYCHAIN"
           security set-keychain-settings -lut 21600 "$KEYCHAIN"
           security unlock-keychain -p actions "$KEYCHAIN"
-          security list-keychains -d user -s "$KEYCHAIN" "$HOME/Library/Keychains/login.keychain-db"
+          security list-keychains -d user -s "$KEYCHAIN" \
+            "$HOME/Library/Keychains/login.keychain-db" \
+            /Library/Keychains/System.keychain \
+            /System/Library/Keychains/SystemRootCertificates.keychain
           security default-keychain -d user -s "$KEYCHAIN"
           printf '%s' "$MACOS_CERT_P12" | base64 -D > "$RUNNER_TEMP/MyAgent-SelfSigned.p12"
-          SIGNING_KEYCHAIN="$KEYCHAIN" SIGN_P12_PASSWORD="$MACOS_CERT_PASSWORD" \
+          SIGNING_KEYCHAIN="$KEYCHAIN" \
+          SIGN_P12_PASSWORD="$MACOS_CERT_PASSWORD" \
+          SIGN_KEYCHAIN_PASSWORD=actions \
+          SIGN_TRUST_SYSTEM=1 \
             ./scripts/setup-signing.sh import "$RUNNER_TEMP/MyAgent-SelfSigned.p12"
 
       # SPARKLE_PRIVATE_KEY signs the update archive and appcast with EdDSA.

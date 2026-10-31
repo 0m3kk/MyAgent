@@ -7,6 +7,8 @@ KEYCHAIN="${SIGNING_KEYCHAIN:-$HOME/Library/Keychains/login.keychain-db}"
 DAYS="${SIGN_DAYS:-3650}"
 OUT_DIR="${SIGN_OUT_DIR:-$ROOT/dist/signing}"
 P12_NAME="${SIGN_P12_NAME:-MyAgent-SelfSigned.p12}"
+TRUST_SYSTEM="${SIGN_TRUST_SYSTEM:-0}"
+KEYCHAIN_PASSWORD="${SIGN_KEYCHAIN_PASSWORD:-}"
 
 usage() {
   cat <<EOF
@@ -21,7 +23,48 @@ Environment:
   SIGN_DAYS                 Certificate validity in days (default: $DAYS)
   SIGN_OUT_DIR              Where to write the .p12 (default: dist/signing)
   SIGN_P12_PASSWORD         Password for the .p12 (default: generated on create, prompted on import)
+  SIGN_TRUST_SYSTEM         Set to 1 to trust the certificate in the System keychain with sudo (CI)
+  SIGN_KEYCHAIN_PASSWORD    Keychain password for set-key-partition-list (CI)
 EOF
+}
+
+run_with_timeout() {
+  local seconds="$1"
+  shift
+  /usr/bin/perl -e 'alarm shift; exec @ARGV' "$seconds" "$@"
+}
+
+trust_certificate() {
+  local cert="$1"
+  if [ "$TRUST_SYSTEM" = "1" ]; then
+    echo "→ trusting certificate in the system keychain"
+    if ! run_with_timeout 30 sudo security add-trusted-cert -d -r trustRoot \
+      -p codeSign -k /Library/Keychains/System.keychain "$cert"; then
+      echo "error: could not trust the certificate in the system keychain." >&2
+      exit 1
+    fi
+  else
+    echo "→ trusting certificate for code signing"
+    if ! run_with_timeout 15 security add-trusted-cert -r trustRoot \
+      -p codeSign -k "$KEYCHAIN" "$cert"; then
+      echo "error: could not trust the certificate." >&2
+      echo "Open Keychain Access, select the certificate, and set 'Always Trust'" >&2
+      echo "for Code Signing." >&2
+      exit 1
+    fi
+  fi
+}
+
+allow_codesign_access() {
+  if [ -n "$KEYCHAIN_PASSWORD" ]; then
+    echo "→ allowing codesign access to the keychain"
+    if ! run_with_timeout 15 security set-key-partition-list \
+      -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" \
+      "$KEYCHAIN" >/dev/null; then
+      echo "error: could not update the keychain partition list." >&2
+      exit 1
+    fi
+  fi
 }
 
 have_identity() {
@@ -83,14 +126,17 @@ EOF
     -certpbe PBE-SHA1-3DES -keypbe PBE-SHA1-3DES -macalg sha1 >/dev/null 2>&1
 
   echo "→ importing identity into $KEYCHAIN"
-  security import "$TMP_DIR/identity.p12" -k "$KEYCHAIN" -P "$password" \
-    -T /usr/bin/codesign >/dev/null
+  if ! run_with_timeout 30 security import "$TMP_DIR/identity.p12" \
+    -k "$KEYCHAIN" -P "$password" -T /usr/bin/codesign >/dev/null; then
+    echo "error: security import failed or timed out." >&2
+    exit 1
+  fi
+  echo "→ imported identity"
+  allow_codesign_access
 
-  # Trust only for code signing, in the user trust domain. Gatekeeper still
-  # requires Developer ID + notarization; this trust is what lets codesign use
-  # the identity locally.
-  security add-trusted-cert -r trustRoot -p codeSign -k "$KEYCHAIN" \
-    "$TMP_DIR/cert.pem"
+  # Trust only for code signing. Gatekeeper still requires Developer ID +
+  # notarization; this trust is what lets codesign use the identity locally.
+  trust_certificate "$TMP_DIR/cert.pem"
 
   if ! have_identity; then
     echo "error: imported the certificate but identity is still not valid." >&2
@@ -145,11 +191,15 @@ import_identity() {
     -passin "pass:$password" -out "$TMP_DIR/cert.pem" >/dev/null 2>&1
 
   echo "→ importing identity into $KEYCHAIN"
-  security import "$p12" -k "$KEYCHAIN" -P "$password" \
-    -T /usr/bin/codesign >/dev/null
+  if ! run_with_timeout 30 security import "$p12" \
+    -k "$KEYCHAIN" -P "$password" -T /usr/bin/codesign >/dev/null; then
+    echo "error: security import failed or timed out." >&2
+    exit 1
+  fi
+  echo "→ imported identity"
+  allow_codesign_access
 
-  security add-trusted-cert -r trustRoot -p codeSign -k "$KEYCHAIN" \
-    "$TMP_DIR/cert.pem"
+  trust_certificate "$TMP_DIR/cert.pem"
 
   if ! have_identity; then
     echo "error: imported the certificate but identity is still not valid." >&2
