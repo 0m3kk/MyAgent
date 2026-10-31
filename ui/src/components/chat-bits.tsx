@@ -14,7 +14,8 @@ import {
   XCircle,
 } from 'lucide-react'
 import { navigate } from '../router'
-import { formatDuration, safeJSON, titleCase } from '../format'
+import { formatDuration, safeJSON } from '../format'
+import { summarizeToolCall, toolCallOutcome } from '../tool-summary'
 import { Badge, CopyButton } from './ui'
 import { ResultBlock } from './result-view'
 
@@ -31,6 +32,50 @@ export interface ToolView {
   logs?: string[]
 }
 
+const CODE_ARGS: Record<string, { key: string; label: string }> = {
+  validate_workflow: { key: 'yaml', label: 'Workflow YAML' },
+  save_workflow_draft: { key: 'yaml', label: 'Workflow YAML' },
+  create_tool_draft: { key: 'manifest_yaml', label: 'Tool manifest' },
+  propose_patch: { key: 'content', label: 'Proposed YAML' },
+  write_tool_file: { key: 'content', label: 'File content' },
+  'fs.write_text': { key: 'content', label: 'File content' },
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function ToolArguments({ name, args }: { name: string; args: unknown }) {
+  if (isRecord(args) && Object.keys(args).length === 0) return null
+  const codeArg = CODE_ARGS[name]
+  if (codeArg && isRecord(args) && typeof args[codeArg.key] === 'string') {
+    const code = args[codeArg.key] as string
+    const rest = { ...args }
+    delete rest[codeArg.key]
+    const hasRest = Object.keys(rest).length > 0
+    return (
+      <>
+        {hasRest && (
+          <div className="tool-section">
+            <div className="tool-section-head">Arguments <CopyButton text={safeJSON(rest, 10000)} /></div>
+            <pre className="json-block small">{safeJSON(rest, 10000)}</pre>
+          </div>
+        )}
+        <div className="tool-section">
+          <div className="tool-section-head">{codeArg.label} <CopyButton text={code} /></div>
+          <pre className="json-block code-block">{code}</pre>
+        </div>
+      </>
+    )
+  }
+  return (
+    <div className="tool-section">
+      <div className="tool-section-head">Arguments <CopyButton text={safeJSON(args, 10000)} /></div>
+      <pre className="json-block">{safeJSON(args, 10000)}</pre>
+    </div>
+  )
+}
+
 export function ToolCard({ tool, live }: { tool: ToolView; live?: boolean }) {
   const [open, setOpen] = useState(!!tool.error)
   const status = tool.status || (live ? 'running' : 'succeeded')
@@ -38,7 +83,8 @@ export function ToolCard({ tool, live }: { tool: ToolView; live?: boolean }) {
   const runId = result && typeof result === 'object' && 'run_id' in (result as Record<string, unknown>)
     ? String((result as Record<string, unknown>).run_id)
     : undefined
-  const name = tool.name.includes('.') ? tool.name : titleCase(tool.name)
+  const summary = summarizeToolCall(tool.name, tool.args)
+  const outcome = status === 'failed' ? undefined : toolCallOutcome(tool.name, result)
   return (
     <div className={clsx('tool-card', `tool-${status}`, open && 'open', live && 'live')}>
       <button className="tool-head" onClick={() => setOpen((o) => !o)}>
@@ -46,8 +92,15 @@ export function ToolCard({ tool, live }: { tool: ToolView; live?: boolean }) {
           {status === 'running' ? <Loader2 size={14} className="spin" /> : status === 'failed' ? <XCircle size={14} /> : <CheckCircle2 size={14} />}
         </span>
         <Wrench size={14} className="tool-wrench" />
-        <span className="tool-name">{name}</span>
+        <span className="tool-name" title={summary.title !== tool.name ? tool.name : undefined}>{summary.title}</span>
+        {summary.target && (
+          <span className="tool-target" title={summary.targetFull || summary.target}>{summary.target}</span>
+        )}
+        {summary.detail && (
+          <span className="tool-detail" title={summary.detail}>{summary.detail}</span>
+        )}
         <span className="tool-meta">
+          {outcome && <span className={clsx('tool-outcome', outcome.tone)}>{outcome.text}</span>}
           {tool.duration_ms !== undefined && <span>{formatDuration(0, tool.duration_ms)}</span>}
           {status === 'running' ? <span className="pulse-label">running</span> : <Badge tone={status === 'failed' ? 'bad' : 'ok'}>{status}</Badge>}
         </span>
@@ -55,12 +108,7 @@ export function ToolCard({ tool, live }: { tool: ToolView; live?: boolean }) {
       </button>
       {open && (
         <div className="tool-body">
-          {tool.args !== undefined && (
-            <div className="tool-section">
-              <div className="tool-section-head">Arguments <CopyButton text={safeJSON(tool.args, 10000)} /></div>
-              <pre className="json-block">{safeJSON(tool.args, 10000)}</pre>
-            </div>
-          )}
+          {tool.args !== undefined && <ToolArguments name={tool.name} args={tool.args} />}
           {tool.logs && tool.logs.length > 0 && (
             <div className="tool-section">
               <div className="tool-section-head"><TerminalSquare size={13} /> Logs</div>

@@ -591,14 +591,22 @@ input[type="checkbox"] { accent-color: var(--accent); }
 /* Tool cards */
 .tool-card { border: 1px solid var(--border); border-radius: 11px; background: var(--surface); overflow: hidden; }
 .tool-card.live { border-color: color-mix(in oklab, var(--accent) 45%, var(--border)); box-shadow: 0 0 0 3px var(--accent-soft); }
-.tool-head { display: flex; align-items: center; gap: 7px; width: 100%; border: 0; background: transparent; padding: 8px 10px; text-align: left; color: var(--text-soft); }
+.tool-head { display: flex; align-items: center; gap: 7px; width: 100%; min-width: 0; border: 0; background: transparent; padding: 8px 10px; text-align: left; color: var(--text-soft); }
 .tool-head:hover { background: var(--hover); }
-.tool-status { display: grid; place-items: center; color: var(--mint); }
+.tool-status { display: grid; place-items: center; color: var(--mint); flex: 0 0 auto; }
 .tool-failed .tool-status { color: var(--red); }
 .tool-running .tool-status { color: var(--blue); }
-.tool-wrench { color: var(--faint); }
-.tool-name { font-family: var(--font-mono); font-size: calc(11px * var(--font-scale)); font-weight: 500; color: var(--text-soft); }
-.tool-meta { margin-left: auto; display: flex; align-items: center; gap: 7px; color: var(--faint); font-size: calc(9.5px * var(--font-scale)); }
+.tool-wrench { color: var(--faint); flex: 0 0 auto; }
+.tool-name { min-width: 0; max-width: 55%; font-family: var(--font-mono); font-size: calc(11px * var(--font-scale)); font-weight: 500; color: var(--text-soft); flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tool-target { min-width: 0; max-width: 45%; padding: 1px 5px; border-radius: 5px; background: var(--surface-3); color: var(--text); font-family: var(--font-mono); font-size: calc(10px * var(--font-scale)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tool-detail { min-width: 0; color: var(--faint); font-size: calc(9.5px * var(--font-scale)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tool-meta { margin-left: auto; display: flex; align-items: center; gap: 7px; color: var(--faint); font-size: calc(9.5px * var(--font-scale)); flex: 0 0 auto; }
+.tool-outcome { font-size: calc(9.5px * var(--font-scale)); white-space: nowrap; }
+.tool-outcome.ok { color: var(--mint); }
+.tool-outcome.bad { color: var(--red); }
+.tool-outcome.warn { color: var(--amber); }
+.tool-outcome.run { color: var(--blue); }
+.tool-outcome.muted, .tool-outcome.neutral { color: var(--faint); }
 .pulse-label { color: var(--blue); font-size: calc(9.5px * var(--font-scale)); }
 .tool-body { border-top: 1px solid var(--border-soft); padding: 9px 10px 11px; display: flex; flex-direction: column; gap: 9px; background: color-mix(in oklab, var(--surface-2) 55%, transparent); }
 .tool-section-head { display: flex; align-items: center; gap: 5px; color: var(--faint); font-size: calc(9px * var(--font-scale)); text-transform: uppercase; letter-spacing: 0.09em; margin-bottom: 4px; }
@@ -606,6 +614,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .tool-section-head.error { color: var(--red); }
 .json-block { background: var(--code-bg); border: 1px solid var(--code-border); border-radius: 7px; padding: 9px 10px; font-size: calc(10.5px * var(--font-scale)); line-height: 1.55; max-height: 340px; overflow: auto; color: var(--text-soft); }
 .json-block.small { max-height: 220px; font-size: calc(10px * var(--font-scale)); }
+.json-block.code-block { max-height: 420px; white-space: pre; font-size: calc(10px * var(--font-scale)); line-height: 1.6; }
 
 /* Structured tool and workflow output */
 .result-block { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
@@ -1276,6 +1285,10 @@ input[type="checkbox"] { accent-color: var(--accent); }
   .secrets-head, .secrets-row { grid-template-columns: minmax(150px, 1fr) 76px 96px; }
   .secrets-head span:nth-child(4), .secrets-head span:nth-child(5), .secrets-head span:nth-child(6), .secrets-row > span:nth-child(4), .secrets-row > span:nth-child(5), .secrets-row > span:nth-child(6) { display: none; }
   .tool-grid, .eval-grid { grid-template-columns: 1fr; }
+  .tool-target { max-width: 50%; }
+  .tool-detail { display: none; }
+  .tool-meta .badge { display: none; }
+  .tool-meta > span:not(.tool-outcome):not(.pulse-label) { display: none; }
   .settings-form-grid, .form-grid.two, .compare-grid, .trigger-grid { grid-template-columns: 1fr; }
   .tool-overview-side, .settings-side { grid-template-columns: 1fr; }
   .tuning-stats { grid-template-columns: 1fr 1fr; }
