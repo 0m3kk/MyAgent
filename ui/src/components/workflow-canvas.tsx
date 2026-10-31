@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useCallback, useMemo, useRef } from 'react'
 import {
   Background,
   Handle,
@@ -8,6 +8,7 @@ import {
   type Edge,
   type Node,
   type NodeProps,
+  type OnNodesChange,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import clsx from 'clsx'
@@ -151,6 +152,16 @@ export function WorkflowCanvas({
     return map
   }, [steps, run, approvals])
 
+  const nodeCache = useRef<Map<string, Node<NodeData>>>(new Map())
+  const dimensions = useRef<Record<string, { width?: number; height?: number }>>({})
+  const handleNodesChange = useCallback<OnNodesChange<Node<NodeData>>>((changes) => {
+    for (const change of changes) {
+      if (change.type === 'dimensions' && change.dimensions) {
+        dimensions.current[change.id] = change.dimensions
+      }
+    }
+  }, [])
+
   const { nodes, edges } = useMemo(() => {
     const levels = levelsFor(steps)
     const perLevel: Record<number, number> = {}
@@ -165,19 +176,41 @@ export function WorkflowCanvas({
       const row = seenLevel[level] || 0
       seenLevel[level] = row + 1
       const status = statusById[step.id]?.status || 'pending'
+      const error = statusById[step.id]?.error
+      const selected = selectedStep === step.id
+      const position = {
+        x: (maxRows - perLevel[level]) * 148 + row * 296 + 30,
+        y: level * 154 + 30,
+      }
+      // Reuse the previous node object when nothing changed. React Flow keys its
+      // internal (measured) node state off object identity, so recreating every
+      // node on each run event makes the whole graph disappear until it has
+      // measured every node again.
+      const prev = nodeCache.current.get(step.id)
+      if (
+        prev &&
+        prev.position.x === position.x &&
+        prev.position.y === position.y &&
+        prev.data.step === step &&
+        prev.data.status === status &&
+        prev.data.error === error &&
+        prev.data.selected === selected
+      ) {
+        return prev
+      }
       // Top-to-bottom DAG: dependency depth is the row, siblings fan out.
+      const measured = prev?.measured ?? dimensions.current[step.id]
       return {
         id: step.id,
         type: 'step',
-        position: {
-          x: (maxRows - perLevel[level]) * 148 + row * 296 + 30,
-          y: level * 154 + 30,
-        },
-        data: { step, status, error: statusById[step.id]?.error, selected: selectedStep === step.id },
+        position,
+        data: { step, status, error, selected },
         draggable: false,
         selectable: true,
+        ...(measured ? { measured } : {}),
       }
     })
+    nodeCache.current = new Map(nodeList.map((node) => [node.id, node]))
     const edgeList: Edge[] = []
     for (const step of steps) {
       for (const need of step.needs || []) {
@@ -202,6 +235,7 @@ export function WorkflowCanvas({
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
+        onNodesChange={handleNodesChange}
         fitView
         fitViewOptions={{ padding: 0.25 }}
         minZoom={0.35}

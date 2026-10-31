@@ -251,6 +251,13 @@ export function RunPage({ runId }: { runId: string }) {
     }
     setDetail((prev) => {
       if (!prev) return prev
+      // High-frequency events (tokens, logs, tool streams) only feed the trace
+      // panel. Replacing `detail` for them re-renders the canvas on every token.
+      const affectsRun = event.type.startsWith('run.') ||
+        event.type === 'step.started' ||
+        event.type === 'step.finished' ||
+        event.type === 'step.skipped'
+      if (!affectsRun) return prev
       const run = { ...prev.run }
       let stepOutputs = prev.step_outputs
       let outputs = prev.outputs
