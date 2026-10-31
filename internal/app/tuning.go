@@ -364,6 +364,17 @@ The diagnosis must classify the cause: bad input, wrong tool choice, weak prompt
 	)
 }
 
+func validationError(res workflow.ValidationResult) error {
+	if len(res.Errors) == 0 {
+		return errors.New("validation failed")
+	}
+	first := res.Errors[0]
+	if first.Path != "" {
+		return fmt.Errorf("%s at %s: %s", first.Code, first.Path, first.Message)
+	}
+	return fmt.Errorf("%s: %s", first.Code, first.Message)
+}
+
 func unifiedDiff(base, proposed string) string {
 	diff, err := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
 		A:        difflib.SplitLines(base),
@@ -471,6 +482,10 @@ func (a *App) DecideProposal(
 		if p.ProposedYAML == "" {
 			return p, errors.New("proposal has no proposed YAML")
 		}
+		base, err := a.Store.GetWorkflowVersion(ctx, p.BaseVersionID)
+		if err != nil {
+			return p, fmt.Errorf("load proposal base version: %w", err)
+		}
 		w, err := a.Store.GetWorkflowByID(ctx, p.TargetID)
 		if err != nil {
 			return p, err
@@ -480,12 +495,18 @@ func (a *App) DecideProposal(
 			p.ProposedYAML,
 			"Accepted tuning proposal "+p.ID+". "+comment,
 			"tuner",
-			0,
+			base.Version,
 		)
-		if err != nil || !v.Validation.OK() {
-			return p, errors.New("proposed workflow is no longer valid")
+		if err != nil {
+			return p, fmt.Errorf("save tuning patch: %w", err)
 		}
-		if err := a.Store.ApproveWorkflowVersion(ctx, w.ID, v.Version.ID); err != nil {
+		if !v.Validation.OK() {
+			return p, fmt.Errorf("proposed workflow is no longer valid: %w", validationError(v.Validation))
+		}
+		if v.Workflow.ID != w.ID {
+			return p, errors.New("proposed workflow changed the workflow name")
+		}
+		if err := a.ApproveWorkflowVersion(ctx, w.ID, v.Version.ID); err != nil {
 			return p, err
 		}
 		_ = a.Store.SetTuningStatus(ctx, p.ID, "accepted", p.EvalAfter)
