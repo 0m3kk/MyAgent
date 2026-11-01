@@ -71,7 +71,7 @@ The diagnosis must classify the cause: bad input, wrong tool choice, weak prompt
 	)
 	res, err := a.ChatWithTools(ctx, workflow.LLMChatRequest{
 		SessionID: runID,
-		Role:      "planner",
+		Task:      model.ModelSelectAnalysis,
 		System:    "You are the run analyst inside MyAgent. Diagnose from evidence, not guesses. Identify one root cause and explain the smallest fix. The response is advisory only; never claim that a change was applied.",
 		Messages:  []llm.Message{{Role: "user", Content: prompt}},
 		OutputSchema: map[string]any{
@@ -91,7 +91,7 @@ The diagnosis must classify the cause: bad input, wrong tool choice, weak prompt
 	data, _ := res.Data.(map[string]any)
 	if data == nil {
 		return model.RunAnalysis{}, errors.New(
-			"the model did not return a structured diagnosis; use a stronger planner model",
+			"the model did not return a structured diagnosis; use a stronger model",
 		)
 	}
 	analysis := model.RunAnalysis{

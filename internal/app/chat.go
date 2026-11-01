@@ -245,7 +245,7 @@ func (a *App) runAssistant(convID, userText string) {
 		a.chatMu.Unlock()
 	}()
 
-	prof, _, err := a.ModelProfileForRole(ctx, "executor")
+	prof, _, err := a.ModelForTask(ctx, model.ModelSelectChat)
 	if err != nil {
 		a.saveAssistantText(
 			convID,
@@ -301,7 +301,6 @@ func (a *App) runAssistant(convID, userText string) {
 		a.Bus.EmitNoErr(model.Event{Stream: model.ConvStream(convID), Type: "llm.request",
 			Payload: a.mustPayload(
 				map[string]any{
-					"role":          "executor",
 					"model":         prof.Model,
 					"step":          step + 1,
 					"max_steps":     settings.AgentMaxSteps,
@@ -312,7 +311,7 @@ func (a *App) runAssistant(convID, userText string) {
 			)})
 		res, err := a.ChatWithTools(ctx, workflow.LLMChatRequest{
 			SessionID: convID,
-			Role:      "executor",
+			Model:     prof.ID,
 			System:    system,
 			Messages:  messages,
 			Tools:     toolSet.Defs,
@@ -824,7 +823,7 @@ func (a *App) GenerateConversationTitle(
 	temperature := 0.2
 	res, err := a.ChatWithTools(ctx, workflow.LLMChatRequest{
 		SessionID: conversationID,
-		Role:      "cheap",
+		Task:      model.ModelSelectChatTitle,
 		System: "You name chat conversations. Reply with a concise title of at most 6 words. " +
 			"Use title case, no quotes, no trailing punctuation, and no explanation.",
 		Messages: []llm.Message{{

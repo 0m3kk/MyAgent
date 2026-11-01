@@ -56,7 +56,7 @@ func TestOrganizeLibraryWithAgent(t *testing.T) {
 	}
 	defer a.Close()
 	if _, err := a.SaveModelProfile(ctx, model.ModelProfile{
-		Name: "fake", BaseURL: llmSrv.URL + "/v1", Model: "fake", Role: "planner",
+		Name: "fake", BaseURL: llmSrv.URL + "/v1", Model: "fake",
 	}, ""); err != nil {
 		t.Fatal(err)
 	}

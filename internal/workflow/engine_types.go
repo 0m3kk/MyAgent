@@ -59,7 +59,8 @@ type LLMChatRequest struct {
 	RunID        string
 	StepID       string
 	SessionID    string
-	Role         string
+	Model        string
+	Task         string
 	System       string
 	Messages     []llm.Message
 	Tools        []llm.ToolDef

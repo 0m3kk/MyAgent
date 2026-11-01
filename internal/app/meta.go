@@ -540,6 +540,7 @@ func (a *App) executeMetaTool(
 		}, nil
 	case "get_environment":
 		profiles, _ := a.Store.ListModelProfiles(ctx)
+		defaultID := a.GetSettings().DefaultModelID
 		mods := []map[string]any{}
 		for _, p := range profiles {
 			mods = append(
@@ -547,8 +548,8 @@ func (a *App) executeMetaTool(
 				map[string]any{
 					"name":     p.Name,
 					"model":    p.Model,
-					"role":     p.Role,
 					"base_url": p.BaseURL,
+					"default":  p.ID == defaultID,
 				},
 			)
 		}

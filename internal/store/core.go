@@ -85,7 +85,7 @@ func (s *Store) SetSetting(ctx context.Context, key, value string) error {
 func (s *Store) ListModelProfiles(ctx context.Context) ([]model.ModelProfile, error) {
 	rows, err := s.db.QueryContext(
 		ctx,
-		`SELECT id,name,base_url,model,role,params,capabilities,COALESCE(secret_id,''),created_at,updated_at
+		`SELECT id,name,base_url,model,params,capabilities,COALESCE(secret_id,''),created_at,updated_at
 		FROM model_profiles ORDER BY created_at`,
 	)
 	if err != nil {
@@ -101,7 +101,6 @@ func (s *Store) ListModelProfiles(ctx context.Context) ([]model.ModelProfile, er
 			&p.Name,
 			&p.BaseURL,
 			&p.Model,
-			&p.Role,
 			&params,
 			&caps,
 			&p.SecretID,
@@ -120,20 +119,9 @@ func (s *Store) ListModelProfiles(ctx context.Context) ([]model.ModelProfile, er
 func (s *Store) GetModelProfile(ctx context.Context, id string) (model.ModelProfile, error) {
 	var p model.ModelProfile
 	var params, caps string
-	err := s.db.QueryRowContext(ctx, `SELECT id,name,base_url,model,role,params,capabilities,COALESCE(secret_id,''),created_at,updated_at
+	err := s.db.QueryRowContext(ctx, `SELECT id,name,base_url,model,params,capabilities,COALESCE(secret_id,''),created_at,updated_at
 		FROM model_profiles WHERE id = ?`, id).
-		Scan(&p.ID, &p.Name, &p.BaseURL, &p.Model, &p.Role, &params, &caps, &p.SecretID, &p.CreatedAt, &p.UpdatedAt)
-	p.Params = json.RawMessage(mustJSON(params))
-	p.Capabilities = json.RawMessage(mustJSON(caps))
-	return p, fmtErr("model profile", err)
-}
-
-func (s *Store) GetModelByRole(ctx context.Context, role string) (model.ModelProfile, error) {
-	var p model.ModelProfile
-	var params, caps string
-	err := s.db.QueryRowContext(ctx, `SELECT id,name,base_url,model,role,params,capabilities,COALESCE(secret_id,''),created_at,updated_at
-		FROM model_profiles WHERE role = ? ORDER BY created_at LIMIT 1`, role).
-		Scan(&p.ID, &p.Name, &p.BaseURL, &p.Model, &p.Role, &params, &caps, &p.SecretID, &p.CreatedAt, &p.UpdatedAt)
+		Scan(&p.ID, &p.Name, &p.BaseURL, &p.Model, &params, &caps, &p.SecretID, &p.CreatedAt, &p.UpdatedAt)
 	p.Params = json.RawMessage(mustJSON(params))
 	p.Capabilities = json.RawMessage(mustJSON(caps))
 	return p, fmtErr("model profile", err)
@@ -157,16 +145,15 @@ func (s *Store) UpsertModelProfile(
 	}
 	_, err := s.db.ExecContext(
 		ctx,
-		`INSERT INTO model_profiles (id,name,base_url,model,role,params,capabilities,secret_id,created_at,updated_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?)
+		`INSERT INTO model_profiles (id,name,base_url,model,params,capabilities,secret_id,created_at,updated_at)
+		VALUES (?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(id) DO UPDATE SET name=excluded.name, base_url=excluded.base_url, model=excluded.model,
-			role=excluded.role, params=excluded.params, capabilities=excluded.capabilities,
+			params=excluded.params, capabilities=excluded.capabilities,
 			secret_id=excluded.secret_id, updated_at=excluded.updated_at`,
 		p.ID,
 		p.Name,
 		p.BaseURL,
 		p.Model,
-		p.Role,
 		string(p.Params),
 		string(p.Capabilities),
 		nullString(p.SecretID),

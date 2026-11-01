@@ -281,5 +281,14 @@ func (a *App) validateOptions(ctx context.Context, forRun bool) workflow.Validat
 			wfMap[fmt.Sprintf("%s@%d", w.Name, w.Version.Version)] = true
 		}
 	}
-	return workflow.ValidateOptions{Tools: toolsMap, Workflows: wfMap, ForRun: forRun}
+	modelMap := map[string]bool{}
+	profiles, _ := a.Store.ListModelProfiles(ctx)
+	for _, p := range profiles {
+		modelMap[p.ID] = true
+		modelMap[p.Name] = true
+		modelMap[p.Model] = true
+	}
+	return workflow.ValidateOptions{
+		Tools: toolsMap, Workflows: wfMap, Models: modelMap, ForRun: forRun,
+	}
 }

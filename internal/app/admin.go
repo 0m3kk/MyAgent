@@ -226,9 +226,6 @@ func (a *App) SaveModelProfile(
 	if strings.TrimSpace(p.Name) == "" {
 		p.Name = p.Model
 	}
-	if p.Role == "" {
-		p.Role = "executor"
-	}
 	if apiKey != "" {
 		secretName := "MODEL_" + strings.ToUpper(sanitizeIdent(p.Name)) + "_API_KEY"
 		meta, err := a.Secrets.Put(
@@ -245,7 +242,21 @@ func (a *App) SaveModelProfile(
 		}
 		p.SecretID = meta.ID
 	}
-	return a.Store.UpsertModelProfile(ctx, p)
+	saved, err := a.Store.UpsertModelProfile(ctx, p)
+	if err != nil {
+		return saved, err
+	}
+	// The first profile becomes the default so chat and workflows work without
+	// an extra settings step.
+	if a.GetSettings().DefaultModelID == "" {
+		if _, err := a.UpdateSettings(
+			ctx,
+			map[string]any{"default_model_id": saved.ID},
+		); err != nil {
+			return saved, err
+		}
+	}
+	return saved, nil
 }
 
 func (a *App) ProbeModel(ctx context.Context, id string) (llm.Capabilities, error) {
@@ -262,7 +273,7 @@ func (a *App) ProbeModel(ctx context.Context, id string) (llm.Capabilities, erro
 	caps := a.LLM.Probe(pctx, prof)
 	raw, _ := json.Marshal(caps)
 	_, err = a.Store.UpsertModelProfile(ctx, model.ModelProfile{
-		ID: p.ID, Name: p.Name, BaseURL: p.BaseURL, Model: p.Model, Role: p.Role,
+		ID: p.ID, Name: p.Name, BaseURL: p.BaseURL, Model: p.Model,
 		Params: p.Params, Capabilities: raw, SecretID: p.SecretID, CreatedAt: p.CreatedAt,
 	})
 	if err != nil {
@@ -284,11 +295,48 @@ func (a *App) profileToLLM(
 		apiKey = val
 	}
 	return p, llm.Profile{ID: p.ID, Name: p.Name, BaseURL: p.BaseURL, Model: p.Model,
-		Role: p.Role, Params: profileParams(p), APIKey: apiKey, SecretID: p.SecretID}, nil
+		Params: profileParams(p), APIKey: apiKey, SecretID: p.SecretID}, nil
 }
 
 func (a *App) DeleteModelProfile(ctx context.Context, id string) error {
-	return a.Store.DeleteModelProfile(ctx, id)
+	p, _ := a.Store.GetModelProfile(ctx, id)
+	if err := a.Store.DeleteModelProfile(ctx, id); err != nil {
+		return err
+	}
+	settings := a.GetSettings()
+	patch := map[string]any{}
+	if settings.DefaultModelID == id {
+		remaining, err := a.Store.ListModelProfiles(ctx)
+		if err != nil {
+			return err
+		}
+		next := ""
+		if len(remaining) > 0 {
+			next = remaining[0].ID
+		}
+		patch["default_model_id"] = next
+	}
+	if len(settings.ModelAssignments) > 0 {
+		next := map[string]string{}
+		changed := false
+		for selector, value := range settings.ModelAssignments {
+			if value == id ||
+				(p.ID != "" && (strings.EqualFold(value, p.Model) ||
+					strings.EqualFold(value, p.Name))) {
+				changed = true
+				continue
+			}
+			next[selector] = value
+		}
+		if changed {
+			patch["model_assignments"] = next
+		}
+	}
+	if len(patch) == 0 {
+		return nil
+	}
+	_, err := a.UpdateSettings(ctx, patch)
+	return err
 }
 
 // ---- secrets ----

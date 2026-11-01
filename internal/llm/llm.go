@@ -87,7 +87,6 @@ type Profile struct {
 	Name     string
 	BaseURL  string
 	Model    string
-	Role     string
 	Params   map[string]any
 	APIKey   string
 	SecretID string

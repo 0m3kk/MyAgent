@@ -217,6 +217,19 @@ func TestEndToEndAPI(t *testing.T) {
 		t.Fatalf("settings not persisted: %+v", settings)
 	}
 
+	// Per-feature model assignments are persisted as a map.
+	c.must("PATCH", "/api/settings", map[string]any{
+		"model_assignments": map[string]any{"chat": "gpt-4.1", "unknown": "ignored"},
+	})
+	settings = c.must("GET", "/api/settings", nil)
+	assignments, _ := settings["model_assignments"].(map[string]any)
+	if assignments["chat"] != "gpt-4.1" {
+		t.Fatalf("model assignments not persisted: %+v", settings)
+	}
+	if _, ok := assignments["unknown"]; ok {
+		t.Fatalf("unknown selectors should be dropped: %+v", assignments)
+	}
+
 	// Step limits allow arbitrary values and -1 for unlimited; 0 falls back to
 	// the default so missing/legacy values stay finite.
 	c.must("PATCH", "/api/settings", map[string]any{"agent_max_steps": -1})
@@ -323,7 +336,7 @@ func TestEndToEndAPI(t *testing.T) {
 	}))
 	defer llmSrv.Close()
 	if _, err := a.SaveModelProfile(ctx, model.ModelProfile{
-		Name: "fake", BaseURL: llmSrv.URL + "/v1", Model: "fake", Role: "planner",
+		Name: "fake", BaseURL: llmSrv.URL + "/v1", Model: "fake",
 	}, ""); err != nil {
 		t.Fatal(err)
 	}
@@ -374,7 +387,7 @@ func TestConcurrentChats(t *testing.T) {
 	}
 	defer a.Close()
 	if _, err := a.SaveModelProfile(ctx, model.ModelProfile{
-		Name: "fake", BaseURL: llmSrv.URL + "/v1", Model: "fake", Role: "executor",
+		Name: "fake", BaseURL: llmSrv.URL + "/v1", Model: "fake",
 	}, ""); err != nil {
 		t.Fatal(err)
 	}
@@ -498,7 +511,7 @@ func TestGenerateTitleFallsBackWhenModelReturnsEmpty(t *testing.T) {
 	}
 	defer a.Close()
 	if _, err := a.SaveModelProfile(ctx, model.ModelProfile{
-		Name: "fake", BaseURL: llmSrv.URL + "/v1", Model: "fake", Role: "executor",
+		Name: "fake", BaseURL: llmSrv.URL + "/v1", Model: "fake",
 	}, ""); err != nil {
 		t.Fatal(err)
 	}

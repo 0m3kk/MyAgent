@@ -95,7 +95,7 @@ func (a *App) OrganizeLibrary(ctx context.Context, kind string) (OrganizeResult,
 	if len(items) == 0 {
 		return OrganizeResult{}, fmt.Errorf("there are no %ss to organize", kind)
 	}
-	_, llmProfile, err := a.ModelProfileForRole(ctx, "planner")
+	_, llmProfile, err := a.ModelForTask(ctx, model.ModelSelectOrganize)
 	if err != nil {
 		return OrganizeResult{}, err
 	}

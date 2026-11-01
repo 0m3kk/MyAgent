@@ -9,6 +9,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"myagent/internal/llm"
+	"myagent/internal/model"
 	"myagent/internal/workflow"
 )
 
@@ -20,8 +21,9 @@ type toolCallRecord struct {
 }
 
 // SaveChatAsWorkflow turns the successful tool chain from a conversation into a
-// validated draft workflow. It uses the planner when available and falls back
-// to a deterministic chain so the button still works offline.
+// validated draft workflow. It uses the model assigned to workflow authoring
+// when available, then the default model, and falls back to a deterministic
+// chain so the button still works offline.
 func (a *App) SaveChatAsWorkflow(
 	ctx context.Context,
 	convID, requestedName string,
@@ -77,9 +79,9 @@ func (a *App) SaveChatAsWorkflow(
 	if requestedName == "" {
 		requestedName = slugify(firstNonEmpty(conv.Title, requestText, "chat-workflow"))
 	}
-	// Try the planner first. It parameterizes and explains better than the
-	// offline fallback.
-	if profileOK, _ := a.hasPlanner(ctx); profileOK {
+	// Try the configured default model first. It parameterizes and explains
+	// better than the offline fallback.
+	if profileOK, _ := a.hasModel(ctx); profileOK {
 		if res, err := a.llmAuthorWorkflow(
 			ctx,
 			conv.ID,
@@ -93,8 +95,8 @@ func (a *App) SaveChatAsWorkflow(
 	return a.heuristicWorkflow(ctx, requestedName, calls)
 }
 
-func (a *App) hasPlanner(ctx context.Context) (bool, error) {
-	p, _, err := a.ModelProfileForRole(ctx, "planner")
+func (a *App) hasModel(ctx context.Context) (bool, error) {
+	p, _, err := a.ModelForTask(ctx, model.ModelSelectWorkflowAuthor)
 	if err != nil {
 		return false, err
 	}
@@ -115,6 +117,7 @@ Rules:
 - Use tool steps with the exact input schemas; you may call describe_tool if needed.
 - Insert an approval step before any write or external step.
 - Prefer tool and set steps over llm steps unless the task itself requires language work.
+- Leave model unset to use the default model. Set llm.model or agent.model only when the step needs a specific configured model.
 - The workflow must be valid and runnable.`
 	prompt := fmt.Sprintf(
 		"Name: %s\nOriginal request: %s\n\nSuccessful tool calls (in order):\n%s\n\nGenerate the workflow YAML. Keep it minimal.",
@@ -124,7 +127,7 @@ Rules:
 	)
 	res, err := a.ChatWithTools(ctx, workflow.LLMChatRequest{
 		SessionID: sessionID,
-		Role:      "planner",
+		Task:      model.ModelSelectWorkflowAuthor,
 		System:    system,
 		Messages:  []llm.Message{{Role: "user", Content: prompt}},
 		OutputSchema: map[string]any{"type": "object", "required": []any{"yaml"},
@@ -145,7 +148,7 @@ Rules:
 		}
 	}
 	if yamlText == "" {
-		return SaveWorkflowResult{}, fmt.Errorf("planner returned no YAML")
+		return SaveWorkflowResult{}, fmt.Errorf("model returned no YAML")
 	}
 	// One repair pass with structured diagnostics.
 	resSave, err := a.SaveWorkflowDraft(ctx, yamlText, "Saved from chat: "+request, "agent", 0)
@@ -158,7 +161,7 @@ Rules:
 		string(diagnostics),
 	)
 	res2, err := a.ChatWithTools(ctx, workflow.LLMChatRequest{
-		SessionID: sessionID, Role: "planner", System: system,
+		SessionID: sessionID, Task: model.ModelSelectWorkflowAuthor, System: system,
 		Messages: []llm.Message{
 			{Role: "user", Content: prompt},
 			{Role: "assistant", Content: "```yaml\n" + yamlText + "\n```"},
@@ -176,7 +179,7 @@ Rules:
 		fixed, _ = data2["yaml"].(string)
 	}
 	if fixed == "" {
-		return resSave, fmt.Errorf("planner could not repair the workflow")
+		return resSave, fmt.Errorf("model could not repair the workflow")
 	}
 	return a.SaveWorkflowDraft(ctx, fixed, "Saved from chat: "+request, "agent", 0)
 }

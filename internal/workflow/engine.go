@@ -98,8 +98,8 @@ func (e *Engine) Run(ctx context.Context, spec *Spec, req RunRequest) RunResult 
 			"source": req.Source,
 		},
 	}
-	if spec.Defaults.Role != "" {
-		env.Vars = map[string]any{"default_role": spec.Defaults.Role}
+	if spec.Defaults.Model != "" {
+		env.Vars = map[string]any{"default_model": spec.Defaults.Model}
 	}
 
 	stepOutputs, statuses, execErr := ex.executeList(ctx2, spec.Steps, env, "", 0)

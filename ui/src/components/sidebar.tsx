@@ -135,7 +135,7 @@ export function Sidebar({
           <span className="model-orb" />
           <div>
             <strong>{defaultModel?.name || 'No model'}</strong>
-            <span>{defaultModel ? `${defaultModel.model} · ${defaultModel.role}` : 'Open settings to add one'}</span>
+            <span>{defaultModel ? defaultModel.model : 'Open settings to add one'}</span>
           </div>
           <span className={`model-status ${defaultModel ? 'ok' : 'missing'}`} />
         </div>

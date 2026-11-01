@@ -52,7 +52,9 @@ type BudgetSpec struct {
 type Defaults struct {
 	Timeout string     `yaml:"timeout,omitempty" json:"timeout,omitempty"`
 	Retry   *RetrySpec `yaml:"retry,omitempty"   json:"retry,omitempty"`
-	Role    string     `yaml:"role,omitempty"    json:"role,omitempty"`
+	Model   string     `yaml:"model,omitempty"   json:"model,omitempty"`
+	// Role is accepted for older workflows and ignored. Use Model instead.
+	Role string `yaml:"role,omitempty" json:"role,omitempty"`
 }
 
 type RetrySpec struct {
@@ -84,6 +86,8 @@ type Step struct {
 }
 
 type LLMSpec struct {
+	Model string `yaml:"model,omitempty" json:"model,omitempty"`
+	// Role is accepted for older workflows and ignored. Use Model instead.
 	Role         string         `yaml:"role,omitempty"          json:"role,omitempty"`
 	Prompt       string         `yaml:"prompt"                  json:"prompt"`
 	System       string         `yaml:"system,omitempty"        json:"system,omitempty"`
@@ -93,6 +97,8 @@ type LLMSpec struct {
 }
 
 type AgentSpec struct {
+	Model string `yaml:"model,omitempty" json:"model,omitempty"`
+	// Role is accepted for older workflows and ignored. Use Model instead.
 	Role         string         `yaml:"role,omitempty"          json:"role,omitempty"`
 	Goal         string         `yaml:"goal"                    json:"goal"`
 	System       string         `yaml:"system,omitempty"        json:"system,omitempty"`
@@ -179,17 +185,17 @@ func (s *Spec) EffectiveRetry(step *Step) *RetrySpec {
 	return s.Defaults.Retry
 }
 
-func (s *Spec) EffectiveRole(step *Step) string {
-	if step != nil && step.LLM != nil && step.LLM.Role != "" {
-		return step.LLM.Role
+func (s *Spec) EffectiveModel(step *Step) string {
+	if step != nil && step.LLM != nil && step.LLM.Model != "" {
+		return step.LLM.Model
 	}
-	if step != nil && step.Agent != nil && step.Agent.Role != "" {
-		return step.Agent.Role
+	if step != nil && step.Agent != nil && step.Agent.Model != "" {
+		return step.Agent.Model
 	}
-	if s.Defaults.Role != "" {
-		return s.Defaults.Role
+	if s.Defaults.Model != "" {
+		return s.Defaults.Model
 	}
-	return "executor"
+	return ""
 }
 
 func (s *Spec) ValidateBasic() error {
@@ -282,12 +288,15 @@ func (st *Step) Summary() string {
 	case "tool":
 		return st.Tool
 	case "llm":
-		role := st.LLM.Role
-		if role == "" {
-			role = "executor"
+		model := st.LLM.Model
+		if model == "" {
+			return "llm"
 		}
-		return "llm:" + role
+		return "llm:" + model
 	case "agent":
+		if st.Agent.Model != "" {
+			return "agent:" + st.Agent.Model
+		}
 		return "agent"
 	case "set":
 		return "set"

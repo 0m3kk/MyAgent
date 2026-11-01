@@ -64,7 +64,7 @@ function StepNode({ data }: NodeProps<Node<NodeData>>) {
   const kind = stepKind(step)
   const summary =
     kind === 'tool' ? step.tool :
-    kind === 'llm' ? `llm · ${step.llm?.role || 'executor'}` :
+    kind === 'llm' ? `llm · ${step.llm?.model || 'default model'}` :
     kind === 'agent' ? `agent · max ${step.agent?.max_steps || 8}` :
     kind === 'map' ? `over ${String(step.map?.over || '').replace(/^\$\{|\}$/g, '')}` :
     kind === 'branch' ? `${step.branch?.cases?.length || 0} case(s)` :

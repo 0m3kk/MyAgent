@@ -26,6 +26,7 @@ export interface Settings {
   agent_budget_tokens: number
   notifications: boolean
   default_model_id: string
+  model_assignments: Record<string, string>
   theme: string
   font_scale: number
   retention_days: number
@@ -37,7 +38,6 @@ export interface ModelProfile {
   name: string
   base_url: string
   model: string
-  role: string
   params: Record<string, unknown>
   capabilities: Record<string, unknown>
   secret_id?: string
@@ -165,8 +165,8 @@ export interface StepSpec {
   side_effect?: string
   tool?: string
   with?: Record<string, unknown>
-  llm?: { role?: string; prompt: string; system?: string; output_schema?: Record<string, unknown>; max_tokens?: number; temperature?: number }
-  agent?: { role?: string; goal: string; tools?: string[]; max_steps?: number; output_schema?: Record<string, unknown> }
+  llm?: { model?: string; prompt: string; system?: string; output_schema?: Record<string, unknown>; max_tokens?: number; temperature?: number }
+  agent?: { model?: string; goal: string; tools?: string[]; max_steps?: number; output_schema?: Record<string, unknown> }
   set?: Record<string, unknown>
   branch?: { cases?: { when: string; do: StepSpec[] }[]; else?: StepSpec[] }
   map?: { over: string; as?: string; do: StepSpec[]; concurrency?: number }
@@ -187,7 +187,7 @@ export interface WorkflowSpec {
     budget?: { max_cost_usd?: number; max_tokens?: number }
     timeout?: string
   }
-  defaults?: { timeout?: string; retry?: { max: number; backoff?: string; delay?: string }; role?: string }
+  defaults?: { timeout?: string; retry?: { max: number; backoff?: string; delay?: string }; model?: string }
   steps: StepSpec[]
 }
 

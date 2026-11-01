@@ -160,3 +160,70 @@ steps:
 		t.Fatalf("unexpected errors: %+v", res.Errors)
 	}
 }
+
+func TestModelNameValidation(t *testing.T) {
+	yaml := `schema: 1
+name: model-test
+defaults:
+  model: fast-model
+steps:
+  - id: summarize
+    llm:
+      model: strong-model
+      prompt: Summarize this
+`
+	spec, err := Parse([]byte(yaml))
+	if err != nil {
+		t.Fatal(err)
+	}
+	res := Validate(spec, ValidateOptions{Models: map[string]bool{"fast-model": true}})
+	if res.OK() {
+		t.Fatal("expected an unknown model error")
+	}
+	found := false
+	for _, e := range res.Errors {
+		if e.Path == "steps[0].llm.model" && strings.Contains(e.Message, "strong-model") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("errors = %+v", res.Errors)
+	}
+
+	res = Validate(spec, ValidateOptions{
+		Models: map[string]bool{"fast-model": true, "strong-model": true},
+	})
+	if !res.OK() {
+		t.Fatalf("unexpected errors: %+v", res.Errors)
+	}
+}
+
+func TestLegacyRoleStillParsesAndWarns(t *testing.T) {
+	yaml := `schema: 1
+name: legacy-role
+defaults:
+  role: executor
+steps:
+  - id: summarize
+    llm:
+      role: planner
+      prompt: Summarize this
+`
+	spec, err := Parse([]byte(yaml))
+	if err != nil {
+		t.Fatal(err)
+	}
+	res := Validate(spec, ValidateOptions{})
+	if !res.OK() {
+		t.Fatalf("legacy role should not block validation: %+v", res.Errors)
+	}
+	count := 0
+	for _, w := range res.Warnings {
+		if w.Code == "W005" {
+			count++
+		}
+	}
+	if count != 2 {
+		t.Fatalf("expected two deprecation warnings, got %+v", res.Warnings)
+	}
+}

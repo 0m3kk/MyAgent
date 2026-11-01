@@ -108,7 +108,6 @@ func (s *Server) handleSaveModel(w http.ResponseWriter, r *http.Request) {
 	name, _ := body["name"].(string)
 	baseURL, _ := body["base_url"].(string)
 	modelName, _ := body["model"].(string)
-	role, _ := body["role"].(string)
 	apiKey, _ := body["api_key"].(string)
 	if baseURL == "" || modelName == "" {
 		writeError(w, http.StatusBadRequest, "base_url and model are required", nil)
@@ -127,7 +126,6 @@ func (s *Server) handleSaveModel(w http.ResponseWriter, r *http.Request) {
 		Name:         name,
 		BaseURL:      baseURL,
 		Model:        modelName,
-		Role:         role,
 		Params:       paramsRaw,
 		Capabilities: caps,
 		SecretID:     existing.SecretID,

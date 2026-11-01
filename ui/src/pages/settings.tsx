@@ -38,6 +38,15 @@ type Tab = 'general' | 'models' | 'secrets'
 
 const UNLIMITED_STEPS = -1
 
+const MODEL_TASKS = [
+  { key: 'chat', label: 'Chat', hint: 'The main conversation loop.' },
+  { key: 'workflow_author', label: 'Workflow authoring', hint: 'Turning a chat into a workflow.' },
+  { key: 'workflow_step', label: 'Workflow LLM steps', hint: 'LLM and agent steps without an explicit model: in YAML.' },
+  { key: 'analysis', label: 'Run analysis', hint: 'Diagnosing a failed or unexpected run.' },
+  { key: 'organize', label: 'Library organizer', hint: 'Organize with agent.' },
+  { key: 'chat_title', label: 'Chat titles', hint: 'Naming conversations.' },
+]
+
 export function SettingsPage({ sub }: { sub?: string[] }) {
   const { data, refresh } = useApp()
   const toast = useToast()
@@ -100,7 +109,7 @@ export function SettingsPage({ sub }: { sub?: string[] }) {
             try {
               const caps = await api.probeModel(m.id)
               setProbe(caps)
-              toast(caps.tool_calling ? 'Probe passed' : 'Probe finished with limits', caps.tool_calling ? 'Tool calling and streaming detected.' : String(caps.error || 'Tool calling was not detected. The model can still be used as an executor.'), caps.tool_calling ? 'success' : 'info')
+              toast(caps.tool_calling ? 'Probe passed' : 'Probe finished with limits', caps.tool_calling ? 'Tool calling and streaming detected.' : String(caps.error || 'Tool calling was not detected. The model may still work for simple text-only steps.'), caps.tool_calling ? 'success' : 'info')
               void refresh()
             } catch (err) {
               toast('Probe failed', err instanceof Error ? err.message : undefined, 'error')
@@ -274,13 +283,13 @@ function GeneralTab({ onNeedModels }: { onNeedModels: () => void }) {
         </div>
 
         <div className="card">
-          <SectionTitle>Models and roles</SectionTitle>
-          <p className="muted small">The default profile handles chat. Role-specific profiles are selected for workflow authoring, execution, judging and cheap summarization.</p>
+          <SectionTitle>Models</SectionTitle>
+          <p className="muted small">The default model handles chat and every workflow step unless a feature assignment or an LLM/agent step sets another model.</p>
           <div className="model-mini-list">
             {data!.model_profiles.map((m) => (
               <div key={m.id} className="model-mini">
                 <span className="model-orb small" />
-                <div><strong>{m.name}</strong><span>{m.model} · {m.role}</span></div>
+                <div><strong>{m.name}</strong><span>{m.model}</span></div>
                 {m.id === data!.settings.default_model_id && <Badge tone="ok">default</Badge>}
               </div>
             ))}
@@ -330,6 +339,8 @@ function ModelsTab({ onAdd, onEdit, onProbe }: { onAdd: () => void; onEdit: (m: 
   const confirm = useConfirm()
   const [busy, setBusy] = useState<string | null>(null)
   if (!data) return null
+  const assignments = data.settings.model_assignments || {}
+  const defaultModel = data.model_profiles.find((m) => m.id === data.settings.default_model_id) || data.model_profiles[0]
   async function setDefault(m: ModelProfile) {
     setBusy('default-' + m.id)
     try {
@@ -338,6 +349,22 @@ function ModelsTab({ onAdd, onEdit, onProbe }: { onAdd: () => void; onEdit: (m: 
       await refresh()
     } catch (err) {
       toast('Could not change the default model', err instanceof Error ? err.message : undefined, 'error')
+    } finally {
+      setBusy(null)
+    }
+  }
+  async function setTaskModel(selector: string, profileID: string) {
+    const next = { ...assignments }
+    if (profileID) next[selector] = profileID
+    else delete next[selector]
+    const label = MODEL_TASKS.find((task) => task.key === selector)?.label || selector
+    setBusy('task-' + selector)
+    try {
+      await api.updateSettings({ model_assignments: next })
+      toast('Model assignment updated', label, 'success')
+      await refresh()
+    } catch (err) {
+      toast('Could not update the model assignment', err instanceof Error ? err.message : undefined, 'error')
     } finally {
       setBusy(null)
     }
@@ -360,8 +387,38 @@ function ModelsTab({ onAdd, onEdit, onProbe }: { onAdd: () => void; onEdit: (m: 
   return (
     <div className="models-tab">
       <div className="models-top">
-        <div><h2>Model profiles</h2><p>Any OpenAI-compatible endpoint works: OpenAI, OpenRouter, Ollama, LM Studio, vLLM, Groq, DeepSeek and others.</p></div>
+        <div><h2>Model profiles</h2><p>Any OpenAI-compatible endpoint works: OpenAI, OpenRouter, Ollama, LM Studio, vLLM, Groq, DeepSeek and others. The default profile is used everywhere unless a feature or workflow step names another model.</p></div>
         <Button variant="primary" icon={<Plus size={15} />} onClick={onAdd}>Add model</Button>
+      </div>
+      <div className="card task-models-card">
+        <SectionTitle hint="Leave on Default to follow the model marked default above.">Feature models</SectionTitle>
+        <p className="muted small">Choose exactly which model each feature uses. Workflow steps with an explicit <code>model:</code> still win over this setting.</p>
+        <div className="task-model-list">
+          {MODEL_TASKS.map((task) => {
+            const assigned = assignments[task.key]
+            const value = data.model_profiles.some((m) => m.id === assigned) ? assigned : ''
+            return (
+              <div className="task-model-row" key={task.key}>
+                <div className="task-model-copy">
+                  <strong>{task.label}</strong>
+                  <span>{task.hint}</span>
+                </div>
+                <Select
+                  value={value}
+                  onChange={(e) => setTaskModel(task.key, e.target.value)}
+                  disabled={busy !== null}
+                >
+                  <option value="">Default{defaultModel ? ` — ${defaultModel.model}` : ''}</option>
+                  {data.model_profiles.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.model}{m.name && m.name !== m.model ? ` — ${m.name}` : ''}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            )
+          })}
+        </div>
       </div>
       <div className="model-grid">
         {data.model_profiles.map((m) => {
@@ -375,7 +432,6 @@ function ModelsTab({ onAdd, onEdit, onProbe }: { onAdd: () => void; onEdit: (m: 
               </div>
               <div className="profile-card-body">
                 <div className="model-field"><span>Model</span><code>{m.model}</code></div>
-                <div className="model-field"><span>Role</span><Badge>{m.role}</Badge></div>
                 <div className="model-caps">
                   {caps.streaming ? <Badge tone="ok">streaming</Badge> : <Badge tone="muted">no stream probe</Badge>}
                   {caps.tool_calling ? <Badge tone="ok">tool calls</Badge> : <Badge tone="warn">tools not verified</Badge>}
@@ -479,7 +535,6 @@ function ModelModal({ open, model, onClose, onSaved }: { open: boolean; model: M
   const [name, setName] = useState('')
   const [baseURL, setBaseURL] = useState(PRESETS[0].base_url)
   const [modelName, setModelName] = useState(PRESETS[0].model)
-  const [role, setRole] = useState('executor')
   const [apiKey, setAPIKey] = useState('')
   const [sessionHeader, setSessionHeader] = useState('')
   const [busy, setBusy] = useState(false)
@@ -493,7 +548,6 @@ function ModelModal({ open, model, onClose, onSaved }: { open: boolean; model: M
       setName(model.name)
       setBaseURL(model.base_url)
       setModelName(model.model)
-      setRole(model.role)
       const header = (model.params || {}).session_header
       setSessionHeader(typeof header === 'string' ? header : '')
       setPreset('custom')
@@ -501,7 +555,6 @@ function ModelModal({ open, model, onClose, onSaved }: { open: boolean; model: M
       setName('')
       setBaseURL(PRESETS[0].base_url)
       setModelName(PRESETS[0].model)
-      setRole('executor')
       setSessionHeader('')
       setPreset('openai')
     }
@@ -530,7 +583,6 @@ function ModelModal({ open, model, onClose, onSaved }: { open: boolean; model: M
         name: name || modelName,
         base_url: baseURL,
         model: modelName,
-        role,
         api_key: apiKey,
         params,
       })
@@ -557,14 +609,13 @@ function ModelModal({ open, model, onClose, onSaved }: { open: boolean; model: M
       )}
       <div className="settings-form-grid">
         <Field label="Profile name"><TextInput value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. GPT-4.1" /></Field>
-        <Field label="Role" hint="Planner authors workflows; executor runs steps."><Select value={role} onChange={(e) => setRole(e.target.value)}>{['planner', 'executor', 'judge', 'cheap'].map((r) => <option key={r} value={r}>{r}</option>)}</Select></Field>
         <Field label="Base URL" hint="Include /v1 when the provider expects it."><TextInput value={baseURL} onChange={(e) => setBaseURL(e.target.value)} className="mono" /></Field>
-        <Field label="Model"><TextInput value={modelName} onChange={(e) => setModelName(e.target.value)} className="mono" /></Field>
+        <Field label="Model" hint="Workflow steps reference this name in model: to select the profile explicitly."><TextInput value={modelName} onChange={(e) => setModelName(e.target.value)} className="mono" /></Field>
         <Field label="API key" hint={model?.secret_id ? 'Leave blank to keep the current key. A new value overwrites the stored secret.' : 'Stored encrypted; never appears in prompts.'}><TextInput type="password" value={apiKey} onChange={(e) => setAPIKey(e.target.value)} placeholder={model?.secret_id ? '•••••••• (unchanged)' : 'sk-…'} autoComplete="off" /></Field>
         <Field label="Session header" hint="Optional. Use x-opencode-session for OpenCode Go; the app sends a stable per-conversation/run ID."><TextInput value={sessionHeader} onChange={(e) => setSessionHeader(e.target.value)} placeholder="x-opencode-session" className="mono" /></Field>
       </div>
       {error && <div className="form-error">{error}</div>}
-      <InlineNotice tone="info" title="Probe after saving">Use Probe to verify streaming and tool calling before assigning this profile to workflow authoring.</InlineNotice>
+      <InlineNotice tone="info" title="Probe after saving">Use Probe to verify streaming and tool calling. Make the profile default to use it everywhere, or set <code>model:</code> on an LLM/agent step to select it explicitly.</InlineNotice>
     </Modal>
   )
 }

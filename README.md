@@ -104,7 +104,7 @@ Any OpenAI-compatible endpoint works: OpenAI, OpenRouter, Ollama, LM Studio, vLL
 > [!NOTE]
 > **OpenCode Go** sends `x-opencode-session` with a stable per-conversation UUID (chat) or per-run UUID (workflow). The value is never a shared static session. For other gateways, set a custom **Session header** in the model profile.
 
-Model roles: `planner`, `executor`, `judge`, `cheap`. Probe a profile to verify streaming and tool calling before using it for workflow authoring.
+Model selection: set a default profile in **Settings → Models**. Chat and every workflow step use it. **Feature models** in the same tab can assign a different profile to chat, workflow authoring, workflow LLM steps, run analysis, library organization and chat titles. To override a specific LLM or agent step, set `model: <profile-or-model-name>` in the workflow YAML (or `defaults.model` for the whole workflow). Probe a profile to verify streaming and tool calling before using it for workflow authoring.
 
 ## 🛠️ Tasks
 

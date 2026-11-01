@@ -172,7 +172,7 @@ func (ex *executor) runLLM(ctx context.Context, st *Step, path string, env *Env)
 	if err != nil {
 		return nil, fmt.Errorf("system prompt: %w", err)
 	}
-	role := ex.spec.EffectiveRole(st)
+	modelName := ex.spec.EffectiveModel(st)
 	promptStr := toStringValue(prompt)
 	systemStr := toStringValue(system)
 	if st.LLM.OutputSchema != nil {
@@ -186,7 +186,7 @@ func (ex *executor) runLLM(ctx context.Context, st *Step, path string, env *Env)
 		}
 	}
 	ex.emit(ctx, "llm.request", path, map[string]any{
-		"role":          role,
+		"model":         modelName,
 		"prompt":        previewString(promptStr, 4000),
 		"system":        previewString(systemStr, 2000),
 		"output_schema": st.LLM.OutputSchema != nil,
@@ -199,7 +199,8 @@ func (ex *executor) runLLM(ctx context.Context, st *Step, path string, env *Env)
 		RunID:        ex.req.RunID,
 		StepID:       path,
 		SessionID:    ex.req.RunID,
-		Role:         role,
+		Model:        modelName,
+		Task:         model.ModelSelectWorkflowStep,
 		System:       systemStr,
 		Messages:     []llm.Message{{Role: "user", Content: promptStr}},
 		OutputSchema: st.LLM.OutputSchema,
@@ -222,7 +223,6 @@ func (ex *executor) runLLM(ctx context.Context, st *Step, path string, env *Env)
 	}
 	ex.emit(ctx, "llm.finished", path, map[string]any{
 		"model":         res.Model,
-		"role":          role,
 		"usage":         map[string]any{"in": res.TokensIn, "out": res.TokensOut},
 		"cost_micro":    res.CostMicro,
 		"finish_reason": res.Finish,
@@ -535,7 +535,7 @@ func (ex *executor) runAgent(ctx context.Context, st *Step, path string, env *En
 	if err != nil {
 		return nil, err
 	}
-	role := ex.spec.EffectiveRole(st)
+	modelName := ex.spec.EffectiveModel(st)
 	defs := []llm.ToolDef{}
 	for _, ref := range st.Agent.Tools {
 		b, err := ex.resolveBinding(ctx, ref)
@@ -576,14 +576,15 @@ func (ex *executor) runAgent(ctx context.Context, st *Step, path string, env *En
 			ctx,
 			"llm.request",
 			path+":agent",
-			map[string]any{"role": role, "step": step + 1, "tools": len(defs)},
+			map[string]any{"model": modelName, "step": step + 1, "tools": len(defs)},
 			nil,
 		)
 		res, err := ex.e.LLM.ChatWithTools(ctx, LLMChatRequest{
 			RunID:     ex.req.RunID,
 			StepID:    path + ":agent",
 			SessionID: ex.req.RunID,
-			Role:      role,
+			Model:     modelName,
+			Task:      model.ModelSelectWorkflowStep,
 			System:    systemStr,
 			Messages:  messages,
 			Tools:     defs,

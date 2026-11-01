@@ -30,7 +30,7 @@ Version 1 · macOS · Go core + native shell + React · OpenAI-compatible
 | Run | One workflow execution: version, inputs, status, timing, cost |
 | StepRun | One step inside a Run: input, output, logs, errors, retry count |
 | Event | Append-only log (`run_id`, `seq`, `ts`). Source for UI, trace and run analysis |
-| ModelProfile | base_url, model name, role (planner, executor, judge), API key reference to secrets |
+| ModelProfile | base_url, model name, API key reference to secrets |
 
 Two additional entities: **Secret** (name, type, description, allowed tools, expiry; **the value is encrypted with AES-256-GCM and stored in SQLite**, with the master key outside the database) and **Trigger** (how a workflow or tool starts: manual, schedule, file watcher, shortcut, CLI, webhook). Each activation creates a Run with a `source` field (chat, manual, schedule, watcher, cli).
 
@@ -46,8 +46,8 @@ Three regions: **left sidebar** (Chats, Workflows, Tools, Runs, Settings), **cha
 2. **Workflow canvas (React Flow).** Edit and Run modes. Nodes are steps; edges are dependencies. During a run, nodes change color by status and active edges animate. Clicking a node opens the right inspector with tabs: Input, Output, Logs, Trace, Cost. The user can also chat to edit the workflow; the agent proposes a diff and the user approves it.
 3. **Tool inspector.** Code (CodeMirror), schema, declared permissions, tests, version history with diffs, and terminal-style output (xterm.js) for trial runs. The Tools and Workflows lists share nested folders, pinning, status filters and sorting so large libraries stay navigable; **Organize with agent** asks the configured model to propose and apply a tidy folder structure without deleting or renaming existing folders.
 4. **Run history.** Table filtered by workflow, status and date. Compare two runs side by side, rerun from a step, and open an on-demand **Analyze** view.
-5. **Run analysis.** The Analyze button sends the run trace to the planner and returns a root cause, the smallest suggested fix and optional YAML. The result is advisory only: it is not stored and never changes a workflow version.
-6. **Settings.** Model profiles and roles, capability probing, authorized folders, approval policy and token budgets.
+5. **Run analysis.** The Analyze button sends the run trace to the default model and returns a root cause, the smallest suggested fix and optional YAML. The result is advisory only: it is not stored and never changes a workflow version.
+6. **Settings.** Model profiles, the default model, per-feature model assignments, capability probing, authorized folders, approval policy and token budgets.
 
 ### 3.3 Node status colors
 
@@ -136,8 +136,8 @@ Once a tool or workflow is approved, chat is no longer the only entry point; it 
 ### 5.1 LLM gateway
 
 - `openai-go` with a custom `base_url`. Supports OpenAI, OpenRouter, Ollama, LM Studio, vLLM, Groq, DeepSeek and other compatible providers.
-- **Capability probe** when adding a model: streaming, tool calling, parallel tool calls, JSON schema output, context length. The result determines which roles a model can fill.
-- **Roles:** planner (strong, authors workflows/tools and diagnoses runs), executor (cheap, runs steps), judge (scores rubric tasks), cheap (summaries, titles).
+- **Capability probe** when adding a model: streaming, tool calling, parallel tool calls, JSON schema output, context length. Warn in the UI when a model cannot call tools.
+- **Selection:** one default model handles chat and workflow runs. Settings can assign a specific profile to chat, workflow authoring, workflow LLM steps, run analysis, library organization and chat titles. An LLM or agent step can set `model:` (profile name or provider model ID), and the workflow can set `defaults.model`; otherwise the feature assignment or default profile is used.
 - Retry with backoff, rate limiting, fallback models, token/cost accounting per call, and per-run budget limits.
 
 ### 5.2 Agent runtime
@@ -170,7 +170,6 @@ steps:
     with: { path: '${inputs.folder}' }
   - id: summarize
     llm:
-      role: executor
       prompt: 'Summarize these files: ${steps.list.output}'
     needs: [list]
   - id: review
@@ -214,7 +213,7 @@ Run history is built from persisted events: status, step outcomes, cost, latency
 **Analysis flow**
 
 1. **Collect:** load the workflow version, run metadata, step summary and a bounded trace of non-delta events.
-2. **Diagnose:** the planner classifies one root cause: bad input, wrong tool choice, weak prompt, tool bug, model limit or flaky external service.
+2. **Diagnose:** the model classifies one root cause: bad input, wrong tool choice, weak prompt, tool bug, model limit or flaky external service.
 3. **Suggest:** return the smallest fix, the expected effect and optional corrected YAML.
 4. **Decide:** the user reads the result in a modal and decides whether to edit the workflow manually. Analysis never writes to the database, applies a patch or changes a version.
 
@@ -325,12 +324,12 @@ Browser/computer-use tools, webhook triggers, workflow import/export and templat
 
 | Risk | Mitigation |
 | --- | --- |
-| Weak tool-calling models | Probe when adding models, assign roles by capability, warn clearly in the UI |
+| Weak tool-calling models | Probe when adding models, warn clearly in the UI, and keep them out of authoring workflows |
 | Agent generates invalid workflows | Static validator, self-repair loop, few-shot examples and templates |
 | Tool escapes the sandbox or is prompt-injected | Least-privilege manifests, first-run approval, treat external data as untrusted, sandbox escape tests |
 | `sandbox-exec` is removed in the future | Put it behind a `Sandbox` interface and track Apple Containerization |
 | Native shell coupling | Keep `/app` thin and the Go core shell-agnostic behind HTTP + SSE |
-| Token costs explode | Per-run and per-analysis budgets, cheap executor models |
+| Token costs explode | Per-run and per-analysis budgets, cheaper models for simple steps |
 | Scope creep | Follow the phase order and each phase's exit criteria |
 
 ## 9. Open decisions
@@ -368,7 +367,7 @@ PRAGMA busy_timeout = 5000;
 | Group | Table | Main columns | Notes |
 | --- | --- | --- | --- |
 | Config | `workspaces` | id, name, root_path | root_path is the authorized folder |
-|  | `model_profiles` | id, base_url, model, role, params, capabilities, secret_id | capabilities come from probing; API key references `secrets` |
+|  | `model_profiles` | id, base_url, model, params, capabilities, secret_id | capabilities come from probing; API key references `secrets` |
 |  | `secrets` | id, name, kind, description, expires_at, last_used_at, ciphertext, nonce, key_version, ask_each_run | Values only exist as ciphertext (AES-256-GCM, associated data = id). Master key lives in Keychain, not in the DB |
 | Chat | `conversations` | id, workspace_id, title |  |
 |  | `messages` | id, conversation_id, seq, role, content, model_profile_id, tokens_in, tokens_out, cost_micro | content is JSON containing text and tool calls |
@@ -483,7 +482,7 @@ Each payload type is its own struct, registered in a registry (`type → struct`
 |  | `step.retrying` | attempt, reason, delay_ms |
 |  | `step.finished` | status, output_ref, duration_ms |
 |  | `step.skipped` | reason (when condition was false) |
-| LLM | `llm.request` | model_profile_id, role, estimated tokens |
+| LLM | `llm.request` | model_profile_id, model, estimated tokens |
 |  | `llm.delta` | text or tool_call chunk (not stored) |
 |  | `llm.finished` | usage, finish_reason, cost_micro |
 | Tool | `tool.call.started` | tool_version_id, args (redacted) |
@@ -528,7 +527,7 @@ The agent generates this file; the validator checks it; the engine runs it. The 
 | `inputs` | Map name → `{type, description, default, enum, format}`. A subset of JSON Schema (string, number, integer, boolean, array, object). `format` suggests a form widget: `path`, `url`, `email`, `datetime`, `text` |
 | `outputs` | Map name → expression, taken from step results |
 | `settings` | `unattended` (allow, ask, deny), `concurrency` (`max`, `policy`: queue, skip, cancel-previous), `budget` (`max_cost_usd`, `max_tokens`), whole-run `timeout` |
-| `defaults` | Default `timeout`, `retry`, `role` for every step |
+| `defaults` | Default `timeout`, `retry`, `model` for every step |
 | `steps` | List of steps (can be nested inside `map`, `branch`, `parallel`) |
 
 **Common fields for every step:** `id` (required, `[a-z][a-z0-9_]*`), `name`, `needs` (list of ids), `when` (boolean expression), `timeout`, `retry` (`max`, `backoff`: fixed or exp, `delay`), `on_error` (`fail` by default, or `continue`), `side_effect` (`none`, `read`, `write`, `external`; default comes from the tool, and a step may raise but not lower it).
@@ -538,8 +537,8 @@ The agent generates this file; the validator checks it; the engine runs it. The 
 | Type | Main keys | Output |
 | --- | --- | --- |
 | tool | `tool` (`name` or `name@3`), `with` | Result according to the tool's `output_schema` |
-| llm | `llm.role`, `prompt`, `system`, `output_schema` | Text, or an object when `output_schema` is present |
-| agent | `agent.role`, `goal`, `tools` (required allowlist), `max_steps`, `output_schema` | Final result of the sub-loop |
+| llm | `llm.model`, `prompt`, `system`, `output_schema` | Text, or an object when `output_schema` is present |
+| agent | `agent.model`, `goal`, `tools` (required allowlist), `max_steps`, `output_schema` | Final result of the sub-loop |
 | set | `set: {key: expression}` | Object, data transformation without a tool |
 | branch | `branch.cases[]` (`when`, `do`), `else` | Output of the selected branch |
 | map | `map.over`, `as`, `do`, `concurrency` | Array of outputs in the same order as `over` |
@@ -591,7 +590,6 @@ steps:
   - id: summarize
     needs: [read_each]
     llm:
-      role: executor
       prompt: |
         Summarize the following documents into a weekly report:
         ${steps.read_each.output}
@@ -756,12 +754,12 @@ The quality of these two things determines whether the agent writes correct work
 
 ### E.2 Modes
 
-| Mode | Purpose | Tools | Model role |
+| Mode | Purpose | Tools | Model |
 | --- | --- | --- | --- |
-| Assist | Work directly with active tools; suggest saving as a workflow | `search_tools`, `describe_tool`, active tools, `run_workflow`, `ask_user`, `delegate` | executor (planner for hard work) |
-| Workflow author | Create or edit workflows | Discovery group, Workflow authoring group, `ask_user` | planner |
-| Tool author | Create or edit tools | Discovery group, Tool authoring group, `ask_user` | planner |
-| Judge | Score against a rubric and return JSON | no tools | judge |
+| Assist | Work directly with active tools; suggest saving as a workflow | `search_tools`, `describe_tool`, active tools, `run_workflow`, `ask_user`, `delegate` | default model |
+| Workflow author | Create or edit workflows | Discovery group, Workflow authoring group, `ask_user` | default model |
+| Tool author | Create or edit tools | Discovery group, Tool authoring group, `ask_user` | default model |
+| Judge | Score against a rubric and return JSON | no tools | default model |
 
 **Hand-off:** Assist calls `delegate(mode, brief, refs)`. The child mode receives a summary of the request and references to relevant events, **not the entire conversation**, keeping context clean and cheap. The result is a reference to a draft (version id), not a long body.
 
@@ -908,7 +906,7 @@ result:
 
 - **Authoring loop:** draft, validate, repair (max 5 attempts), dry-run, present to the user.
 - **Stuck detection:** if the same error appears twice or the same tool call repeats with identical arguments, stop the current strategy, change approach or call `ask_user`.
-- **Model escalation:** if the executor fails repeatedly, move the rest of the turn to the planner and record it in the trace.
+- **Model escalation:** if the default model fails repeatedly, retry the rest of the turn with a stronger model and record it in the trace.
 - **Authoring budget:** cap turns, tokens and cost per authoring session. Stop and report when exhausted.
 - **Context compaction:** on long traces, keep the latest diagnosis and current draft, and summarize the rest.
 
@@ -927,4 +925,4 @@ This is the product's most important flow (the **Save as workflow** button):
 - `/core/agent/examples` contains example workflows and tools validated in CI. They serve as both few-shot examples and test fixtures.
 - **Authoring eval:** about 30 natural-language tasks with fake environments. Measure valid-workflow rate on first save, dry-run pass rate, average repair rounds, cost per task, and rule violations (hardcoded values, missing approval, excessive permissions).
 - **Run this eval whenever a prompt or model changes.** A new prompt may only be promoted if it is not worse than the current one.
-- **By model capability** (from the probe in section 5.1): strong tool-calling models use native function calling; weaker models use JSON mode with a parser and fewer tools per turn; models that are too weak are limited to the executor role and cannot author.
+- **By model capability** (from the probe in section 5.1): strong tool-calling models use native function calling; weaker models use JSON mode with a parser and fewer tools per turn; models that are too weak are limited to running existing workflows and cannot author new ones.

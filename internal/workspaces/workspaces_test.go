@@ -88,9 +88,9 @@ func TestExportStripsSecretsAndImportCreatesProfile(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := st.DB().Exec(
-		`INSERT INTO model_profiles (id,name,base_url,model,role,params,capabilities,secret_id,created_at,updated_at)
-		 VALUES (?,?,?,?,?,?,?,?,?,?)`,
-		"model1", "Model", "https://example.com", "gpt", "executor", "{}", "{}", "sec1", 1, 1,
+		`INSERT INTO model_profiles (id,name,base_url,model,params,capabilities,secret_id,created_at,updated_at)
+		 VALUES (?,?,?,?,?,?,?,?,?)`,
+		"model1", "Model", "https://example.com", "gpt", "{}", "{}", "sec1", 1, 1,
 	); err != nil {
 		t.Fatal(err)
 	}

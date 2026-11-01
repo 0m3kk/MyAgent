@@ -62,12 +62,35 @@ type ModelProfile struct {
 	Name         string          `json:"name"`
 	BaseURL      string          `json:"base_url"`
 	Model        string          `json:"model"`
-	Role         string          `json:"role"`
 	Params       json.RawMessage `json:"params"`
 	Capabilities json.RawMessage `json:"capabilities"`
 	SecretID     string          `json:"secret_id,omitempty"`
 	CreatedAt    int64           `json:"created_at"`
 	UpdatedAt    int64           `json:"updated_at"`
+}
+
+// ModelSelectors identify the feature that is asking for a model. Settings can
+// assign a profile to each selector; an empty assignment uses the default.
+const (
+	ModelSelectChat           = "chat"
+	ModelSelectChatTitle      = "chat_title"
+	ModelSelectWorkflowAuthor = "workflow_author"
+	ModelSelectWorkflowStep   = "workflow_step"
+	ModelSelectAnalysis       = "analysis"
+	ModelSelectOrganize       = "organize"
+)
+
+func KnownModelSelector(selector string) bool {
+	switch selector {
+	case ModelSelectChat,
+		ModelSelectChatTitle,
+		ModelSelectWorkflowAuthor,
+		ModelSelectWorkflowStep,
+		ModelSelectAnalysis,
+		ModelSelectOrganize:
+		return true
+	}
+	return false
 }
 
 type Conversation struct {

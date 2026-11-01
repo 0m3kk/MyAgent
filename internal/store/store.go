@@ -86,6 +86,9 @@ func (s *Store) migrate(ctx context.Context) error {
 	if err := s.ensureColumn(ctx, "workflows", "pinned", "INTEGER NOT NULL DEFAULT 0"); err != nil {
 		return err
 	}
+	if err := s.dropColumn(ctx, "model_profiles", "role"); err != nil {
+		return err
+	}
 	if err := s.linkLegacyToolDrafts(ctx); err != nil {
 		return err
 	}
@@ -150,6 +153,39 @@ func (s *Store) ensureColumn(ctx context.Context, table, column, decl string) er
 		return err
 	}
 	_, err = s.db.ExecContext(ctx, "ALTER TABLE "+table+" ADD COLUMN "+column+" "+decl)
+	return err
+}
+
+func (s *Store) dropColumn(ctx context.Context, table, column string) error {
+	rows, err := s.db.QueryContext(ctx, "PRAGMA table_info("+table+")")
+	if err != nil {
+		return err
+	}
+	found := false
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notNull, pk int
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &typ, &notNull, &dflt, &pk); err != nil {
+			rows.Close()
+			return err
+		}
+		if name == column {
+			found = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if !found {
+		return nil
+	}
+	_, err = s.db.ExecContext(ctx, "ALTER TABLE "+table+" DROP COLUMN "+column)
 	return err
 }
 

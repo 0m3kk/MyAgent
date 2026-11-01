@@ -23,7 +23,6 @@ CREATE TABLE IF NOT EXISTS model_profiles (
   name TEXT NOT NULL,
   base_url TEXT NOT NULL,
   model TEXT NOT NULL,
-  role TEXT NOT NULL,
   params TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(params)),
   capabilities TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(capabilities)),
   secret_id TEXT REFERENCES secrets(id) ON DELETE SET NULL,

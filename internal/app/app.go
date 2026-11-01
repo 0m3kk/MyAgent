@@ -77,15 +77,16 @@ type App struct {
 const AgentStepsUnlimited = -1
 
 type Settings struct {
-	GlobalConcurrency int     `json:"global_concurrency"`
-	AgentMaxSteps     int     `json:"agent_max_steps"`
-	AgentBudgetTokens int     `json:"agent_budget_tokens"`
-	Notifications     bool    `json:"notifications"`
-	DefaultModelID    string  `json:"default_model_id"`
-	Theme             string  `json:"theme"`
-	FontScale         float64 `json:"font_scale"`
-	RetentionDays     int     `json:"retention_days"`
-	AutoApproveReads  bool    `json:"auto_approve_reads"`
+	GlobalConcurrency int               `json:"global_concurrency"`
+	AgentMaxSteps     int               `json:"agent_max_steps"`
+	AgentBudgetTokens int               `json:"agent_budget_tokens"`
+	Notifications     bool              `json:"notifications"`
+	DefaultModelID    string            `json:"default_model_id"`
+	ModelAssignments  map[string]string `json:"model_assignments"`
+	Theme             string            `json:"theme"`
+	FontScale         float64           `json:"font_scale"`
+	RetentionDays     int               `json:"retention_days"`
+	AutoApproveReads  bool              `json:"auto_approve_reads"`
 }
 
 func DefaultSettings() Settings {
@@ -94,6 +95,7 @@ func DefaultSettings() Settings {
 		AgentMaxSteps:     12,
 		AgentBudgetTokens: 200000,
 		Notifications:     true,
+		ModelAssignments:  map[string]string{},
 		Theme:             "system",
 		FontScale:         1,
 		RetentionDays:     90,
@@ -102,6 +104,17 @@ func DefaultSettings() Settings {
 }
 
 func normalizeSettings(s Settings) Settings {
+	if s.ModelAssignments == nil {
+		s.ModelAssignments = map[string]string{}
+	}
+	for selector, modelName := range s.ModelAssignments {
+		modelName = strings.TrimSpace(modelName)
+		if modelName == "" || !model.KnownModelSelector(selector) {
+			delete(s.ModelAssignments, selector)
+			continue
+		}
+		s.ModelAssignments[selector] = modelName
+	}
 	if s.Theme != "light" && s.Theme != "dark" && s.Theme != "system" {
 		s.Theme = "system"
 	}
@@ -266,6 +279,7 @@ func New(ctx context.Context, cfg Config) (*App, error) {
 		settings:     DefaultSettings(),
 	}
 	a.loadSettings(ctx)
+	a.ensureDefaultModel(ctx)
 	// Concurrency cap follows settings on boot; changes apply to new runs.
 	if a.settings.GlobalConcurrency > 0 && a.settings.GlobalConcurrency < 64 {
 		a.sem = make(chan struct{}, a.settings.GlobalConcurrency)
@@ -392,6 +406,24 @@ func (a *App) GetSettings() Settings {
 	a.settingsMu.RLock()
 	defer a.settingsMu.RUnlock()
 	return a.settings
+}
+
+// ensureDefaultModel gives existing installs a stable default after the role
+// based selector was removed.
+func (a *App) ensureDefaultModel(ctx context.Context) {
+	profiles, err := a.Store.ListModelProfiles(ctx)
+	if err != nil || len(profiles) == 0 {
+		return
+	}
+	defaultID := a.GetSettings().DefaultModelID
+	if defaultID != "" {
+		for _, p := range profiles {
+			if p.ID == defaultID {
+				return
+			}
+		}
+	}
+	_, _ = a.UpdateSettings(ctx, map[string]any{"default_model_id": profiles[0].ID})
 }
 
 func (a *App) UpdateSettings(ctx context.Context, patch map[string]any) (Settings, error) {
@@ -529,9 +561,36 @@ func profileParams(p model.ModelProfile) map[string]any {
 	return params
 }
 
-func (a *App) ModelProfileForRole(
+var errModelNotConfigured = errors.New("model is not configured")
+
+// ModelForTask resolves the model assigned to a feature, then falls back to
+// the default model when the feature has no assignment.
+func (a *App) ModelForTask(
 	ctx context.Context,
-	role string,
+	selector string,
+) (model.ModelProfile, llm.Profile, error) {
+	if selector != "" {
+		if name := strings.TrimSpace(a.GetSettings().ModelAssignments[selector]); name != "" {
+			p, prof, err := a.ModelForName(ctx, name)
+			if err == nil {
+				return p, prof, nil
+			}
+			if !errors.Is(err, errModelNotConfigured) {
+				return p, prof, err
+			}
+			// The assigned profile was deleted or renamed. Use the default
+			// instead of breaking the feature.
+		}
+	}
+	return a.ModelForName(ctx, "")
+}
+
+// ModelForName returns the configured profile for an explicit model name.
+// A name can match the provider model ID, the profile name, or the profile ID.
+// An empty name selects the default model from settings, then the first profile.
+func (a *App) ModelForName(
+	ctx context.Context,
+	name string,
 ) (model.ModelProfile, llm.Profile, error) {
 	profiles, err := a.Store.ListModelProfiles(ctx)
 	if err != nil {
@@ -540,21 +599,19 @@ func (a *App) ModelProfileForRole(
 	if len(profiles) == 0 {
 		return model.ModelProfile{}, llm.Profile{}, errors.New("no model profiles configured")
 	}
-	settings := a.GetSettings()
+	name = strings.TrimSpace(name)
 	var picked *model.ModelProfile
-	if settings.DefaultModelID != "" {
-		for i := range profiles {
-			if profiles[i].ID == settings.DefaultModelID {
-				picked = &profiles[i]
-				break
-			}
-		}
-	}
-	if picked == nil {
-		order := []string{role, "executor", "planner", "cheap", "judge"}
-		for _, r := range order {
+	if name != "" {
+		// Prefer an exact match, then fall back to a case-insensitive one.
+		for _, match := range []func(model.ModelProfile) bool{
+			func(p model.ModelProfile) bool { return p.Model == name },
+			func(p model.ModelProfile) bool { return p.Name == name },
+			func(p model.ModelProfile) bool { return p.ID == name },
+			func(p model.ModelProfile) bool { return strings.EqualFold(p.Model, name) },
+			func(p model.ModelProfile) bool { return strings.EqualFold(p.Name, name) },
+		} {
 			for i := range profiles {
-				if profiles[i].Role == r {
+				if match(profiles[i]) {
 					picked = &profiles[i]
 					break
 				}
@@ -563,9 +620,26 @@ func (a *App) ModelProfileForRole(
 				break
 			}
 		}
-	}
-	if picked == nil {
-		picked = &profiles[0]
+		if picked == nil {
+			return model.ModelProfile{}, llm.Profile{}, fmt.Errorf(
+				"%w: %q; add it in Settings → Models",
+				errModelNotConfigured,
+				name,
+			)
+		}
+	} else {
+		settings := a.GetSettings()
+		if settings.DefaultModelID != "" {
+			for i := range profiles {
+				if profiles[i].ID == settings.DefaultModelID {
+					picked = &profiles[i]
+					break
+				}
+			}
+		}
+		if picked == nil {
+			picked = &profiles[0]
+		}
 	}
 	p := *picked
 	apiKey := ""
@@ -581,7 +655,7 @@ func (a *App) ModelProfileForRole(
 		apiKey = val
 	}
 	return p, llm.Profile{
-		ID: p.ID, Name: p.Name, BaseURL: p.BaseURL, Model: p.Model, Role: p.Role,
+		ID: p.ID, Name: p.Name, BaseURL: p.BaseURL, Model: p.Model,
 		Params: profileParams(p), APIKey: apiKey, SecretID: p.SecretID,
 	}, nil
 }
@@ -590,7 +664,13 @@ func (a *App) ChatWithTools(
 	ctx context.Context,
 	req workflow.LLMChatRequest,
 ) (workflow.LLMChatResult, error) {
-	_, prof, err := a.ModelProfileForRole(ctx, req.Role)
+	var prof llm.Profile
+	var err error
+	if strings.TrimSpace(req.Model) != "" {
+		_, prof, err = a.ModelForName(ctx, req.Model)
+	} else {
+		_, prof, err = a.ModelForTask(ctx, req.Task)
+	}
 	if err != nil {
 		return workflow.LLMChatResult{}, err
 	}

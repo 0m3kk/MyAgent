@@ -32,7 +32,7 @@ import { navigate } from '../router'
 import { useApp } from '../store'
 import { useToast } from '../components/toast'
 import { useConfirm } from '../components/confirm'
-import type { Folder as FolderRecord, Run, StepSpec, Trigger, ValidationResult, Workflow, WorkflowDetail, WorkflowSpec, WorkflowVersion } from '../types'
+import type { Folder as FolderRecord, ModelProfile, Run, StepSpec, Trigger, ValidationResult, Workflow, WorkflowDetail, WorkflowSpec, WorkflowVersion } from '../types'
 import { formatDate, formatRelative, shortId, statusTone, versionLabel } from '../format'
 import { Badge, Button, EmptyState, Field, IconButton, InlineNotice, Modal, PageHeader, SectionTitle, Select, Spinner, StatusBadge, Tabs, TextArea, TextInput, Toggle, CopyButton } from '../components/ui'
 import { DiagnosticsList } from '../components/diagnostics'
@@ -628,6 +628,8 @@ export function WorkflowPage({ workflowId }: { workflowId: string }) {
           validate={validate}
           save={save}
           busy={busy}
+          models={data?.model_profiles || []}
+          defaultModelID={data?.settings.default_model_id}
         />
       ) : (
         <>
@@ -699,8 +701,10 @@ export function WorkflowPage({ workflowId }: { workflowId: string }) {
                     <li>Reference only declared inputs and ancestor steps.</li>
                     <li>Put <code>approval</code> before write/external steps.</li>
                     <li><code>needs</code> defines the DAG. Independent steps run in parallel.</li>
+                    <li>LLM and agent steps use the default model. Add <code>model: &lt;name&gt;</code> to a step, or <code>defaults.model</code>, to override it.</li>
                   </ul>
                 </div>
+                <ModelHelp models={data?.model_profiles || []} defaultModelID={data?.settings.default_model_id} />
               </aside>
             </div>
           )}
@@ -751,6 +755,8 @@ function NewWorkflowEditor({
   validate,
   save,
   busy,
+  models,
+  defaultModelID,
 }: {
   yaml: string
   setYaml: (s: string) => void
@@ -758,6 +764,8 @@ function NewWorkflowEditor({
   validate: () => Promise<ValidationResult | null>
   save: (approve?: boolean) => Promise<unknown>
   busy: string | null
+  models: ModelProfile[]
+  defaultModelID?: string
 }) {
   return (
     <div className="yaml-workspace new-workflow">
@@ -782,7 +790,27 @@ function NewWorkflowEditor({
           <p>Every workflow has inputs, steps and outputs. Tool names are available in the Tools tab.</p>
           <Button variant="ghost" size="sm" onClick={() => setYaml(STARTER_YAML)}>Load starter</Button>
         </div>
+        <ModelHelp models={models} defaultModelID={defaultModelID} />
       </aside>
+    </div>
+  )
+}
+
+function ModelHelp({ models, defaultModelID }: { models: ModelProfile[]; defaultModelID?: string }) {
+  if (models.length === 0) return null
+  return (
+    <div className="yaml-help">
+      <strong>Models</strong>
+      <p>LLM and agent steps use the default model unless they set <code>model:</code>. Tool steps run code and do not call a model.</p>
+      <ul>
+        {models.map((m) => (
+          <li key={m.id}>
+            <code>{m.model}</code>
+            {m.name && m.name !== m.model ? ` — ${m.name}` : ''}
+            {m.id === defaultModelID ? ' (default)' : ''}
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
@@ -882,8 +910,8 @@ function WorkflowSidePanel({ detail, selectedStepId, onClose }: { detail: Workfl
 
 function stepKindLabel(step: StepSpec) {
   if (step.tool) return `tool · ${step.tool}`
-  if (step.llm) return `llm · ${step.llm.role || 'executor'}`
-  if (step.agent) return 'agent'
+  if (step.llm) return `llm · ${step.llm.model || 'default model'}`
+  if (step.agent) return `agent${step.agent.model ? ` · ${step.agent.model}` : ''}`
   if (step.map) return 'map'
   if (step.branch) return 'branch'
   if (step.parallel) return 'parallel'

@@ -26,6 +26,7 @@ type ToolInfo struct {
 type ValidateOptions struct {
 	Tools           map[string]ToolInfo
 	Workflows       map[string]bool
+	Models          map[string]bool
 	AllowUnapproved bool
 	ForRun          bool
 }
@@ -102,6 +103,22 @@ func Validate(spec *Spec, opts ValidateOptions) ValidationResult {
 	}
 	if _, err := parseDuration(spec.Defaults.Timeout); err != nil {
 		addErr("E001", "defaults.timeout", err.Error(), "Use a duration such as 90s or 10m")
+	}
+	if spec.Defaults.Model != "" && !modelKnown(opts.Models, spec.Defaults.Model) {
+		addErr(
+			"E001",
+			"defaults.model",
+			"unknown model "+strconv.Quote(spec.Defaults.Model),
+			"Use a model profile name or model ID from Settings → Models",
+		)
+	}
+	if spec.Defaults.Role != "" {
+		addWarn(
+			"W005",
+			"defaults.role",
+			"role is deprecated and ignored",
+			"Use defaults.model with a profile name or model ID",
+		)
 	}
 
 	// Inputs.
@@ -452,17 +469,41 @@ func Validate(spec *Spec, opts ValidateOptions) ValidationResult {
 						addErr("E001", path+".llm.output_schema", err.Error(), "")
 					}
 				}
-				if st.LLM.Role != "" && !validRole(st.LLM.Role) {
+				if st.LLM.Model != "" && !modelKnown(opts.Models, st.LLM.Model) {
 					addErr(
 						"E001",
+						path+".llm.model",
+						"unknown model "+strconv.Quote(st.LLM.Model),
+						"Use a model profile name or model ID from Settings → Models",
+					)
+				}
+				if st.LLM.Role != "" {
+					addWarn(
+						"W005",
 						path+".llm.role",
-						"unknown role "+st.LLM.Role,
-						"Use planner, executor, judge or cheap",
+						"role is deprecated and ignored",
+						"Use llm.model with a profile name or model ID",
 					)
 				}
 			case "agent":
 				if strings.TrimSpace(st.Agent.Goal) == "" {
 					addErr("E001", path+".agent.goal", "goal is required", "")
+				}
+				if st.Agent.Model != "" && !modelKnown(opts.Models, st.Agent.Model) {
+					addErr(
+						"E001",
+						path+".agent.model",
+						"unknown model "+strconv.Quote(st.Agent.Model),
+						"Use a model profile name or model ID from Settings → Models",
+					)
+				}
+				if st.Agent.Role != "" {
+					addWarn(
+						"W005",
+						path+".agent.role",
+						"role is deprecated and ignored",
+						"Use agent.model with a profile name or model ID",
+					)
 				}
 				if len(st.Agent.Tools) == 0 {
 					addErr(
@@ -929,8 +970,19 @@ func sideEffectRank(s string) int {
 	}
 }
 
-func validRole(r string) bool {
-	return r == "planner" || r == "executor" || r == "judge" || r == "cheap"
+func modelKnown(models map[string]bool, name string) bool {
+	if models == nil {
+		return true
+	}
+	if models[name] {
+		return true
+	}
+	for configured := range models {
+		if strings.EqualFold(configured, name) {
+			return true
+		}
+	}
+	return false
 }
 
 func validateLiteralType(v any, typ string) []string {
