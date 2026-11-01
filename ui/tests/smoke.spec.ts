@@ -95,7 +95,7 @@ test('delete uses the in-app confirm dialog', async ({ page }) => {
 
 test('structured workflow output renders readable content', async ({ page }) => {
   await page.goto('/#/runs')
-  await expect(page.getByRole('heading', { name: 'Runs' })).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByRole('heading', { name: 'Runs', exact: true })).toBeVisible({ timeout: 15_000 })
   const token = await page.evaluate(async () => {
     const res = await fetch('/api/dev-token')
     return ((await res.json()) as { token: string }).token
