@@ -24,7 +24,7 @@ import (
 // version is overridden at build time with:
 //
 //	go build -ldflags "-X main.version=1.2.3"
-var version = "1.2.5"
+var version = "1.2.6"
 
 type runtimeInfo struct {
 	URL   string `json:"url"`
