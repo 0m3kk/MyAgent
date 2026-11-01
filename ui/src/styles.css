@@ -187,17 +187,22 @@ input[type="checkbox"] { accent-color: var(--accent); }
 }
 .workspace-menu-label { padding: 5px 8px 6px; font-size: calc(9px * var(--font-scale)); text-transform: uppercase; letter-spacing: 0.1em; color: var(--faint); }
 .workspace-menu-list { display: flex; flex-direction: column; gap: 1px; }
-.workspace-menu-row { display: flex; align-items: center; gap: 1px; border-radius: 7px; padding: 1px; }
+.workspace-menu-row { display: flex; align-items: center; gap: 2px; border-radius: 7px; padding: 2px 2px 2px 1px; }
 .workspace-menu-row:hover { background: var(--hover); }
 .workspace-menu-row.active { background: var(--surface-2); }
 .workspace-menu-main { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; border: 0; background: transparent; padding: 6px; text-align: left; }
-.workspace-check { width: 14px; height: 14px; flex: 0 0 auto; display: grid; place-items: center; color: var(--accent-bright); }
+.workspace-check { width: 16px; height: 16px; flex: 0 0 auto; display: grid; place-items: center; color: var(--accent-bright); }
 .workspace-menu-copy { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
 .workspace-menu-copy strong { font-size: calc(11.5px * var(--font-scale)); font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-menu-copy em { font-style: normal; font-size: calc(9px * var(--font-scale)); color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.workspace-menu-row .icon-btn { width: 20px; height: 20px; opacity: 0; transition: opacity 0.12s; }
-.workspace-menu-row:hover .icon-btn, .workspace-menu-row.active .icon-btn { opacity: 1; }
-.workspace-menu-row .icon-btn.danger { color: var(--red); }
+.workspace-menu-row .icon-btn {
+  width: 28px; height: 28px; border-radius: 7px; color: var(--muted); opacity: 0.7;
+  transition: opacity 0.12s, background 0.12s, color 0.12s;
+}
+.workspace-menu-row:hover .icon-btn, .workspace-menu-row.active .icon-btn, .workspace-menu-row .icon-btn:focus-visible { opacity: 1; }
+.workspace-menu-row .icon-btn:hover { background: var(--surface-3); color: var(--text); opacity: 1; }
+.workspace-menu-row .icon-btn.danger { color: var(--red); opacity: 0.8; }
+.workspace-menu-row .icon-btn.danger:hover { background: var(--red-soft); color: var(--red); opacity: 1; }
 .workspace-menu-actions { display: flex; flex-direction: column; gap: 1px; border-top: 1px solid var(--border-soft); margin-top: 5px; padding-top: 5px; }
 .workspace-menu-actions button {
   display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: transparent;

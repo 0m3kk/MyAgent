@@ -169,7 +169,7 @@ export function WorkspaceSwitcher() {
           <strong>{displayName}</strong>
           <em>{displayRoot}</em>
         </span>
-        <ChevronsUpDown size={14} />
+        <ChevronsUpDown size={15} />
       </button>
 
       {open && (
@@ -181,14 +181,14 @@ export function WorkspaceSwitcher() {
               return (
                 <div key={profile.id} className={clsx('workspace-menu-row', isActive && 'active')}>
                   <button className="workspace-menu-main" onClick={() => void switchTo(profile)}>
-                    <span className="workspace-check">{isActive ? <Check size={13} /> : null}</span>
+                    <span className="workspace-check">{isActive ? <Check size={15} strokeWidth={2.4} /> : null}</span>
                     <span className="workspace-menu-copy">
                       <strong>{profile.name}</strong>
                       <em>{profile.root_path}</em>
                     </span>
                   </button>
                   <button
-                    className="icon-btn tiny"
+                    className="icon-btn"
                     title="Rename workspace"
                     aria-label={`Rename ${profile.name}`}
                     onClick={() => {
@@ -198,24 +198,24 @@ export function WorkspaceSwitcher() {
                       setEditRoot(profile.root_path)
                     }}
                   >
-                    <Pencil size={12} />
+                    <Pencil size={16} />
                   </button>
                   <button
-                    className="icon-btn tiny"
+                    className="icon-btn"
                     title="Export workspace"
                     aria-label={`Export ${profile.name}`}
                     onClick={() => exportWorkspace(profile)}
                   >
-                    <Download size={12} />
+                    <Download size={16} />
                   </button>
                   {!isActive && (
                     <button
-                      className="icon-btn tiny danger"
+                      className="icon-btn danger"
                       title="Delete workspace"
                       aria-label={`Delete ${profile.name}`}
                       onClick={() => void removeWorkspace(profile)}
                     >
-                      <Trash2 size={12} />
+                      <Trash2 size={16} />
                     </button>
                   )}
                 </div>
