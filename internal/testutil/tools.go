@@ -126,7 +126,11 @@ func InstallTool(
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return model.Tool{}, err
 	}
-	if err := os.WriteFile(filepath.Join(dir, "manifest.yaml"), []byte(manifestYAML), 0o644); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(dir, "manifest.yaml"),
+		[]byte(manifestYAML),
+		0o644,
+	); err != nil {
 		return model.Tool{}, err
 	}
 	if err := os.WriteFile(filepath.Join(dir, entry), []byte(code), 0o644); err != nil {

@@ -55,7 +55,15 @@ func (e *Executor) starlarkFSModule(m *Manifest) *starlarkstruct.Struct {
 			}
 			path := "."
 			limit := 200
-			if err := starlark.UnpackArgs("list", args, kwargs, "path?", &path, "limit?", &limit); err != nil {
+			if err := starlark.UnpackArgs(
+				"list",
+				args,
+				kwargs,
+				"path?",
+				&path,
+				"limit?",
+				&limit,
+			); err != nil {
 				return nil, err
 			}
 			out, err := e.fsList(map[string]any{"path": path, "limit": limit})
@@ -94,7 +102,15 @@ func (e *Executor) starlarkFSModule(m *Manifest) *starlarkstruct.Struct {
 			var path, content string
 			appendMode := false
 			if err := starlark.UnpackArgs(
-				"write_text", args, kwargs, "path", &path, "content", &content, "append?", &appendMode,
+				"write_text",
+				args,
+				kwargs,
+				"path",
+				&path,
+				"content",
+				&content,
+				"append?",
+				&appendMode,
 			); err != nil {
 				return nil, err
 			}
@@ -132,7 +148,15 @@ func (e *Executor) starlarkFSModule(m *Manifest) *starlarkstruct.Struct {
 			}
 			var path string
 			recursive := false
-			if err := starlark.UnpackArgs("delete", args, kwargs, "path", &path, "recursive?", &recursive); err != nil {
+			if err := starlark.UnpackArgs(
+				"delete",
+				args,
+				kwargs,
+				"path",
+				&path,
+				"recursive?",
+				&recursive,
+			); err != nil {
 				return nil, err
 			}
 			out, err := e.fsDelete(map[string]any{"path": path, "recursive": recursive})

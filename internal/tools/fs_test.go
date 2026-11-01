@@ -65,7 +65,13 @@ func TestStarlarkFSReadsStayInsideWorkspace(t *testing.T) {
 	if body["content"] != "hello" {
 		t.Fatalf("content = %#v", body["content"])
 	}
-	if _, err := runStarlarkFS(t, root, testFSManifest(`"."`, ``, `read`), code, "/etc/passwd"); err == nil ||
+	if _, err := runStarlarkFS(
+		t,
+		root,
+		testFSManifest(`"."`, ``, `read`),
+		code,
+		"/etc/passwd",
+	); err == nil ||
 		!strings.Contains(err.Error(), "outside the workspace") {
 		t.Fatalf("expected workspace escape denial, got %v", err)
 	}
@@ -99,7 +105,13 @@ func TestStarlarkFSWritesStayInsideWorkspace(t *testing.T) {
 	if err != nil || string(raw) != "written" {
 		t.Fatalf("written file = %q, err = %v", raw, err)
 	}
-	if _, err := runStarlarkFS(t, root, testFSManifest(`"."`, `"."`, `write`), code, "../escape.txt"); err == nil ||
+	if _, err := runStarlarkFS(
+		t,
+		root,
+		testFSManifest(`"."`, `"."`, `write`),
+		code,
+		"../escape.txt",
+	); err == nil ||
 		!strings.Contains(err.Error(), "outside the workspace") {
 		t.Fatalf("expected workspace escape denial, got %v", err)
 	}
