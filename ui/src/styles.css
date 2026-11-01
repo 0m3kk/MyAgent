@@ -1078,6 +1078,17 @@ input[type="checkbox"] { accent-color: var(--accent); }
   color: var(--faint); min-width: 18px; text-align: right;
 }
 .library-nav-row.active em { color: var(--accent-bright); }
+.library-organize {
+  display: flex; align-items: center; justify-content: center; gap: 6px; width: calc(100% - 4px);
+  margin: 8px 2px 2px; padding: 7px 8px; border-radius: 8px;
+  border: 1px dashed color-mix(in oklab, var(--accent) 42%, var(--border));
+  background: var(--accent-soft); color: var(--accent-bright);
+  font-size: calc(10.5px * var(--font-scale)); font-weight: 550;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.library-organize:hover { background: color-mix(in oklab, var(--accent) 18%, transparent); border-color: var(--accent); }
+.library-organize:disabled { opacity: 0.7; cursor: default; }
+.library-organize svg { flex: 0 0 auto; }
 .library-nav-section {
   display: flex; align-items: center; justify-content: space-between; gap: 6px;
   margin: 12px 4px 5px; padding-top: 9px; border-top: 1px solid var(--border-soft);

@@ -225,6 +225,9 @@ func cleanFolderName(name string) (string, error) {
 	if utf8.RuneCountInString(name) > 80 {
 		return "", fmt.Errorf("%w: name is longer than 80 characters", ErrInvalidFolder)
 	}
+	if strings.ContainsAny(name, "\r\n") {
+		return "", fmt.Errorf("%w: name cannot contain line breaks", ErrInvalidFolder)
+	}
 	return name, nil
 }
 

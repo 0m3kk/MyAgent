@@ -136,6 +136,16 @@ export interface Folder {
   created_at: number
 }
 
+export interface OrganizeResult {
+  kind: 'tool' | 'workflow'
+  summary: string
+  model?: string
+  created_folders: string[]
+  assigned_items: number
+  moved_items: number
+  unchanged_items: number
+}
+
 export interface InputSpec {
   type: string
   description?: string

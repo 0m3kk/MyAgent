@@ -148,6 +148,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/folders", s.handleCreateFolder)
 	s.mux.HandleFunc("PATCH /api/folders/{id}", s.handleUpdateFolder)
 	s.mux.HandleFunc("DELETE /api/folders/{id}", s.handleDeleteFolder)
+	s.mux.HandleFunc("POST /api/library/organize", s.handleOrganizeLibrary)
 
 	s.mux.HandleFunc("GET /api/approvals", s.handleListApprovals)
 	s.mux.HandleFunc("POST /api/approvals/{id}/decision", s.handleApprovalDecision)

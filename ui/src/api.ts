@@ -9,6 +9,7 @@ import type {
   Folder,
   Message,
   ModelProfile,
+  OrganizeResult,
   Run,
   RunDetail,
   SecretMeta,
@@ -201,6 +202,8 @@ export const api = {
   updateFolder: (id: string, body: { name?: string; parent_id?: string }) =>
     request<Folder>(`/api/folders/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteFolder: (id: string) => request<{ ok: boolean }>(`/api/folders/${id}`, { method: 'DELETE' }),
+  organizeLibrary: (kind: 'tool' | 'workflow') =>
+    request<OrganizeResult>('/api/library/organize', json({ kind })),
 
   approvals: () => request<{ approvals: Approval[] }>('/api/approvals'),
   decideApproval: (id: string, decision: 'approve' | 'reject', comment = '') =>

@@ -97,6 +97,7 @@ export function WorkflowsPage() {
   const [folderDialog, setFolderDialog] = useState<{ mode: 'create' | 'edit'; folder?: FolderRecord } | null>(null)
   const [moveWorkflow, setMoveWorkflow] = useState<Workflow | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  const [organizing, setOrganizing] = useState(false)
 
   const allWorkflows = useMemo(() => data?.workflows ?? [], [data?.workflows])
   const folders = useMemo(() => (data?.folders ?? []).filter((f) => f.kind === 'workflow'), [data?.folders])
@@ -218,6 +219,34 @@ export function WorkflowsPage() {
     }
   }
 
+  async function organizeWithAgent() {
+    if (!data?.model_profiles.length) {
+      toast('Add a model first', 'Settings → Models is required before the agent can organize the library.', 'error')
+      return
+    }
+    setOrganizing(true)
+    try {
+      const result = await api.organizeLibrary('workflow')
+      await refresh()
+      setSelection({ kind: 'all' })
+      const parts: string[] = []
+      if (result.created_folders.length) {
+        parts.push(`${result.created_folders.length} new folder${result.created_folders.length === 1 ? '' : 's'}`)
+      }
+      parts.push(`${result.moved_items} moved`)
+      if (result.unchanged_items) parts.push(`${result.unchanged_items} unchanged`)
+      toast(
+        result.moved_items || result.created_folders.length ? 'Agent organized your workflows' : 'Library already looks tidy',
+        parts.join(' · '),
+        'success',
+      )
+    } catch (err) {
+      toast('Could not organize workflows', err instanceof Error ? err.message : undefined, 'error')
+    } finally {
+      setOrganizing(false)
+    }
+  }
+
   return (
     <div className="page">
       <PageHeader
@@ -243,6 +272,8 @@ export function WorkflowsPage() {
           onCreateFolder={() => setFolderDialog({ mode: 'create' })}
           onRenameFolder={(folder) => setFolderDialog({ mode: 'edit', folder })}
           onDeleteFolder={removeFolder}
+          onOrganize={() => void organizeWithAgent()}
+          organizing={organizing}
         />
         <div className="library-main">
           <div className="library-toolbar">

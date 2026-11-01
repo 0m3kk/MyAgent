@@ -148,6 +148,7 @@ export function ToolsPage() {
   const [folderDialog, setFolderDialog] = useState<{ mode: 'create' | 'edit'; folder?: FolderRecord } | null>(null)
   const [moveTool, setMoveTool] = useState<Tool | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  const [organizing, setOrganizing] = useState(false)
 
   const allTools = useMemo(() => data?.tools ?? [], [data?.tools])
   const folders = useMemo(() => (data?.folders ?? []).filter((f) => f.kind === 'tool'), [data?.folders])
@@ -270,6 +271,34 @@ export function ToolsPage() {
     }
   }
 
+  async function organizeWithAgent() {
+    if (!data?.model_profiles.length) {
+      toast('Add a model first', 'Settings → Models is required before the agent can organize the library.', 'error')
+      return
+    }
+    setOrganizing(true)
+    try {
+      const result = await api.organizeLibrary('tool')
+      await refresh()
+      setSelection({ kind: 'all' })
+      const parts: string[] = []
+      if (result.created_folders.length) {
+        parts.push(`${result.created_folders.length} new folder${result.created_folders.length === 1 ? '' : 's'}`)
+      }
+      parts.push(`${result.moved_items} moved`)
+      if (result.unchanged_items) parts.push(`${result.unchanged_items} unchanged`)
+      toast(
+        result.moved_items || result.created_folders.length ? 'Agent organized your tools' : 'Library already looks tidy',
+        parts.join(' · '),
+        'success',
+      )
+    } catch (err) {
+      toast('Could not organize tools', err instanceof Error ? err.message : undefined, 'error')
+    } finally {
+      setOrganizing(false)
+    }
+  }
+
   return (
     <div className="page">
       <PageHeader
@@ -292,6 +321,8 @@ export function ToolsPage() {
           onCreateFolder={() => setFolderDialog({ mode: 'create' })}
           onRenameFolder={(folder) => setFolderDialog({ mode: 'edit', folder })}
           onDeleteFolder={removeFolder}
+          onOrganize={() => void organizeWithAgent()}
+          organizing={organizing}
         />
         <div className="library-main">
           <div className="library-toolbar">

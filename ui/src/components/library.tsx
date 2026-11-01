@@ -7,7 +7,9 @@ import {
   FolderPlus,
   Inbox,
   Layers,
+  Loader2,
   Pencil,
+  Sparkles,
   Star,
   Trash2,
 } from 'lucide-react'
@@ -122,6 +124,8 @@ export function LibraryNav({
   onCreateFolder,
   onRenameFolder,
   onDeleteFolder,
+  onOrganize,
+  organizing,
 }: {
   folders: Folder[]
   counts: LibraryCounts
@@ -130,6 +134,8 @@ export function LibraryNav({
   onCreateFolder: () => void
   onRenameFolder: (folder: Folder) => void
   onDeleteFolder: (folder: Folder) => void
+  onOrganize?: () => void
+  organizing?: boolean
 }) {
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
   const roots = useMemo(() => {
@@ -159,6 +165,18 @@ export function LibraryNav({
           <NavRow icon={<CircleAlert size={14} />} label="Needs attention" count={counts.attention} tone="warn" active={selection.kind === 'attention'} onClick={() => onSelect({ kind: 'attention' })} />
           <NavRow icon={<Inbox size={14} />} label="Unfiled" count={counts.unfiled} active={selection.kind === 'unfiled'} onClick={() => onSelect({ kind: 'unfiled' })} />
         </div>
+
+        {onOrganize && (
+          <button
+            className="library-organize"
+            onClick={onOrganize}
+            disabled={organizing}
+            title="Let the configured model create a tidy folder structure"
+          >
+            {organizing ? <Loader2 className="spin" size={13} /> : <Sparkles size={13} />}
+            <span>{organizing ? 'Organizing…' : 'Organize with agent'}</span>
+          </button>
+        )}
 
         <div className="library-nav-section">
           <span>Folders</span>

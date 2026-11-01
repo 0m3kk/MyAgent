@@ -13,6 +13,7 @@ test('home, command palette and workflow list', async ({ page }) => {
 
   await page.getByRole('link', { name: /Workflows/ }).click()
   await expect(page.getByRole('heading', { name: 'Workflows', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Organize with agent' })).toBeVisible()
   await expect(page.getByText('Build your first workflow')).toBeVisible()
 })
 

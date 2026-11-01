@@ -306,6 +306,35 @@ func TestEndToEndAPI(t *testing.T) {
 	if folders := c.must("GET", "/api/folders", nil)["folders"].([]any); len(folders) != 1 {
 		t.Fatalf("nested folder should be deleted with its parent: %+v", folders)
 	}
+
+	// The agent can propose and apply a folder organization in one click.
+	llmSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		chunk, _ := json.Marshal(map[string]any{
+			"model": "fake",
+			"choices": []any{map[string]any{
+				"delta": map[string]any{
+					"content": `{"summary":"Test plan","assignments":[{"item":"test.echo","folder":["QA"]}]}`,
+				},
+				"finish_reason": "stop",
+			}},
+		})
+		fmt.Fprintf(w, "data: %s\n\ndata: [DONE]\n\n", chunk)
+	}))
+	defer llmSrv.Close()
+	if _, err := a.SaveModelProfile(ctx, model.ModelProfile{
+		Name: "fake", BaseURL: llmSrv.URL + "/v1", Model: "fake", Role: "planner",
+	}, ""); err != nil {
+		t.Fatal(err)
+	}
+	organizedResult := c.must("POST", "/api/library/organize", map[string]any{"kind": "tool"})
+	if organizedResult["moved_items"] != float64(1) || organizedResult["summary"] != "Test plan" {
+		t.Fatalf("organize result: %+v", organizedResult)
+	}
+	if folders := organizedResult["created_folders"].([]any); len(folders) != 1 ||
+		folders[0] != "QA" {
+		t.Fatalf("organize folders: %+v", folders)
+	}
 }
 
 func TestConcurrentChats(t *testing.T) {
