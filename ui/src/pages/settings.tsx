@@ -405,16 +405,17 @@ function ModelsTab({ onAdd, onEdit, onProbe }: { onAdd: () => void; onEdit: (m: 
                 </div>
                 <Select
                   value={value}
-                  onChange={(e) => setTaskModel(task.key, e.target.value)}
+                  onChange={(next) => setTaskModel(task.key, next)}
                   disabled={busy !== null}
-                >
-                  <option value="">Default{defaultModel ? ` — ${defaultModel.model}` : ''}</option>
-                  {data.model_profiles.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.model}{m.name && m.name !== m.model ? ` — ${m.name}` : ''}
-                    </option>
-                  ))}
-                </Select>
+                  aria-label={task.label}
+                  options={[
+                    { value: '', label: `Default${defaultModel ? ` — ${defaultModel.model}` : ''}` },
+                    ...data.model_profiles.map((m) => ({
+                      value: m.id,
+                      label: `${m.model}${m.name && m.name !== m.model ? ` — ${m.name}` : ''}`,
+                    })),
+                  ]}
+                />
               </div>
             )
           })}
@@ -666,7 +667,19 @@ function SecretModal({ open, secret, onClose, onSaved }: { open: boolean; secret
       footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button variant="primary" onClick={save} loading={busy} disabled={!name || !value}>Save secret</Button></>}>
       <div className="settings-form-grid">
         <Field label="Name" hint="UPPER_SNAKE_CASE; tools declare this logical name."><TextInput value={name} onChange={(e) => setName(e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '_'))} placeholder="GITHUB_TOKEN" className="mono" disabled={!!secret} /></Field>
-        <Field label="Kind"><Select value={kind} onChange={(e) => setKind(e.target.value)}><option value="api_key">API key</option><option value="token">Token</option><option value="password">Password</option><option value="other">Other</option></Select></Field>
+        <Field label="Kind">
+          <Select
+            value={kind}
+            onChange={setKind}
+            aria-label="Secret kind"
+            options={[
+              { value: 'api_key', label: 'API key' },
+              { value: 'token', label: 'Token' },
+              { value: 'password', label: 'Password' },
+              { value: 'other', label: 'Other' },
+            ]}
+          />
+        </Field>
         <Field label="Value" hint="Never sent to the model; injected at runtime."><TextInput type="password" value={value} onChange={(e) => setValue(e.target.value)} autoComplete="new-password" /></Field>
         <Field label="Description"><TextInput value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Read-only GitHub token" /></Field>
         <Field label="Expires at" hint="Optional. The UI warns before expiry."><TextInput type="datetime-local" value={expires} onChange={(e) => setExpires(e.target.value)} /></Field>

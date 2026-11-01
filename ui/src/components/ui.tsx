@@ -1,17 +1,22 @@
 import {
   forwardRef,
+  isValidElement,
+  useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
+  useState,
   type ButtonHTMLAttributes,
+  type CSSProperties,
   type InputHTMLAttributes,
+  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
-  type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from 'react'
 import { createPortal } from 'react-dom'
 import clsx from 'clsx'
-import { AlertCircle, CheckCircle2, Loader2, X } from 'lucide-react'
+import { AlertCircle, Check, CheckCircle2, ChevronDown, Loader2, X } from 'lucide-react'
 import { statusTone } from '../format'
 
 export function Button({
@@ -295,11 +300,263 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<H
   },
 )
 
-export function Select({ className, children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
+export interface SelectOption {
+  value: string
+  label: ReactNode
+  disabled?: boolean
+}
+
+function optionText(node: ReactNode): string {
+  if (typeof node === 'string' || typeof node === 'number') return String(node)
+  if (Array.isArray(node)) return node.map(optionText).join('')
+  if (isValidElement<{ children?: ReactNode }>(node)) return optionText(node.props.children)
+  return ''
+}
+
+function firstEnabled(options: SelectOption[]): number {
+  return options.findIndex((option) => !option.disabled)
+}
+
+function nearbyEnabled(options: SelectOption[], start: number, step: 1 | -1): number {
+  if (options.length === 0) return -1
+  let index = Math.max(0, Math.min(start, options.length - 1))
+  for (let seen = 0; seen < options.length; seen += 1) {
+    if (!options[index].disabled) return index
+    index = (index + step + options.length) % options.length
+  }
+  return -1
+}
+
+export function Select({
+  value,
+  options,
+  onChange,
+  className,
+  disabled,
+  placeholder = 'Select…',
+  'aria-label': ariaLabel,
+}: {
+  value: string
+  options: SelectOption[]
+  onChange: (value: string) => void
+  className?: string
+  disabled?: boolean
+  placeholder?: string
+  'aria-label'?: string
+}) {
+  const listId = useId()
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const typeaheadRef = useRef({ query: '', timer: 0 })
+  const [open, setOpen] = useState(false)
+  const [active, setActive] = useState(-1)
+  const [menuStyle, setMenuStyle] = useState<CSSProperties | null>(null)
+  const selected = options.find((option) => option.value === value)
+
+  const positionMenu = useCallback(() => {
+    const trigger = triggerRef.current
+    const menu = menuRef.current
+    if (!trigger || !menu) return
+    const anchor = trigger.getBoundingClientRect()
+    const margin = 8
+    const gap = 5
+    const viewportWidth = window.innerWidth
+    const viewportHeight = window.innerHeight
+    const width = Math.min(Math.max(anchor.width, 190), viewportWidth - margin * 2)
+    const menuHeight = menu.getBoundingClientRect().height
+    const roomBelow = viewportHeight - anchor.bottom - gap - margin
+    const roomAbove = anchor.top - gap - margin
+    const flip = menuHeight > roomBelow && roomAbove > roomBelow
+    const maxHeight = Math.max(120, Math.min(flip ? roomAbove : roomBelow, 320))
+    const visibleHeight = Math.min(menuHeight, maxHeight)
+    setMenuStyle({
+      left: Math.max(margin, Math.min(anchor.left, viewportWidth - width - margin)),
+      top: flip ? Math.max(margin, anchor.top - gap - visibleHeight) : anchor.bottom + gap,
+      width,
+      maxHeight,
+    })
+  }, [])
+
+  useLayoutEffect(() => {
+    if (open) positionMenu()
+  }, [open, options.length, positionMenu])
+
+  useEffect(() => {
+    if (!open) return
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node
+      if (triggerRef.current?.contains(target) || menuRef.current?.contains(target)) return
+      setOpen(false)
+      setMenuStyle(null)
+    }
+    const onScroll = (event: Event) => {
+      if (menuRef.current?.contains(event.target as Node)) return
+      setOpen(false)
+      setMenuStyle(null)
+    }
+    const onResize = () => positionMenu()
+    document.addEventListener('pointerdown', onPointerDown, true)
+    window.addEventListener('scroll', onScroll, true)
+    window.addEventListener('resize', onResize)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true)
+      window.removeEventListener('scroll', onScroll, true)
+      window.removeEventListener('resize', onResize)
+    }
+  }, [open, positionMenu])
+
+  useEffect(() => {
+    if (!open || active < 0) return
+    menuRef.current
+      ?.querySelector<HTMLElement>(`[data-index="${active}"]`)
+      ?.scrollIntoView({ block: 'nearest' })
+  }, [open, active])
+
+  useEffect(() => () => window.clearTimeout(typeaheadRef.current.timer), [])
+
+  function closeMenu(refocus = false) {
+    setOpen(false)
+    setMenuStyle(null)
+    if (refocus) triggerRef.current?.focus()
+  }
+
+  function openMenu(initial: 'selected' | 'first' | 'last' = 'selected') {
+    if (disabled) return
+    if (initial === 'last') {
+      setActive(nearbyEnabled(options, options.length - 1, -1))
+    } else if (initial === 'first') {
+      setActive(firstEnabled(options))
+    } else {
+      const selectedIndex = options.findIndex((option) => option.value === value)
+      setActive(selectedIndex >= 0 ? nearbyEnabled(options, selectedIndex, 1) : firstEnabled(options))
+    }
+    setOpen(true)
+  }
+
+  function choose(option?: SelectOption) {
+    if (!option || option.disabled) return
+    if (option.value !== value) onChange(option.value)
+    closeMenu(true)
+  }
+
+  function typeahead(key: string) {
+    const now = typeaheadRef.current
+    window.clearTimeout(now.timer)
+    now.query += key.toLowerCase()
+    now.timer = window.setTimeout(() => {
+      typeaheadRef.current.query = ''
+    }, 600)
+    const start = active >= 0 ? active + 1 : 0
+    const ordered = [...options.slice(start), ...options.slice(0, start)]
+    const match = ordered.find((option) => !option.disabled && optionText(option.label).toLowerCase().startsWith(now.query))
+    if (match) setActive(options.indexOf(match))
+  }
+
+  function onKeyDown(event: ReactKeyboardEvent<HTMLButtonElement>) {
+    if (disabled) return
+    if (!open) {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault()
+        openMenu(event.key === 'ArrowUp' ? 'last' : 'selected')
+      }
+      return
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      event.stopPropagation()
+      closeMenu(true)
+      return
+    }
+    if (event.key === 'Tab') {
+      closeMenu()
+      return
+    }
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault()
+      event.stopPropagation()
+      setActive((current) => nearbyEnabled(options, current + (event.key === 'ArrowDown' ? 1 : -1), event.key === 'ArrowDown' ? 1 : -1))
+      return
+    }
+    if (event.key === 'Home') {
+      event.preventDefault()
+      setActive(firstEnabled(options))
+      return
+    }
+    if (event.key === 'End') {
+      event.preventDefault()
+      setActive(nearbyEnabled(options, options.length - 1, -1))
+      return
+    }
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      event.stopPropagation()
+      choose(options[active])
+      return
+    }
+    if (event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      event.preventDefault()
+      typeahead(event.key)
+    }
+  }
+
   return (
-    <select {...props} className={clsx('select', className)}>
-      {children}
-    </select>
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        role="combobox"
+        aria-label={ariaLabel}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={open ? listId : undefined}
+        aria-activedescendant={open && active >= 0 ? `${listId}-option-${active}` : undefined}
+        className={clsx('select', 'select-trigger', className)}
+        disabled={disabled}
+        onClick={() => (open ? closeMenu() : openMenu())}
+        onKeyDown={onKeyDown}
+      >
+        <span className={clsx('select-value', !selected && 'select-placeholder')}>{selected?.label ?? placeholder}</span>
+        <ChevronDown className="select-chevron" size={14} aria-hidden />
+      </button>
+      {open &&
+        createPortal(
+          <div
+            ref={menuRef}
+            id={listId}
+            role="listbox"
+            aria-label={ariaLabel}
+            className="select-menu"
+            style={menuStyle ?? { visibility: 'hidden' }}
+          >
+            {options.length === 0 && <div className="select-empty">No options</div>}
+            {options.map((option, index) => (
+              <div
+                key={option.value}
+                id={`${listId}-option-${index}`}
+                data-index={index}
+                role="option"
+                aria-selected={option.value === value}
+                aria-disabled={option.disabled || undefined}
+                className={clsx(
+                  'select-option',
+                  index === active && 'active',
+                  option.value === value && 'selected',
+                  option.disabled && 'disabled',
+                )}
+                onMouseDown={(event) => event.preventDefault()}
+                onMouseEnter={() => {
+                  if (!option.disabled) setActive(index)
+                }}
+                onClick={() => choose(option)}
+              >
+                <span className="select-option-label">{option.label}</span>
+                {option.value === value && <Check className="select-check" size={13} aria-hidden />}
+              </div>
+            ))}
+          </div>,
+          document.body,
+        )}
+    </>
   )
 }
 

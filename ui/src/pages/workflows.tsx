@@ -282,16 +282,28 @@ export function WorkflowsPage() {
               <span>{filtered.length === allWorkflows.length ? `${allWorkflows.length} workflows` : `${filtered.length} of ${allWorkflows.length} workflows`}</span>
             </div>
             <div className="library-filters">
-              <Select className="compact" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label="Filter by status">
-                <option value="all">Any status</option>
-                <option value="approved">Approved</option>
-                <option value="draft">Draft</option>
-              </Select>
-              <Select className="compact" value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} aria-label="Sort workflows">
-                <option value="name">Name</option>
-                <option value="newest">Newest</option>
-                <option value="updated">Recently updated</option>
-              </Select>
+              <Select
+                className="compact"
+                value={statusFilter}
+                onChange={setStatusFilter}
+                aria-label="Filter by status"
+                options={[
+                  { value: 'all', label: 'Any status' },
+                  { value: 'approved', label: 'Approved' },
+                  { value: 'draft', label: 'Draft' },
+                ]}
+              />
+              <Select
+                className="compact"
+                value={sort}
+                onChange={(next) => setSort(next as typeof sort)}
+                aria-label="Sort workflows"
+                options={[
+                  { value: 'name', label: 'Name' },
+                  { value: 'newest', label: 'Newest' },
+                  { value: 'updated', label: 'Recently updated' },
+                ]}
+              />
               {filtersActive && (
                 <button className="link-btn tiny" onClick={() => { setQuery(''); setStatusFilter('all') }}>Reset</button>
               )}
@@ -1048,11 +1060,16 @@ function TriggersTab({ detail, onChanged }: { detail: WorkflowDetail; onChanged:
         footer={<><Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button><Button variant="primary" onClick={create} loading={busy === 'create'}>Enable trigger</Button></>}>
         <div className="form-grid">
           <Field label="Kind">
-            <Select value={kind} onChange={(e) => setKind(e.target.value)}>
-              <option value="cron">Schedule (cron)</option>
-              <option value="file">Folder watcher</option>
-              <option value="webhook">Local webhook</option>
-            </Select>
+            <Select
+              value={kind}
+              onChange={setKind}
+              aria-label="Trigger kind"
+              options={[
+                { value: 'cron', label: 'Schedule (cron)' },
+                { value: 'file', label: 'Folder watcher' },
+                { value: 'webhook', label: 'Local webhook' },
+              ]}
+            />
           </Field>
           {kind === 'cron' && (
             <Field label="Schedule" hint="Five-field cron in local time. Example: 0 9 * * 1 (Mondays 09:00).">
@@ -1067,18 +1084,28 @@ function TriggersTab({ detail, onChanged }: { detail: WorkflowDetail; onChanged:
           {kind === 'webhook' && <InlineNotice tone="info" title="A token is generated">POST to the URL with the token. The endpoint only listens on loopback.</InlineNotice>}
           <div className="form-grid two">
             <Field label="Unattended policy">
-              <Select value={unattended} onChange={(e) => setUnattended(e.target.value)}>
-                <option value="ask">Ask and wait</option>
-                <option value="allow">Allow risky steps</option>
-                <option value="deny">Deny unattended approvals</option>
-              </Select>
+              <Select
+                value={unattended}
+                onChange={setUnattended}
+                aria-label="Unattended policy"
+                options={[
+                  { value: 'ask', label: 'Ask and wait' },
+                  { value: 'allow', label: 'Allow risky steps' },
+                  { value: 'deny', label: 'Deny unattended approvals' },
+                ]}
+              />
             </Field>
             <Field label="Concurrency">
-              <Select value={concurrency} onChange={(e) => setConcurrency(e.target.value)}>
-                <option value="queue">Queue</option>
-                <option value="skip">Skip if running</option>
-                <option value="cancel-previous">Cancel previous</option>
-              </Select>
+              <Select
+                value={concurrency}
+                onChange={setConcurrency}
+                aria-label="Concurrency"
+                options={[
+                  { value: 'queue', label: 'Queue' },
+                  { value: 'skip', label: 'Skip if running' },
+                  { value: 'cancel-previous', label: 'Cancel previous' },
+                ]}
+              />
             </Field>
           </div>
           <div className="form-section-label">Fixed inputs</div>

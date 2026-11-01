@@ -99,12 +99,14 @@ export function InputForm({
             <Field key={name} label={<span className="input-label">{icon} {label}</span>} hint={hint} error={errors[name]} required={required}>
               <Select
                 value={v === undefined ? '' : String(v)}
-                onChange={(e) => set(name, e.target.value)}
+                onChange={(next) => set(name, next)}
                 disabled={disabled}
-              >
-                <option value="">Choose…</option>
-                {prop.enum.map((opt) => <option key={String(opt)} value={String(opt)}>{String(opt)}</option>)}
-              </Select>
+                aria-label={label}
+                options={[
+                  { value: '', label: 'Choose…' },
+                  ...prop.enum.map((opt) => ({ value: String(opt), label: String(opt) })),
+                ]}
+              />
             </Field>
           )
         }

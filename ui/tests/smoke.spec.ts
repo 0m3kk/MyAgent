@@ -228,6 +228,26 @@ test('tool inspector renders schema and tests', async ({ page }) => {
   await expect(page.getByText('List files and folders inside the workspace.')).toBeVisible()
 })
 
+test('selects use an in-app dropdown', async ({ page }) => {
+  await page.goto('/#/runs')
+  await expect(page.getByRole('heading', { name: 'Runs', exact: true })).toBeVisible({ timeout: 15_000 })
+
+  const select = page.getByRole('combobox', { name: 'Filter by status' })
+  await select.click()
+  const menu = page.getByRole('listbox')
+  await expect(menu).toBeVisible()
+  await expect(menu.getByRole('option', { name: 'All statuses' })).toHaveAttribute('aria-selected', 'true')
+  await menu.getByRole('option', { name: 'failed' }).click()
+  await expect(select).toContainText('failed')
+  await expect(select).toHaveAttribute('aria-expanded', 'false')
+
+  await select.focus()
+  await page.keyboard.press('ArrowDown')
+  await expect(page.getByRole('listbox')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('listbox')).toHaveCount(0)
+})
+
 test('tools can be organized into folders and pinned', async ({ page }) => {
   await page.goto('/#/tools')
   await expect(page.getByRole('heading', { name: 'Tools', exact: true })).toBeVisible({ timeout: 15_000 })

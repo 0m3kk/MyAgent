@@ -331,22 +331,40 @@ export function ToolsPage() {
               <span>{filtered.length === allTools.length ? `${allTools.length} tools` : `${filtered.length} of ${allTools.length} tools`}</span>
             </div>
             <div className="library-filters">
-              <Select className="compact" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label="Filter by status">
-                <option value="all">Any status</option>
-                <option value="active">Active</option>
-                <option value="draft">Drafts & tested</option>
-              </Select>
-              <Select className="compact" value={kindFilter} onChange={(e) => setKindFilter(e.target.value)} aria-label="Filter by kind">
-                <option value="all">Any kind</option>
-                <option value="builtin">Built-in</option>
-                <option value="starlark">Starlark</option>
-                <option value="script">Script</option>
-              </Select>
-              <Select className="compact" value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} aria-label="Sort tools">
-                <option value="name">Name</option>
-                <option value="newest">Newest</option>
-                <option value="updated">Recently updated</option>
-              </Select>
+              <Select
+                className="compact"
+                value={statusFilter}
+                onChange={setStatusFilter}
+                aria-label="Filter by status"
+                options={[
+                  { value: 'all', label: 'Any status' },
+                  { value: 'active', label: 'Active' },
+                  { value: 'draft', label: 'Drafts & tested' },
+                ]}
+              />
+              <Select
+                className="compact"
+                value={kindFilter}
+                onChange={setKindFilter}
+                aria-label="Filter by kind"
+                options={[
+                  { value: 'all', label: 'Any kind' },
+                  { value: 'builtin', label: 'Built-in' },
+                  { value: 'starlark', label: 'Starlark' },
+                  { value: 'script', label: 'Script' },
+                ]}
+              />
+              <Select
+                className="compact"
+                value={sort}
+                onChange={(next) => setSort(next as typeof sort)}
+                aria-label="Sort tools"
+                options={[
+                  { value: 'name', label: 'Name' },
+                  { value: 'newest', label: 'Newest' },
+                  { value: 'updated', label: 'Recently updated' },
+                ]}
+              />
               {filtersActive && (
                 <button className="link-btn tiny" onClick={() => { setQuery(''); setStatusFilter('all'); setKindFilter('all') }}>Reset</button>
               )}
@@ -522,10 +540,15 @@ function NewToolPage() {
           </div>
         </div>
         <div className="workflow-actions">
-          <Select value={template} onChange={(e) => applyTemplate(e.target.value)}>
-            <option value="starlark">Starlark template</option>
-            <option value="script">Python script template</option>
-          </Select>
+          <Select
+            value={template}
+            onChange={applyTemplate}
+            aria-label="Tool template"
+            options={[
+              { value: 'starlark', label: 'Starlark template' },
+              { value: 'script', label: 'Python script template' },
+            ]}
+          />
           <Button variant="primary" icon={<Save size={15} />} onClick={create} loading={busy}>Create draft</Button>
         </div>
       </header>
@@ -880,15 +903,15 @@ function SecretBindings({
                 <strong>{d.name} {d.required && <em className="required">*</em>}</strong>
                 <span>{d.description || d.inject || 'env'} · inject: {d.inject || 'env'}</span>
               </div>
-              <select
-                className="select compact"
+              <Select
+                className="compact"
                 value={bound?.secret_id || ''}
-                onChange={(e) => e.target.value && onBind(d.name, e.target.value)}
+                onChange={(secretID) => secretID && onBind(d.name, secretID)}
                 disabled={busy === 'secret-' + d.name}
-              >
-                <option value="">{bound ? 'Bound' : 'Not bound'}</option>
-                {secrets.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.status})</option>)}
-              </select>
+                placeholder={bound ? 'Bound' : 'Not bound'}
+                aria-label={`Bind ${d.name}`}
+                options={secrets.map((s) => ({ value: s.id, label: `${s.name} (${s.status})` }))}
+              />
               {secret ? <Badge tone="ok">{secret.status}</Badge> : <Badge tone="warn">missing</Badge>}
             </div>
           )

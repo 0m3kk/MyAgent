@@ -83,18 +83,33 @@ export function RunsPage() {
       <div className="filter-bar">
         <div className="filter-group">
           <ListFilter size={14} />
-          <Select value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="">All statuses</option>
-            {['running', 'waiting_approval', 'paused', 'succeeded', 'failed', 'cancelled'].map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
-          </Select>
-          <Select value={source} onChange={(e) => setSource(e.target.value)}>
-            <option value="">All sources</option>
-            {['manual', 'chat', 'schedule', 'watcher', 'webhook', 'cli', 'replay'].map((s) => <option key={s} value={s}>{s}</option>)}
-          </Select>
-          <Select value={workflow} onChange={(e) => setWorkflow(e.target.value)}>
-            <option value="">All workflows</option>
-            {data?.workflows.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-          </Select>
+          <Select
+            value={status}
+            onChange={setStatus}
+            aria-label="Filter by status"
+            options={[
+              { value: '', label: 'All statuses' },
+              ...['running', 'waiting_approval', 'paused', 'succeeded', 'failed', 'cancelled'].map((s) => ({ value: s, label: s.replace(/_/g, ' ') })),
+            ]}
+          />
+          <Select
+            value={source}
+            onChange={setSource}
+            aria-label="Filter by source"
+            options={[
+              { value: '', label: 'All sources' },
+              ...['manual', 'chat', 'schedule', 'watcher', 'webhook', 'cli', 'replay'].map((s) => ({ value: s, label: s })),
+            ]}
+          />
+          <Select
+            value={workflow}
+            onChange={setWorkflow}
+            aria-label="Filter by workflow"
+            options={[
+              { value: '', label: 'All workflows' },
+              ...(data?.workflows ?? []).map((w) => ({ value: w.id, label: w.name })),
+            ]}
+          />
         </div>
         <span className="muted tiny">{runs.length} runs</span>
       </div>

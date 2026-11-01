@@ -365,12 +365,18 @@ export function FolderDialog({
           <TextInput value={name} autoFocus onChange={(e) => setName(e.target.value)} placeholder="e.g. Research" onKeyDown={(e) => { if (e.key === 'Enter') void submit() }} />
         </Field>
         <Field label="Parent folder" hint="Leave empty for a top-level folder.">
-          <Select value={parentID} onChange={(e) => setParentID(e.target.value)}>
-            <option value="">No parent (top level)</option>
-            {options.map(({ folder: option, depth }) => (
-              <option key={option.id} value={option.id}>{`${'— '.repeat(depth)}${option.name}`}</option>
-            ))}
-          </Select>
+          <Select
+            value={parentID}
+            onChange={setParentID}
+            aria-label="Parent folder"
+            options={[
+              { value: '', label: 'No parent (top level)' },
+              ...options.map(({ folder: option, depth }) => ({
+                value: option.id,
+                label: `${'— '.repeat(depth)}${option.name}`,
+              })),
+            ]}
+          />
         </Field>
       </div>
     </Modal>
