@@ -161,6 +161,36 @@ test('text size can be increased and reset in settings', async ({ page }) => {
   await page.locator('.settings-page .text-size-value').click()
 })
 
+test('text size scales page chrome and content', async ({ page }) => {
+  await page.goto('/#/tools')
+  await expect(page.getByRole('heading', { name: 'Tools', exact: true })).toBeVisible({ timeout: 15_000 })
+  await page.keyboard.press('Meta+0')
+
+  const selectors = [
+    '.page-header h1',
+    '.page-description',
+    '.search-box input',
+    '.btn-primary',
+    '.library-nav-row',
+    '.library-group-head h3',
+    '.tool-tile-open',
+    '.tool-tile p',
+    '.badge',
+  ]
+  const sizes = async () => page.evaluate((list) => Object.fromEntries(list.map((selector) => {
+    const el = document.querySelector(selector)
+    return [selector, el ? parseFloat(getComputedStyle(el).fontSize) : 0]
+  })), selectors)
+
+  const before = await sizes()
+  await page.keyboard.press('Meta+=')
+  await expect.poll(async () => (await sizes())['.page-header h1']).toBeGreaterThan(before['.page-header h1'])
+  const after = await sizes()
+  const unscaled = selectors.filter((selector) => before[selector] > 0 && after[selector] <= before[selector])
+  expect(unscaled).toEqual([])
+  await page.keyboard.press('Meta+0')
+})
+
 test('agent steps can be unlimited', async ({ page }) => {
   await page.goto('/#/settings')
   const unlimited = page.getByRole('checkbox', { name: 'Unlimited' })

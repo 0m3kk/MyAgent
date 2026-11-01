@@ -21,6 +21,7 @@ import {
   YAxis,
 } from 'recharts'
 import { Markdown } from '../markdown'
+import { useApp } from '../../store'
 import { richCatalog } from './catalog'
 
 type ChartProps = InferComponentProps<typeof richCatalog, 'BarChart'>
@@ -57,14 +58,16 @@ function formatValue(value: number, format?: ChartProps['valueFormat']) {
   }).format(value)
 }
 
-const tooltipStyle = {
-  background: 'var(--surface-2)',
-  border: '1px solid var(--border)',
-  borderRadius: 8,
-  boxShadow: 'var(--shadow-sm)',
-  color: 'var(--text)',
-  fontSize: 11,
-  padding: '6px 9px',
+function tooltipStyle(fontScale: number) {
+  return {
+    background: 'var(--surface-2)',
+    border: '1px solid var(--border)',
+    borderRadius: 8,
+    boxShadow: 'var(--shadow-sm)',
+    color: 'var(--text)',
+    fontSize: 11 * fontScale,
+    padding: '6px 9px',
+  }
 }
 
 function ChartFrame({ title, children }: { title?: string; children: ReactNode }) {
@@ -76,7 +79,7 @@ function ChartFrame({ title, children }: { title?: string; children: ReactNode }
   )
 }
 
-function chartAxes(format?: ChartProps['valueFormat']) {
+function chartAxes(format: ChartProps['valueFormat'], fontScale: number) {
   return (
     <>
       <CartesianGrid stroke="var(--border-soft)" strokeDasharray="3 3" vertical={false} />
@@ -84,19 +87,19 @@ function chartAxes(format?: ChartProps['valueFormat']) {
         dataKey="label"
         tickLine={false}
         axisLine={false}
-        tick={{ fill: 'var(--muted)', fontSize: 10 }}
+        tick={{ fill: 'var(--muted)', fontSize: 10 * fontScale }}
         interval="preserveStartEnd"
       />
       <YAxis
-        width={46}
+        width={Math.round(46 * Math.max(1, fontScale))}
         tickLine={false}
         axisLine={false}
-        tick={{ fill: 'var(--muted)', fontSize: 10 }}
+        tick={{ fill: 'var(--muted)', fontSize: 10 * fontScale }}
         tickFormatter={(value: number) => formatValue(value, format)}
       />
       <Tooltip
         cursor={{ fill: 'color-mix(in oklab, var(--accent) 7%, transparent)' }}
-        contentStyle={tooltipStyle}
+        contentStyle={tooltipStyle(fontScale)}
         labelStyle={{ color: 'var(--muted)' }}
         formatter={(value) => formatValue(Number(value), format)}
       />
@@ -105,10 +108,11 @@ function chartAxes(format?: ChartProps['valueFormat']) {
 }
 
 function Chart(props: ChartProps) {
+  const { fontScale } = useApp()
   return (
     <ResponsiveContainer width="100%" height={220}>
       <ReBarChart data={props.data} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-        {chartAxes(props.valueFormat)}
+        {chartAxes(props.valueFormat, fontScale)}
         <Bar dataKey="value" fill="var(--accent)" radius={[4, 4, 0, 0]} maxBarSize={46} />
       </ReBarChart>
     </ResponsiveContainer>
@@ -116,10 +120,11 @@ function Chart(props: ChartProps) {
 }
 
 function LineChart(props: ChartProps) {
+  const { fontScale } = useApp()
   return (
     <ResponsiveContainer width="100%" height={220}>
       <ReLineChart data={props.data} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-        {chartAxes(props.valueFormat)}
+        {chartAxes(props.valueFormat, fontScale)}
         <Line
           type="monotone"
           dataKey="value"
@@ -134,6 +139,7 @@ function LineChart(props: ChartProps) {
 }
 
 function AreaChart(props: ChartProps) {
+  const { fontScale } = useApp()
   const gradientId = `rich-area-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`
   return (
     <ResponsiveContainer width="100%" height={220}>
@@ -144,7 +150,7 @@ function AreaChart(props: ChartProps) {
             <stop offset="100%" stopColor="var(--accent)" stopOpacity={0.02} />
           </linearGradient>
         </defs>
-        {chartAxes(props.valueFormat)}
+        {chartAxes(props.valueFormat, fontScale)}
         <Area
           type="monotone"
           dataKey="value"
@@ -158,6 +164,7 @@ function AreaChart(props: ChartProps) {
 }
 
 function PieChart(props: ChartProps) {
+  const { fontScale } = useApp()
   return (
     <ResponsiveContainer width="100%" height={220}>
       <RePieChart>
@@ -176,13 +183,13 @@ function PieChart(props: ChartProps) {
           ))}
         </Pie>
         <Tooltip
-          contentStyle={tooltipStyle}
+          contentStyle={tooltipStyle(fontScale)}
           formatter={(value) => formatValue(Number(value), props.valueFormat)}
         />
         <Legend
           iconType="circle"
           iconSize={7}
-          wrapperStyle={{ fontSize: 10, color: 'var(--muted)' }}
+          wrapperStyle={{ fontSize: 10 * fontScale, color: 'var(--muted)' }}
         />
       </RePieChart>
     </ResponsiveContainer>
