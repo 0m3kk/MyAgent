@@ -3,9 +3,11 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -62,6 +64,18 @@ func metaToolDefs() []llm.ToolDef {
 			map[string]any{},
 		),
 		toolDef(
+			"list_folders",
+			"List existing tool or workflow folders as full paths. Use it before creating a draft so you reuse an existing folder instead of creating a near-duplicate.",
+			map[string]any{
+				"kind": map[string]any{
+					"type":        "string",
+					"enum":        []any{"tool", "workflow"},
+					"description": "Library kind",
+				},
+			},
+			"kind",
+		),
+		toolDef(
 			"get_workflow",
 			"Get a workflow YAML and its validation diagnostics.",
 			map[string]any{
@@ -105,6 +119,10 @@ func metaToolDefs() []llm.ToolDef {
 				"change_note": map[string]any{
 					"type":        "string",
 					"description": "Short note describing the change",
+				},
+				"folder": map[string]any{
+					"type":        "string",
+					"description": "Optional folder path such as Research/Sources. Missing folders are created and an existing path is reused.",
 				},
 			},
 			"yaml",
@@ -185,6 +203,10 @@ func metaToolDefs() []llm.ToolDef {
 				"base_version": map[string]any{
 					"type":        "integer",
 					"description": "Required when editing an existing tool",
+				},
+				"folder": map[string]any{
+					"type":        "string",
+					"description": "Optional folder path such as Research/Sources. Missing folders are created and an existing path is reused.",
 				},
 			},
 			"manifest_yaml",
@@ -350,6 +372,8 @@ func (a *App) executeMetaTool(
 			"workflows": out,
 			"next_hint": "Use get_workflow for the full YAML.",
 		}, nil
+	case "list_folders":
+		return a.metaListFolders(ctx, str(args, "kind"))
 	case "get_workflow":
 		w, v, spec, err := a.ResolveWorkflowVersion(ctx, str(args, "name"), "", "manual")
 		if err != nil {
@@ -377,6 +401,14 @@ func (a *App) executeMetaTool(
 		return map[string]any{"ok": res.OK(), "name": spec.Name, "diagnostics": res.Errors,
 			"warnings": res.Warnings, "next_hint": "Fix every E-code. W-codes are advice."}, nil
 	case "save_workflow_draft":
+		folderPath, folderErr := folderPathArg(args, "folder")
+		if folderErr != nil {
+			return map[string]any{
+				"saved":     false,
+				"error":     folderErr.Error(),
+				"next_hint": "Use a folder path such as Research/Sources, then try again.",
+			}, nil
+		}
 		base := intg(args, "base_version", 0)
 		res, err := a.SaveWorkflowDraft(
 			ctx,
@@ -395,6 +427,24 @@ func (a *App) executeMetaTool(
 			out["version"] = res.Version.Version
 			out["workflow_id"] = res.Workflow.ID
 			out["next_hint"] = "Draft saved. Ask the user to review it, or dry-run with realistic inputs."
+			if len(folderPath) > 0 {
+				folderID, created, err := a.assignToFolderPath(
+					ctx,
+					"workflow",
+					res.Workflow.ID,
+					folderPath,
+				)
+				if err != nil {
+					out["folder_error"] = err.Error()
+					out["next_hint"] = "Draft saved, but the folder could not be applied. Call list_folders and retry with a valid path."
+				} else {
+					out["folder"] = folderLabel(folderPath)
+					out["folder_id"] = folderID
+					if len(created) > 0 {
+						out["created_folders"] = created
+					}
+				}
+			}
 		} else {
 			out["next_hint"] = "Fix the diagnostics and call save_workflow_draft again (max 5 attempts)."
 		}
@@ -570,6 +620,14 @@ func (a *App) executeMetaTool(
 			"settings":  a.GetSettings(),
 		}, nil
 	case "create_tool_draft":
+		folderPath, folderErr := folderPathArg(args, "folder")
+		if folderErr != nil {
+			return map[string]any{
+				"ok":        false,
+				"error":     folderErr.Error(),
+				"next_hint": "Use a folder path such as Research/Sources, then try again.",
+			}, nil
+		}
 		res, err := a.CreateToolDraft(
 			ctx,
 			str(args, "manifest_yaml"),
@@ -582,6 +640,24 @@ func (a *App) executeMetaTool(
 			out["version_id"] = res.Version.ID
 			out["version"] = res.Version.Version
 			out["next_hint"] = "Write implementation files, then run_tool_tests."
+			if len(folderPath) > 0 {
+				folderID, created, err := a.assignToFolderPath(
+					ctx,
+					"tool",
+					res.Tool.ID,
+					folderPath,
+				)
+				if err != nil {
+					out["folder_error"] = err.Error()
+					out["next_hint"] = "Draft saved, but the folder could not be applied. Call list_folders and retry with a valid path."
+				} else {
+					out["folder"] = folderLabel(folderPath)
+					out["folder_id"] = folderID
+					if len(created) > 0 {
+						out["created_folders"] = created
+					}
+				}
+			}
 		} else {
 			out["next_hint"] = "Fix manifest issues and try again."
 		}
@@ -842,6 +918,34 @@ func (a *App) metaDeleteTool(ctx context.Context, convID, name, reason string) (
 	return map[string]any{
 		"ok": true, "deleted": true, "tool": t.Name, "tool_id": t.ID,
 		"next_hint": "Tool deleted. Workflows that referenced it will need another tool.",
+	}, nil
+}
+
+func (a *App) metaListFolders(ctx context.Context, kind string) (any, error) {
+	if kind != "tool" && kind != "workflow" {
+		return nil, errors.New("kind must be tool or workflow")
+	}
+	folders, err := a.FolderList(ctx, kind)
+	if err != nil {
+		return nil, err
+	}
+	paths := folderPathMap(folders)
+	sort.SliceStable(folders, func(i, j int) bool {
+		return pathKey(paths[folders[i].ID]) < pathKey(paths[folders[j].ID])
+	})
+	out := make([]map[string]any, 0, len(folders))
+	for _, folder := range folders {
+		out = append(out, map[string]any{
+			"id":        folder.ID,
+			"path":      paths[folder.ID],
+			"parent_id": folder.ParentID,
+		})
+	}
+	return map[string]any{
+		"ok":        true,
+		"kind":      kind,
+		"folders":   out,
+		"next_hint": "Pass folder as a path string such as Research/Sources to create_tool_draft or save_workflow_draft. Missing folders are created and existing paths are reused.",
 	}, nil
 }
 

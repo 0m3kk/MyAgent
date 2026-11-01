@@ -105,6 +105,14 @@ function workflowSummary(source: string): { name?: string; steps?: number } {
   return { name: yamlTopLevel(source, 'name'), steps: yamlStepCount(source) }
 }
 
+function folderText(value: unknown): string | undefined {
+  if (Array.isArray(value)) {
+    const parts = value.map((part) => text(part)).filter((part): part is string => !!part)
+    return parts.length > 0 ? parts.join(' / ') : undefined
+  }
+  return text(value)
+}
+
 function fallbackTarget(args: Args): string | undefined {
   const preferred = [
     'path',
@@ -155,12 +163,14 @@ export function summarizeToolCall(name: string, rawArgs: unknown): ToolSummary {
       const yaml = s('yaml') ?? ''
       const wf = workflowSummary(yaml)
       const base = integer(args.base_version)
+      const folder = folderText(args.folder)
       return {
         title: 'Save workflow draft',
         ...target(wf.name ?? 'untitled workflow'),
         detail: detail(
           wf.steps !== undefined ? count(wf.steps, 'step') : undefined,
           base ? `from v${base}` : undefined,
+          folder ? `in ${folder}` : undefined,
         ),
       }
     }
@@ -181,6 +191,8 @@ export function summarizeToolCall(name: string, rawArgs: unknown): ToolSummary {
       }
     case 'list_workflows':
       return { title: 'List workflows' }
+    case 'list_folders':
+      return { title: 'List folders', ...target(s('kind')) }
     case 'search_tools':
       return { title: 'Search tools', ...target(s('query')) }
     case 'describe_tool':
@@ -192,10 +204,11 @@ export function summarizeToolCall(name: string, rawArgs: unknown): ToolSummary {
     case 'create_tool_draft': {
       const manifest = s('manifest_yaml') ?? ''
       const kind = yamlTopLevel(manifest, 'kind')
+      const folder = folderText(args.folder)
       return {
         title: 'Create tool draft',
         ...target(yamlTopLevel(manifest, 'name') ?? 'untitled tool'),
-        detail: kind,
+        detail: detail(kind, folder ? `in ${folder}` : undefined),
       }
     }
     case 'write_tool_file': {
@@ -362,6 +375,10 @@ export function toolCallOutcome(name: string, rawResult: unknown): ToolOutcome |
     case 'list_workflows': {
       const items = array(result.workflows)
       return items ? { text: count(items.length, 'workflow'), tone: 'neutral' } : undefined
+    }
+    case 'list_folders': {
+      const items = array(result.folders)
+      return items ? { text: count(items.length, 'folder'), tone: 'neutral' } : undefined
     }
     case 'search_tools': {
       const items = array(result.tools)

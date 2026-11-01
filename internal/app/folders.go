@@ -256,6 +256,97 @@ func (a *App) validFolderParent(
 	return folder, nil
 }
 
+// folderPathArg turns an agent-supplied folder path into cleaned segments. It
+// accepts "Research/Sources" and ["Research", "Sources"] so a model can use
+// either shape without a retry.
+func folderPathArg(args map[string]any, key string) ([]string, error) {
+	raw, ok := args[key]
+	if !ok || raw == nil {
+		return nil, nil
+	}
+	path := []string{}
+	switch value := raw.(type) {
+	case string:
+		path = strings.FieldsFunc(value, func(r rune) bool { return r == '/' || r == '>' })
+	case []string:
+		path = append(path, value...)
+	case []any:
+		for _, item := range value {
+			part, ok := item.(string)
+			if !ok {
+				return nil, fmt.Errorf("%s must be a folder path such as Research/Sources", key)
+			}
+			path = append(path, part)
+		}
+	default:
+		return nil, fmt.Errorf("%s must be a folder path such as Research/Sources", key)
+	}
+	return cleanOrganizePath(organizePath(path))
+}
+
+func folderLabel(path []string) string {
+	return strings.Join(path, " / ")
+}
+
+// assignToFolderPath creates any missing folders in the path, then moves the
+// tool or workflow into the deepest folder.
+func (a *App) assignToFolderPath(
+	ctx context.Context,
+	kind, itemID string,
+	path []string,
+) (string, []string, error) {
+	if len(path) == 0 {
+		return "", nil, nil
+	}
+	folderID, created, err := a.ensureFolderPath(ctx, kind, path)
+	if err != nil {
+		return "", nil, err
+	}
+	switch kind {
+	case "tool":
+		err = a.SetToolOrganization(ctx, itemID, &folderID, nil)
+	case "workflow":
+		err = a.SetWorkflowOrganization(ctx, itemID, &folderID, nil)
+	default:
+		err = fmt.Errorf("%w: kind must be tool or workflow", ErrInvalidFolder)
+	}
+	if err != nil {
+		return "", nil, err
+	}
+	return folderID, created, nil
+}
+
+// ensureFolderPath reuses an existing path case-insensitively and creates only
+// the missing segments.
+func (a *App) ensureFolderPath(
+	ctx context.Context,
+	kind string,
+	path []string,
+) (string, []string, error) {
+	cleaned, err := cleanOrganizePath(organizePath(path))
+	if err != nil {
+		return "", nil, err
+	}
+	if len(cleaned) == 0 {
+		return "", nil, nil
+	}
+	folders, err := a.Store.ListFolders(ctx, kind)
+	if err != nil {
+		return "", nil, err
+	}
+	index := map[string]string{}
+	for id, itemPath := range folderPathMap(folders) {
+		index[pathKey(itemPath)] = id
+	}
+	created := []string{}
+	createdSet := map[string]bool{}
+	folderID, err := a.ensureOrganizePath(ctx, kind, cleaned, index, &created, createdSet)
+	if err != nil {
+		return "", nil, err
+	}
+	return folderID, created, nil
+}
+
 // folderInSubtree reports whether candidate is root or one of its descendants.
 func (a *App) folderInSubtree(ctx context.Context, candidate, root string) (bool, error) {
 	current := candidate
