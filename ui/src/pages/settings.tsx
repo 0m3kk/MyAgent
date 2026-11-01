@@ -409,10 +409,10 @@ function ModelsTab({ onAdd, onEdit, onProbe }: { onAdd: () => void; onEdit: (m: 
                   disabled={busy !== null}
                   aria-label={task.label}
                   options={[
-                    { value: '', label: `Default${defaultModel ? ` — ${defaultModel.model}` : ''}` },
+                    { value: '', label: `Default${defaultModel ? ` — ${defaultModel.name || defaultModel.model}` : ''}` },
                     ...data.model_profiles.map((m) => ({
                       value: m.id,
-                      label: `${m.model}${m.name && m.name !== m.model ? ` — ${m.name}` : ''}`,
+                      label: m.name || m.model,
                     })),
                   ]}
                 />
