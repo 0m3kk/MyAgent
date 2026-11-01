@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"myagent/internal/workspaces"
@@ -57,17 +58,26 @@ func (s *Server) handleUpdateWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	name, _ := body["name"].(string)
-	root, _ := body["root_path"].(string)
-	if id == reg.Active() && root != "" && s.app.HasActiveWork() {
-		writeError(
-			w,
-			http.StatusConflict,
-			"stop active chats and runs before changing the workspace folder",
-			nil,
-		)
-		return
+	rootValue, rootSet := body["root_path"]
+	root, _ := rootValue.(string)
+	root = strings.TrimSpace(root)
+	if rootSet && id == reg.Active() && s.app.HasActiveWork() {
+		current, err := reg.Get(id)
+		if err != nil {
+			writeWorkspaceError(w, err)
+			return
+		}
+		if root != strings.TrimSpace(current.RootPath) {
+			writeError(
+				w,
+				http.StatusConflict,
+				"stop active chats and runs before changing the workspace folder",
+				nil,
+			)
+			return
+		}
 	}
-	p, err := reg.Update(id, name, root)
+	p, err := reg.Update(id, name, root, rootSet && root == "")
 	if err != nil {
 		writeWorkspaceError(w, err)
 		return

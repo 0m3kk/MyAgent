@@ -13,7 +13,10 @@ import (
 	"myagent/internal/ids"
 )
 
-const registryVersion = 1
+// Version 2 makes every workspace own a private folder inside its profile.
+// Version 1 profiles stored an external project folder; opening the registry
+// resets them instead of migrating their files.
+const registryVersion = 2
 
 var (
 	ErrNotConfigured = errors.New("workspace profiles are not configured")
@@ -67,19 +70,29 @@ func Open(home string) (*Registry, error) {
 	if err := json.Unmarshal(raw, &f); err != nil {
 		return nil, fmt.Errorf("read workspaces.json: %w", err)
 	}
-	if f.Version == 0 {
-		f.Version = registryVersion
-	}
+	legacy := f.Version < registryVersion
 	for i := range f.Workspaces {
 		normalizeProfile(home, &f.Workspaces[i])
 	}
 	if len(f.Workspaces) == 0 {
 		return nil, ErrNotConfigured
 	}
+	if legacy {
+		for i := range f.Workspaces {
+			f.Workspaces[i].RootPath = privateRoot(f.Workspaces[i].DataDir)
+		}
+		f.Version = registryVersion
+	}
 	if f.Active == "" || !hasProfile(f.Workspaces, f.Active) {
 		f.Active = f.Workspaces[0].ID
 	}
-	return &Registry{home: home, path: path, active: f.Active, list: f.Workspaces}, nil
+	reg := &Registry{home: home, path: path, active: f.Active, list: f.Workspaces}
+	if legacy {
+		if err := reg.saveLocked(); err != nil {
+			return nil, err
+		}
+	}
+	return reg, nil
 }
 
 // OpenOrCreate is used by agentd. When home is empty it returns nil, which
@@ -97,9 +110,6 @@ func OpenOrCreate(home, dataDir, root, name string) (*Registry, error) {
 	}
 	if name == "" {
 		name = "Personal"
-	}
-	if root == "" {
-		root = defaultHomeRoot()
 	}
 	if dataDir == "" {
 		dataDir = filepath.Join(home, "profiles", "default")
@@ -202,9 +212,6 @@ func (r *Registry) Create(name, root string) (Profile, error) {
 	if nameTaken(r.list, name, "") {
 		return Profile{}, ErrDuplicate
 	}
-	if root == "" {
-		root = defaultRoot(name)
-	}
 	id := ids.New()
 	p, err := newProfile(r.home, id, name, root, filepath.Join(r.home, "profiles", id))
 	if err != nil {
@@ -221,7 +228,10 @@ func (r *Registry) Create(name, root string) (Profile, error) {
 	return p, nil
 }
 
-func (r *Registry) Update(id, name, root string) (Profile, error) {
+// Update changes a profile's name and, when requested, its working folder.
+// An empty root with resetRoot=true restores the profile's private workspace
+// folder. An empty root without resetRoot leaves the current folder unchanged.
+func (r *Registry) Update(id, name, root string, resetRoot bool) (Profile, error) {
 	if r == nil {
 		return Profile{}, ErrNotConfigured
 	}
@@ -245,7 +255,12 @@ func (r *Registry) Update(id, name, root string) (Profile, error) {
 		}
 		p.Name = name
 	}
-	if root = strings.TrimSpace(root); root != "" {
+	if resetRoot {
+		p.RootPath = privateRoot(p.DataDir)
+		if err := os.MkdirAll(p.RootPath, 0o755); err != nil {
+			return Profile{}, err
+		}
+	} else if root = strings.TrimSpace(root); root != "" {
 		expanded, err := expandPath(r.home, root)
 		if err != nil {
 			return Profile{}, err
@@ -367,16 +382,26 @@ func (r *Registry) saveLocked() error {
 }
 
 func newProfile(home, id, name, root, dataDir string) (Profile, error) {
-	root, err := expandPath(home, root)
+	dataDir, err := expandPath(home, dataDir)
 	if err != nil {
 		return Profile{}, err
+	}
+	if err := os.MkdirAll(dataDir, 0o700); err != nil {
+		return Profile{}, err
+	}
+	_ = os.Chmod(dataDir, 0o700)
+	// A profile without an explicit project folder keeps its files inside the
+	// profile directory. Nothing outside the app's data directory is created.
+	if strings.TrimSpace(root) == "" {
+		root = privateRoot(dataDir)
+	} else {
+		root, err = expandPath(home, root)
+		if err != nil {
+			return Profile{}, err
+		}
 	}
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return Profile{}, fmt.Errorf("create workspace folder: %w", err)
-	}
-	dataDir, err = expandPath(home, dataDir)
-	if err != nil {
-		return Profile{}, err
 	}
 	now := ids.NowMS()
 	return Profile{
@@ -403,7 +428,7 @@ func normalizeProfile(home string, p *Profile) {
 		p.Name = "Workspace"
 	}
 	if p.RootPath == "" {
-		p.RootPath = defaultRoot(p.Name)
+		p.RootPath = privateRoot(p.DataDir)
 	}
 	if expanded, err := expandPath(home, p.RootPath); err == nil {
 		p.RootPath = expanded
@@ -491,16 +516,11 @@ func slug(name string) string {
 	return out
 }
 
-func defaultHomeRoot() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "MyAgent"
-	}
-	return filepath.Join(home, "MyAgent")
-}
-
-func defaultRoot(name string) string {
-	return filepath.Join(defaultHomeRoot(), slug(name))
+// privateRoot is the workspace-owned folder for profiles that have no explicit
+// project folder. It lives inside the profile so imports and new workspaces
+// never depend on a source directory outside the app data directory.
+func privateRoot(dataDir string) string {
+	return filepath.Join(dataDir, "workspace")
 }
 
 func pathWithin(base, target string) (bool, error) {

@@ -28,7 +28,6 @@ export function WorkspaceSwitcher() {
   const [switching, setSwitching] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [createName, setCreateName] = useState('')
-  const [createRoot, setCreateRoot] = useState('')
   const [editTarget, setEditTarget] = useState<WorkspaceProfile | null>(null)
   const [editName, setEditName] = useState('')
   const [editRoot, setEditRoot] = useState('')
@@ -89,10 +88,9 @@ export function WorkspaceSwitcher() {
     if (!name || busy) return
     setBusy(true)
     try {
-      const profile = await api.createWorkspace(name, createRoot.trim())
+      const profile = await api.createWorkspace(name)
       setCreateOpen(false)
       setCreateName('')
-      setCreateRoot('')
       await load()
       toast('Workspace created', profile.root_path, 'success')
     } catch (err) {
@@ -127,7 +125,7 @@ export function WorkspaceSwitcher() {
     setOpen(false)
     const ok = await confirm({
       title: 'Delete workspace',
-      message: `Delete “${profile.name}”? Its chats, workflows, tools and runs will be removed. The project folder is not touched.`,
+      message: `Delete “${profile.name}”? Its chats, workflows, tools, runs and private files will be removed. A separately linked working folder is not touched.`,
       confirmLabel: 'Delete workspace',
     })
     if (!ok) return
@@ -252,7 +250,7 @@ export function WorkspaceSwitcher() {
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         title="New workspace"
-        subtitle="Each workspace has its own chats, workflows, tools, runs, secrets and settings."
+        subtitle="Each workspace has its own chats, workflows, tools, runs, secrets, settings and private files."
         width={520}
         footer={(
           <>
@@ -272,21 +270,13 @@ export function WorkspaceSwitcher() {
             onKeyDown={(e) => { if (e.key === 'Enter') void createWorkspace() }}
           />
         </Field>
-        <Field label="Project folder" hint="Leave blank for ~/MyAgent/<name>. This folder is not included in exports.">
-          <TextInput
-            value={createRoot}
-            onChange={(e) => setCreateRoot(e.target.value)}
-            placeholder="~/Projects/MyAgent"
-            className="mono"
-          />
-        </Field>
       </Modal>
 
       <Modal
         open={editTarget !== null}
         onClose={() => setEditTarget(null)}
         title="Edit workspace"
-        subtitle="The project folder is not included in workspace exports."
+        subtitle="The working folder is only where the agent may read and write files. It is not included in exports."
         width={520}
         footer={(
           <>
@@ -305,10 +295,11 @@ export function WorkspaceSwitcher() {
             onKeyDown={(e) => { if (e.key === 'Enter') void saveWorkspace() }}
           />
         </Field>
-        <Field label="Project folder" hint="Changing the folder while chats or runs are active is blocked.">
+        <Field label="Working folder" hint="Leave blank to use this workspace's private folder. Changing it while chats or runs are active is blocked.">
           <TextInput
             value={editRoot}
             onChange={(e) => setEditRoot(e.target.value)}
+            placeholder="Private workspace folder"
             className="mono"
           />
         </Field>

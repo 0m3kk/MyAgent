@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -31,12 +32,15 @@ func TestRegistryLifecycle(t *testing.T) {
 	if _, err := reg.Create("work", ""); !errors.Is(err, ErrDuplicate) {
 		t.Fatalf("expected duplicate error, got %v", err)
 	}
-	renamed, err := reg.Update(work.ID, "Client", "")
+	renamed, err := reg.Update(work.ID, "Client", "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if renamed.Name != "Client" {
 		t.Fatalf("name = %q", renamed.Name)
+	}
+	if renamed.RootPath != filepath.Join(home, "projects", "work") {
+		t.Fatalf("name-only update changed root to %q", renamed.RootPath)
 	}
 	if _, err := reg.Activate(work.ID); err != nil {
 		t.Fatal(err)
@@ -51,6 +55,12 @@ func TestRegistryLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if want := filepath.Join(other.DataDir, "workspace"); other.RootPath != want {
+		t.Fatalf("private root = %q, want %q", other.RootPath, want)
+	}
+	if _, err := os.Stat(other.RootPath); err != nil {
+		t.Fatalf("private root was not created: %v", err)
+	}
 	if _, err := reg.Activate(other.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -59,6 +69,59 @@ func TestRegistryLifecycle(t *testing.T) {
 	}
 	if _, err := os.Stat(work.DataDir); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("profile dir still exists: %v", err)
+	}
+}
+
+func TestOpenResetsLegacyProjectFolders(t *testing.T) {
+	home := t.TempDir()
+	dataDir := filepath.Join(home, "profiles", "p1")
+	writeRegistry(t, home, registryFile{
+		Version: 1,
+		Active:  "p1",
+		Workspaces: []Profile{{
+			ID:       "p1",
+			Name:     "Old",
+			RootPath: filepath.Join(home, "source-checkout"),
+			DataDir:  dataDir,
+		}},
+	})
+
+	reg, err := Open(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := reg.Get("p1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := privateRoot(dataDir); p.RootPath != want {
+		t.Fatalf("root = %q, want %q", p.RootPath, want)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(home, "workspaces.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var saved registryFile
+	if err := json.Unmarshal(raw, &saved); err != nil {
+		t.Fatal(err)
+	}
+	if saved.Version != registryVersion {
+		t.Fatalf("saved version = %d, want %d", saved.Version, registryVersion)
+	}
+	if saved.Workspaces[0].RootPath != privateRoot(dataDir) {
+		t.Fatalf("saved root = %q", saved.Workspaces[0].RootPath)
+	}
+}
+
+func writeRegistry(t *testing.T, home string, f registryFile) {
+	t.Helper()
+	raw, err := json.MarshalIndent(f, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "workspaces.json"), raw, 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -156,6 +219,9 @@ func TestExportStripsSecretsAndImportCreatesProfile(t *testing.T) {
 	}
 	if imported.Name != "Personal (2)" {
 		t.Fatalf("imported name = %q", imported.Name)
+	}
+	if want := filepath.Join(imported.DataDir, "workspace"); imported.RootPath != want {
+		t.Fatalf("imported root = %q, want private %q", imported.RootPath, want)
 	}
 	if _, err := os.Stat(filepath.Join(imported.DataDir, "myagent.db")); err != nil {
 		t.Fatal(err)

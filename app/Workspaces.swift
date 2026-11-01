@@ -35,7 +35,7 @@ enum WorkspaceError: LocalizedError {
 
 /// Reads the profile registry used by the native shell. The Go core owns
 /// creating/updating profiles; this type only needs to pick the active one and
-/// migrate the first-run data layout.
+/// bootstrap a private profile on first launch.
 final class WorkspaceManager {
     let home: URL
     let registryURL: URL
@@ -107,8 +107,8 @@ final class WorkspaceManager {
                 reg.workspaces[i].dataDir = home.appendingPathComponent("profiles/\(reg.workspaces[i].id)").path
             }
             if reg.workspaces[i].rootPath.isEmpty {
-                reg.workspaces[i].rootPath = FileManager.default.homeDirectoryForCurrentUser
-                    .appendingPathComponent("MyAgent/\(slug(reg.workspaces[i].name))").path
+                reg.workspaces[i].rootPath = URL(fileURLWithPath: reg.workspaces[i].dataDir)
+                    .appendingPathComponent("workspace").path
             }
             if reg.workspaces[i].name.isEmpty {
                 reg.workspaces[i].name = "Workspace"
@@ -123,25 +123,19 @@ final class WorkspaceManager {
     private static func bootstrap(home: URL) throws -> WorkspaceRegistry {
         let fm = FileManager.default
         let env = ProcessInfo.processInfo.environment
-        let legacy = env["MYAGENT_DATA_DIR"].flatMap { path -> URL? in
+        let dataOverride = env["MYAGENT_DATA_DIR"].flatMap { path -> URL? in
             guard !path.isEmpty else { return nil }
             return URL(fileURLWithPath: path).standardizedFileURL
-        } ?? home
+        }
+        let name = env["MYAGENT_WORKSPACE_NAME"].flatMap { $0.isEmpty ? nil : $0 } ?? "Personal"
+
+        let profileDir = dataOverride ?? home.appendingPathComponent("profiles/default")
+        try fm.createDirectory(at: profileDir, withIntermediateDirectories: true)
+
         let root = env["MYAGENT_WORKSPACE"].flatMap { path -> URL? in
             guard !path.isEmpty else { return nil }
             return URL(fileURLWithPath: path).standardizedFileURL
-        } ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("MyAgent")
-        let name = env["MYAGENT_WORKSPACE_NAME"].flatMap { $0.isEmpty ? nil : $0 } ?? "Personal"
-
-        let profileDir: URL
-        if legacy.path == home.path {
-            profileDir = home.appendingPathComponent("profiles/default")
-            try fm.createDirectory(at: profileDir, withIntermediateDirectories: true)
-            try migrateLegacyData(from: home, to: profileDir)
-        } else {
-            profileDir = legacy
-            try fm.createDirectory(at: profileDir, withIntermediateDirectories: true)
-        }
+        } ?? profileDir.appendingPathComponent("workspace")
         try? fm.createDirectory(at: root, withIntermediateDirectories: true)
         try? fm.removeItem(at: home.appendingPathComponent("api.json"))
 
@@ -154,23 +148,7 @@ final class WorkspaceManager {
             createdAt: now,
             lastOpenedAt: now
         )
-        return WorkspaceRegistry(version: 1, active: profile.id, workspaces: [profile])
-    }
-
-    private static func migrateLegacyData(from old: URL, to new: URL) throws {
-        let fm = FileManager.default
-        let names = [
-            "myagent.db", "myagent.db-wal", "myagent.db-shm", "master.key",
-            "artifacts", "tools", "tmp", "agentd.log",
-        ]
-        for name in names {
-            let src = old.appendingPathComponent(name)
-            let dst = new.appendingPathComponent(name)
-            guard fm.fileExists(atPath: src.path), !fm.fileExists(atPath: dst.path) else {
-                continue
-            }
-            try fm.moveItem(at: src, to: dst)
-        }
+        return WorkspaceRegistry(version: 2, active: profile.id, workspaces: [profile])
     }
 
     private static func absolutePath(_ home: URL, _ path: String) -> String {
@@ -181,14 +159,5 @@ final class WorkspaceManager {
             value = home.appendingPathComponent(value).path
         }
         return URL(fileURLWithPath: value).standardizedFileURL.path
-    }
-
-    private static func slug(_ name: String) -> String {
-        let allowed = CharacterSet.alphanumerics
-        let mapped = name.lowercased().unicodeScalars.map { scalar -> Character in
-            allowed.contains(scalar) ? Character(String(scalar)) : "-"
-        }
-        let value = String(mapped).trimmingCharacters(in: CharacterSet(charactersIn: "-"))
-        return value.isEmpty ? "workspace" : value
     }
 }

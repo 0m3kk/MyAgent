@@ -106,8 +106,8 @@ export const api = {
   health: () => request<{ ok: boolean; version: string }>('/api/health'),
 
   workspaces: () => request<WorkspaceList>('/api/workspaces'),
-  createWorkspace: (name: string, rootPath: string) =>
-    request<WorkspaceProfile>('/api/workspaces', json({ name, root_path: rootPath })),
+  createWorkspace: (name: string) =>
+    request<WorkspaceProfile>('/api/workspaces', json({ name })),
   updateWorkspace: (id: string, body: { name?: string; root_path?: string }) =>
     request<WorkspaceProfile>(`/api/workspaces/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteWorkspace: (id: string) => request<{ ok: boolean }>(`/api/workspaces/${id}`, { method: 'DELETE' }),

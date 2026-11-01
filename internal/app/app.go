@@ -198,7 +198,7 @@ func New(ctx context.Context, cfg Config) (*App, error) {
 		cfg.DataDir = defaultDataDir()
 	}
 	if cfg.WorkspaceRoot == "" {
-		cfg.WorkspaceRoot = defaultWorkspace()
+		cfg.WorkspaceRoot = defaultWorkspace(cfg.DataDir)
 	}
 	if cfg.WorkspaceName == "" {
 		cfg.WorkspaceName = "Personal"
@@ -209,7 +209,15 @@ func New(ctx context.Context, cfg Config) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	migrateLegacyWorkspace(cfg.WorkspaceRoot)
+	// The registry is authoritative. The active profile decides where data and
+	// files live, not the directory the binary or shell was launched from.
+	if reg != nil {
+		if p, err := reg.Get(reg.Active()); err == nil {
+			cfg.DataDir = p.DataDir
+			cfg.WorkspaceRoot = p.RootPath
+			cfg.WorkspaceName = p.Name
+		}
+	}
 	if cfg.DBPath == "" {
 		cfg.DBPath = filepath.Join(cfg.DataDir, "myagent.db")
 	}
@@ -514,33 +522,13 @@ func defaultDataDir() string {
 	return filepath.Join(home, "Library", "Application Support", "MyAgent")
 }
 
-func defaultWorkspace() string {
+func defaultWorkspace(dataDir string) string {
 	if v := os.Getenv("MYAGENT_WORKSPACE"); v != "" {
 		return v
 	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, "MyAgent")
-}
-
-// migrateLegacyWorkspace moves the old default workspace to the new default
-// location. It only runs for the default path and never overwrites existing data.
-func migrateLegacyWorkspace(root string) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return
-	}
-	target := filepath.Join(home, "MyAgent")
-	if filepath.Clean(root) != filepath.Clean(target) {
-		return
-	}
-	legacy := filepath.Join(home, "MyAgent Workspace")
-	if _, err := os.Stat(legacy); err != nil {
-		return
-	}
-	if _, err := os.Stat(target); err == nil {
-		return
-	}
-	_ = os.Rename(legacy, target)
+	// Standalone runs keep their files in the data directory instead of a
+	// folder next to the source checkout.
+	return filepath.Join(dataDir, "workspace")
 }
 
 func parseToolRef(ref string) (string, int) {

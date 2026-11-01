@@ -127,26 +127,24 @@ func Import(archivePath, home, rootOverride string) (Profile, error) {
 		return Profile{}, err
 	}
 
-	root := strings.TrimSpace(rootOverride)
-	if root == "" && manifest.RootPath != "" {
-		if info, err := os.Stat(manifest.RootPath); err == nil && info.IsDir() {
-			root = manifest.RootPath
-		}
-	}
-	if root == "" {
-		root = defaultRoot(manifest.Name)
-	}
-	root, err = expandPath(home, root)
-	if err != nil {
-		return Profile{}, err
-	}
-	if err := os.MkdirAll(root, 0o755); err != nil {
-		return Profile{}, err
-	}
-
 	id := ids.New()
 	profileDir := filepath.Join(home, "profiles", id)
 	if err := os.MkdirAll(profileDir, 0o700); err != nil {
+		return Profile{}, err
+	}
+	// Imports keep their files inside the new profile unless the caller
+	// explicitly asks to relink to a folder on this machine. The manifest root
+	// belongs to the machine that exported the archive, so it is never reused.
+	root := strings.TrimSpace(rootOverride)
+	if root == "" {
+		root = privateRoot(profileDir)
+	} else {
+		root, err = expandPath(home, root)
+		if err != nil {
+			return Profile{}, err
+		}
+	}
+	if err := os.MkdirAll(root, 0o755); err != nil {
 		return Profile{}, err
 	}
 	cleanup := true
