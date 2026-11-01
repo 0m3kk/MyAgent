@@ -129,7 +129,7 @@ export function ChatHome() {
       )}
 
       <div className="home-composer">
-        <StartChatComposer hasModel={hasModel} model={defaultModel?.model} onSend={start} />
+        <StartChatComposer hasModel={hasModel} name={defaultModel?.name} onSend={start} />
       </div>
 
       <div className="home-columns">
@@ -292,7 +292,7 @@ export function NewChatPage() {
       </div>
 
       <div className="composer-dock">
-        <StartChatComposer hasModel={hasModel} model={defaultModel?.model} onSend={start} />
+        <StartChatComposer hasModel={hasModel} name={defaultModel?.name} onSend={start} />
       </div>
     </div>
   )
@@ -775,7 +775,7 @@ export function ChatPage({ conversationId }: { conversationId: string }) {
           </div>
         </div>
         <div className="composer-foot">
-          <span>{defaultModel?.model}</span>
+          <span>{defaultModel?.name}</span>
           <span>·</span>
           <span>Secrets never enter the prompt</span>
           <span className={clsx('limit-chip', limitTone)} title={limitTitle}>

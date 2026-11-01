@@ -4,11 +4,11 @@ import { Button, TextArea } from './ui'
 
 export function StartChatComposer({
   hasModel,
-  model,
+  name,
   onSend,
 }: {
   hasModel: boolean
-  model?: string
+  name?: string
   onSend: (text: string) => Promise<boolean>
 }) {
   const [draft, setDraft] = useState('')
@@ -74,7 +74,7 @@ export function StartChatComposer({
         </div>
       </div>
       <div className="composer-foot">
-        <span>{model || 'No model selected'}</span>
+        <span>{name || 'No model selected'}</span>
         <span>·</span>
         <span>Secrets never enter the prompt</span>
       </div>
