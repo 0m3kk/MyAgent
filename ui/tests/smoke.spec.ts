@@ -182,6 +182,52 @@ steps:
   await expect(page.getByText('Raw JSON')).toBeVisible()
 })
 
+test('workflow can be started from chat and stays in the conversation', async ({ page }) => {
+  await page.goto('/#/chats')
+  await expect(page.getByRole('heading', { name: 'All chats' })).toBeVisible({ timeout: 15_000 })
+  const token = await page.evaluate(async () => {
+    const res = await fetch('/api/dev-token')
+    return ((await res.json()) as { token: string }).token
+  })
+  const headers = { Authorization: `Bearer ${token}` }
+  const yaml = `schema: 1
+name: chat-run-test
+description: Workflow started from a chat.
+inputs: {}
+outputs:
+  message: \${steps.compose.output.message}
+steps:
+  - id: compose
+    set:
+      message: Hello from the workflow
+`
+  const saved = await page.request.post('/api/workflows', {
+    headers,
+    data: { yaml, change_note: 'e2e', approve: true },
+  })
+  expect(saved.ok()).toBeTruthy()
+  const conversation = await page.request.post('/api/conversations', {
+    headers,
+    data: { title: 'Workflow chat' },
+  })
+  const conversationID = ((await conversation.json()) as { id: string }).id
+  await page.goto(`/#/chats/${conversationID}`)
+  await expect(page.getByRole('heading', { name: 'Workflow chat' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Run workflow' }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByText('Run a workflow in this chat')).toBeVisible()
+  await dialog.getByRole('combobox', { name: 'Workflow' }).click()
+  await page.getByRole('option', { name: /chat-run-test/ }).click()
+  await dialog.getByRole('button', { name: 'Start run' }).click()
+
+  const card = page.locator('.workflow-run-card')
+  await expect(card).toContainText('chat-run-test')
+  await expect(card.locator('.workflow-run-head .badge').filter({ hasText: 'succeeded' })).toBeVisible({ timeout: 10_000 })
+  await page.reload()
+  await expect(page.locator('.workflow-run-card')).toContainText('chat-run-test')
+})
+
 test('text size can be increased and reset in settings', async ({ page }) => {
   await page.goto('/#/settings')
   const control = page.locator('.settings-page .text-size-control')

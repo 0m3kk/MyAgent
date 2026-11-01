@@ -105,6 +105,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/conversations/{id}/messages", s.handleSendMessage)
 	s.mux.HandleFunc("POST /api/conversations/{id}/stop", s.handleStopChat)
 	s.mux.HandleFunc("POST /api/conversations/{id}/save-workflow", s.handleSaveAsWorkflow)
+	s.mux.HandleFunc("POST /api/conversations/{id}/run-workflow", s.handleRunWorkflowInChat)
 	s.mux.HandleFunc("POST /api/chat", s.handleChat)
 
 	s.mux.HandleFunc("GET /api/workflows", s.handleListWorkflows)

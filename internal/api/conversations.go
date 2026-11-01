@@ -167,3 +167,29 @@ func (s *Server) handleSaveAsWorkflow(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, res)
 }
+
+func (s *Server) handleRunWorkflowInChat(w http.ResponseWriter, r *http.Request) {
+	body, ok := readJSON(w, r, 1<<20)
+	if !ok {
+		return
+	}
+	workflowID, _ := body["workflow_id"].(string)
+	versionID, _ := body["version_id"].(string)
+	run, msg, err := s.app.StartWorkflowInChat(
+		r.Context(),
+		r.PathValue("id"),
+		workflowID,
+		versionID,
+		mapFrom(body["inputs"]),
+	)
+	if err != nil {
+		status := http.StatusBadRequest
+		if run.ID != "" {
+			// The run itself started; only the chat card failed to persist.
+			status = http.StatusInternalServerError
+		}
+		writeError(w, status, err.Error(), map[string]any{"run_id": run.ID})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"run": run, "message": msg})
+}

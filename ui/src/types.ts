@@ -79,6 +79,15 @@ export interface MessageContent {
   parts?: Part[]
 }
 
+export interface WorkflowRunPartData {
+  run_id: string
+  workflow_id?: string
+  workflow_name?: string
+  version_id?: string
+  version?: number
+  status?: string
+}
+
 export interface Message {
   id: string
   conversation_id: string

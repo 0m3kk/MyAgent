@@ -3,6 +3,7 @@ import {
   ArrowRight,
   Bot,
   Check,
+  CirclePlay,
   Cpu,
   Gauge,
   MessageSquareText,
@@ -24,11 +25,13 @@ import { api } from '../api'
 import { navigate } from '../router'
 import { useApp } from '../store'
 import { useEventStream, usePolling, useAutoScroll } from '../hooks'
-import type { Approval, ChatProgress, Conversation, EventEnvelope, Message } from '../types'
+import type { Approval, ChatProgress, Conversation, EventEnvelope, Message, Part } from '../types'
 import { formatRelative } from '../format'
 import { ApprovalCard } from '../components/approval'
 import { StartChatComposer } from '../components/chat-composer'
 import { Markdown, MessageMeta, StreamCursor, ToolCard, TypingIndicator, type ToolView } from '../components/chat-bits'
+import { ChatWorkflowDialog } from '../components/run-workflow-dialog'
+import { WorkflowRunCard } from '../components/workflow-run-card'
 import { Badge, Button, EmptyState, IconButton, PageHeader, Spinner, TextArea } from '../components/ui'
 import { useToast } from '../components/toast'
 import { useConfirm } from '../components/confirm'
@@ -298,6 +301,7 @@ export function ChatPage({ conversationId }: { conversationId: string }) {
   const [streamText, setStreamText] = useState('')
   const [liveTools, setLiveTools] = useState<Record<string, ToolView>>({})
   const [menuOpen, setMenuOpen] = useState(false)
+  const [runOpen, setRunOpen] = useState(false)
   const [savingWorkflow, setSavingWorkflow] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
@@ -335,6 +339,7 @@ export function ChatPage({ conversationId }: { conversationId: string }) {
     setProgress(null)
     setStreamText('')
     setLiveTools({})
+    setRunOpen(false)
     setEditingTitle(false)
     setTitleDraft('')
     setTitleBusy(false)
@@ -402,7 +407,11 @@ export function ChatPage({ conversationId }: { conversationId: string }) {
         case 'message.created': {
           const msg = p.message as Message | undefined
           if (!msg) break
-          if (msg.role === 'assistant') {
+          const parts = msg.content?.parts || []
+          const hasAgentOutput = msg.role === 'assistant' && (
+            !!msg.content?.text || parts.some((part) => part.type === 'tool-call')
+          )
+          if (hasAgentOutput) {
             setStreaming(false)
             setStreamText('')
             setLiveTools({})
@@ -656,6 +665,9 @@ export function ChatPage({ conversationId }: { conversationId: string }) {
               New chat
             </Button>
           )}
+          <Button variant="subtle" size="sm" icon={<CirclePlay size={15} />} onClick={() => setRunOpen(true)}>
+            Run workflow
+          </Button>
           <Button variant="subtle" size="sm" icon={<Workflow size={15} />} onClick={saveAsWorkflow} loading={savingWorkflow}>
             Save as workflow
           </Button>
@@ -766,8 +778,30 @@ export function ChatPage({ conversationId }: { conversationId: string }) {
           {pending.length > 0 && <Badge tone="warn">{pending.length} awaiting approval</Badge>}
         </div>
       </div>
+      <ChatWorkflowDialog
+        open={runOpen}
+        onClose={() => setRunOpen(false)}
+        conversationId={conversationId}
+        workflows={data?.workflows ?? []}
+        onStarted={() => {
+          void load()
+          void refresh()
+        }}
+      />
     </div>
   )
+}
+
+function workflowRunPart(part: Part) {
+  const raw = part.result
+  if (!raw || typeof raw !== 'object') return null
+  const data = raw as Record<string, unknown>
+  if (typeof data.run_id !== 'string' || !data.run_id) return null
+  return {
+    runId: data.run_id,
+    name: typeof data.workflow_name === 'string' ? data.workflow_name : part.name || 'Workflow',
+    version: typeof data.version === 'number' ? data.version : undefined,
+  }
 }
 
 function ChatMessage({ message, profileName }: { message: Message; profileName?: string }) {
@@ -784,17 +818,48 @@ function ChatMessage({ message, profileName }: { message: Message; profileName?:
     )
   }
   if (message.role !== 'assistant') return null
-  const parts = (c.parts || []).filter((p) => p.type === 'tool-call')
-  if (!c.text && parts.length === 0) return null
+  const runParts = (c.parts || []).filter((p) => p.type === 'workflow-run')
+  const runIds = new Set(
+    runParts.flatMap((p) => {
+      const run = workflowRunPart(p)
+      return run ? [run.runId] : []
+    }),
+  )
+  const parts = (c.parts || [])
+    .filter((p) => p.type === 'tool-call')
+    .filter((p) => {
+      if (p.name !== 'run_workflow') return true
+      const result = p.result
+      const runId = result && typeof result === 'object'
+        ? (result as Record<string, unknown>).run_id
+        : undefined
+      return !(typeof runId === 'string' && runIds.has(runId))
+    })
+  if (!c.text && parts.length === 0 && runParts.length === 0) return null
+  const workflowOnly = !c.text && parts.length === 0 && runParts.length > 0
   return (
     <div className="message assistant-message">
-      <div className="avatar assistant-avatar"><Bot size={16} /></div>
+      <div className={clsx('avatar', workflowOnly ? 'workflow-avatar' : 'assistant-avatar')}>
+        {workflowOnly ? <Workflow size={15} /> : <Bot size={16} />}
+      </div>
       <div className="message-body">
-        <div className="assistant-name">{profileName || 'Agent'}</div>
+        <div className="assistant-name">{workflowOnly ? 'Workflow run' : profileName || 'Agent'}</div>
         <div className="assistant-card">
           {c.text && <Markdown>{c.text}</Markdown>}
-          {parts.length > 0 && (
+          {(runParts.length > 0 || parts.length > 0) && (
             <div className="message-tools">
+              {runParts.map((p) => {
+                const run = workflowRunPart(p)
+                if (!run) return null
+                return (
+                  <WorkflowRunCard
+                    key={run.runId}
+                    runId={run.runId}
+                    name={run.name}
+                    version={run.version}
+                  />
+                )
+              })}
               {parts.map((p) => (
                 <ToolCard
                   key={p.tool_call_id || `${p.name}-${message.id}`}

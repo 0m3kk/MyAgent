@@ -412,6 +412,19 @@ func (a *App) runAssistant(convID, userText string) {
 				part.Result = truncateRawJSON(out, 64*1024)
 			}
 			parts = append(parts, part)
+			// A real workflow run started by the agent gets the same live card
+			// as one started from the chat header. The tool call stays in the
+			// persisted message so the model history remains valid; the UI
+			// hides the redundant tool card when a run card is present.
+			if execErr == nil && toolSet.Routes[call.Function.Name].Meta == "run_workflow" {
+				if result, ok := out.(map[string]any); ok {
+					if runID, _ := result["run_id"].(string); runID != "" {
+						if runPart, ok := a.workflowRunPart(ctx, runID); ok {
+							parts = append(parts, runPart)
+						}
+					}
+				}
+			}
 			a.Bus.EmitNoErr(
 				model.Event{Stream: model.ConvStream(convID), Type: "tool.call.finished",
 					Payload: a.mustPayload(map[string]any{

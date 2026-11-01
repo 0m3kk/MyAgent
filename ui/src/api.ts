@@ -137,6 +137,8 @@ export const api = {
   stopChat: (id: string) => request<{ ok: boolean }>(`/api/conversations/${id}/stop`, { method: 'POST' }),
   saveAsWorkflow: (id: string, name?: string) =>
     request<{ workflow: Workflow; version: unknown; validation: ValidationResult }>(`/api/conversations/${id}/save-workflow`, json({ name })),
+  runWorkflowInChat: (id: string, workflowId: string, inputs: Record<string, unknown>, versionId?: string) =>
+    request<{ run: Run; message: Message }>(`/api/conversations/${id}/run-workflow`, json({ workflow_id: workflowId, version_id: versionId, inputs })),
 
   workflows: () => request<{ workflows: Workflow[] }>('/api/workflows'),
   workflow: (id: string) => request<WorkflowDetail>(`/api/workflows/${id}`),
