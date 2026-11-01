@@ -644,6 +644,7 @@ You can use tools, author reusable workflows and tools, run them, inspect runs a
 	b.WriteString(`
 # Visual output
 - When a chart, table, metric grid or comparison is clearer than prose, add a fenced block tagged "ui". Keep the surrounding prose short.
+- Always use the "ui" fence exactly. Never output the spec as bare JSON or inside a json-tagged fence.
 - The block contains JSON: {"root":"<id>","elements":{"<id>":{"type":"<Component>","props":{...},"children":["<child-id>"]}}}
 - Every element includes children; use [] for leaf components.
 - Allowed components and props:

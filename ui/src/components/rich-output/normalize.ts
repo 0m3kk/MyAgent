@@ -1,37 +1,7 @@
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
-}
+import { isRecord, objectEnd } from './detect'
 
 function looksLikeElement(value: unknown): value is Record<string, unknown> {
   return isRecord(value) && typeof value.type === 'string'
-}
-
-/**
- * Return the end index of the JSON object starting at `start`, or -1 when the
- * braces are unbalanced. String contents and escapes are skipped so braces in
- * captions and markdown do not confuse the scan.
- */
-function objectEnd(text: string, start: number): number {
-  if (text[start] !== '{') return -1
-  let depth = 0
-  let inString = false
-  let escaped = false
-  for (let i = start; i < text.length; i++) {
-    const char = text[i]
-    if (inString) {
-      if (escaped) escaped = false
-      else if (char === '\\') escaped = true
-      else if (char === '"') inString = false
-      continue
-    }
-    if (char === '"') inString = true
-    else if (char === '{') depth++
-    else if (char === '}') {
-      depth--
-      if (depth === 0) return i
-    }
-  }
-  return -1
 }
 
 /**
@@ -65,27 +35,25 @@ function recoverElement(raw: string, id: string): Record<string, unknown> | unde
 /**
  * `children` is required by the json-render spec schema, but models routinely
  * omit it on leaves. Fill it in so an otherwise valid output still renders.
- * Also repair elements that lost a duplicate-key race in the raw JSON.
+ * Also repair elements that lost a duplicate-key race in the raw JSON, and drop
+ * entries that are not elements (usually an extra `children` written one brace
+ * too early and left inside `elements`).
  */
 export function normalizeSpec(spec: unknown, raw?: string): unknown {
   if (!isRecord(spec) || !isRecord(spec.elements)) return spec
-  const elements = Object.fromEntries(
-    Object.entries(spec.elements).map(([key, element]) => {
-      let value = element
-      if (!looksLikeElement(element) && raw) {
-        const recovered = recoverElement(raw, key)
-        if (recovered) value = recovered
-      }
-      if (!isRecord(value)) return [key, value]
-      return [
-        key,
-        {
-          ...value,
-          props: isRecord(value.props) ? value.props : {},
-          children: Array.isArray(value.children) ? value.children : [],
-        },
-      ]
-    }),
-  )
+  const elements: Record<string, unknown> = {}
+  for (const [key, element] of Object.entries(spec.elements)) {
+    let value = element
+    if (!looksLikeElement(element) && raw) {
+      const recovered = recoverElement(raw, key)
+      if (recovered) value = recovered
+    }
+    if (!isRecord(value) || typeof value.type !== 'string') continue
+    elements[key] = {
+      ...value,
+      props: isRecord(value.props) ? value.props : {},
+      children: Array.isArray(value.children) ? value.children : [],
+    }
+  }
   return { ...spec, elements }
 }

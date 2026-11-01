@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm'
 import clsx from 'clsx'
 import { ExternalLink, Loader2 } from 'lucide-react'
 import { CopyButton } from './ui'
+import { parseRichSpec, promoteRichBlocks, unclosedSpecStart } from './rich-output/detect'
 
 const RichOutput = lazy(() => import('./rich-output').then((mod) => ({ default: mod.RichOutput })))
 
@@ -25,7 +26,7 @@ export function Markdown({
   className?: string
   streaming?: boolean
 }) {
-  const content = streaming ? splitUnclosedRichBlock(children) : { text: children, pending: false }
+  const content = prepareContent(children, streaming)
   return (
     <div className={clsx('markdown', className)}>
       <ReactMarkdown
@@ -62,14 +63,6 @@ export function Markdown({
   )
 }
 
-function parseRichSpec(raw: string): unknown {
-  try {
-    return JSON.parse(raw)
-  } catch {
-    return undefined
-  }
-}
-
 function extractText(node: ReactNode): string {
   if (typeof node === 'string' || typeof node === 'number') return String(node)
   if (Array.isArray(node)) return node.map(extractText).join('')
@@ -88,9 +81,10 @@ function codeLanguage(node: ReactNode): string | undefined {
 }
 
 /**
- * A rich block is only valid after its closing fence arrives. While the
- * response is streaming, hide the unfinished JSON and show the placeholder
- * instead of flashing a raw, half-written spec.
+ * A rich block is only valid after its closing fence arrives (or, for a bare
+ * spec, after its closing brace arrives). While the response is streaming, hide
+ * the unfinished JSON and show the placeholder instead of flashing a raw,
+ * half-written spec.
  */
 function splitUnclosedRichBlock(text: string): { text: string; pending: boolean } {
   let open = -1
@@ -102,7 +96,18 @@ function splitUnclosedRichBlock(text: string): { text: string; pending: boolean 
       marker = candidate.slice(0, 3)
     }
   }
-  if (open < 0 || !marker) return { text, pending: false }
-  if (text.slice(open + 5).includes(marker)) return { text, pending: false }
+  const bare = unclosedSpecStart(text)
+  if (bare >= 0 && (open < 0 || bare < open)) {
+    open = bare
+    marker = ''
+  }
+  if (open < 0) return { text, pending: false }
+  if (marker && text.slice(open + 5).includes(marker)) return { text, pending: false }
   return { text: text.slice(0, open).trimEnd(), pending: true }
+}
+
+function prepareContent(text: string, streaming?: boolean) {
+  if (!streaming) return { text: promoteRichBlocks(text), pending: false }
+  const split = splitUnclosedRichBlock(text)
+  return { text: promoteRichBlocks(split.text), pending: split.pending }
 }
