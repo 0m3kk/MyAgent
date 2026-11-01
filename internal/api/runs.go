@@ -46,9 +46,6 @@ func (s *Server) handleGetRun(w http.ResponseWriter, r *http.Request) {
 		"outputs":      outputs,
 		"step_outputs": stepOutputs,
 	}
-	if f, err := s.app.Store.GetFeedback(r.Context(), "run", run.ID); err == nil {
-		resp["feedback"] = f
-	}
 	if run.TargetKind == "workflow" {
 		if v, err := s.app.Store.GetWorkflowVersion(r.Context(), run.TargetVer); err == nil {
 			resp["version"] = v
@@ -123,26 +120,11 @@ func (s *Server) handleRerun(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"run": run})
 }
 
-func (s *Server) handleFeedback(w http.ResponseWriter, r *http.Request) {
-	body, ok := readJSON(w, r, 1<<20)
-	if !ok {
-		return
-	}
-	rating, _ := body["rating"].(string)
-	note, _ := body["note"].(string)
-	f, err := s.app.SetFeedback(r.Context(), r.PathValue("id"), rating, note)
+func (s *Server) handleAnalyzeRun(w http.ResponseWriter, r *http.Request) {
+	analysis, err := s.app.AnalyzeRun(r.Context(), r.PathValue("id"))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error(), nil)
+		writeError(w, http.StatusBadGateway, err.Error(), nil)
 		return
 	}
-	writeJSON(w, http.StatusOK, f)
-}
-
-func (s *Server) handleEvalCase(w http.ResponseWriter, r *http.Request) {
-	c, err := s.app.CreateEvalCaseFromRun(r.Context(), r.PathValue("id"))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error(), nil)
-		return
-	}
-	writeJSON(w, http.StatusOK, c)
+	writeJSON(w, http.StatusOK, analysis)
 }

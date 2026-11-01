@@ -590,39 +590,3 @@ func (s *Store) GetArtifact(ctx context.Context, id string) (model.Artifact, err
 		Scan(&a.ID, &a.RunID, &a.StepRunID, &a.Path, &a.SHA256, &a.Size, &a.Mime, &a.CreatedAt)
 	return a, fmtErr("artifact", err)
 }
-
-// ---- feedback ----
-
-func (s *Store) UpsertFeedback(ctx context.Context, f model.Feedback) (model.Feedback, error) {
-	if f.ID == "" {
-		f.ID = ids.New()
-	}
-	if f.CreatedAt == 0 {
-		f.CreatedAt = ids.NowMS()
-	}
-	_, err := s.db.ExecContext(
-		ctx,
-		`INSERT INTO feedback (id,target_kind,target_id,rating,note,created_at)
-		VALUES (?,?,?,?,?,?)
-		ON CONFLICT(target_kind,target_id) DO UPDATE SET rating=excluded.rating, note=excluded.note, created_at=excluded.created_at`,
-		f.ID,
-		f.TargetKind,
-		f.TargetID,
-		f.Rating,
-		f.Note,
-		f.CreatedAt,
-	)
-	if err != nil {
-		return f, err
-	}
-	err = s.db.QueryRowContext(ctx, `SELECT id,target_kind,target_id,rating,note,created_at FROM feedback WHERE target_kind=? AND target_id=?`, f.TargetKind, f.TargetID).
-		Scan(&f.ID, &f.TargetKind, &f.TargetID, &f.Rating, &f.Note, &f.CreatedAt)
-	return f, err
-}
-
-func (s *Store) GetFeedback(ctx context.Context, kind, targetID string) (model.Feedback, error) {
-	var f model.Feedback
-	err := s.db.QueryRowContext(ctx, `SELECT id,target_kind,target_id,rating,note,created_at FROM feedback WHERE target_kind=? AND target_id=?`, kind, targetID).
-		Scan(&f.ID, &f.TargetKind, &f.TargetID, &f.Rating, &f.Note, &f.CreatedAt)
-	return f, err
-}

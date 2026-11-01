@@ -3,19 +3,17 @@ import type {
   Bootstrap,
   ChatProgress,
   Conversation,
-  EvalRun,
-  EvalSuite,
   EventEnvelope,
   Folder,
   Message,
   ModelProfile,
   OrganizeResult,
   Run,
+  RunAnalysis,
   RunDetail,
   SecretMeta,
   Settings,
   TestResult,
-  TuningProposal,
   ValidationResult,
   Workflow,
   WorkflowDetail,
@@ -171,9 +169,7 @@ export const api = {
   resumeRun: (id: string) => request<{ ok: boolean }>(`/api/runs/${id}/resume`, { method: 'POST' }),
   cancelRun: (id: string) => request<{ ok: boolean }>(`/api/runs/${id}/cancel`, { method: 'POST' }),
   rerun: (id: string) => request<{ run: Run }>(`/api/runs/${id}/rerun`, { method: 'POST' }),
-  feedback: (id: string, rating: 'up' | 'down', note = '') =>
-    request<import('./types').Feedback>(`/api/runs/${id}/feedback`, json({ rating, note })),
-  evalCase: (id: string) => request<import('./types').EvalCase>(`/api/runs/${id}/eval-case`, { method: 'POST' }),
+  analyzeRun: (runId: string) => request<RunAnalysis>(`/api/runs/${runId}/analyze`, { method: 'POST' }),
 
   tools: () => request<{ tools: import('./types').Tool[] }>('/api/tools'),
   tool: (id: string) => request<import('./types').ToolDetail>(`/api/tools/${id}`),
@@ -221,16 +217,6 @@ export const api = {
 
   settings: () => request<Settings>('/api/settings'),
   updateSettings: (patch: Partial<Settings>) => request<Settings>('/api/settings', { method: 'PATCH', body: JSON.stringify(patch) }),
-
-  tuning: () =>
-    request<{ proposals: TuningProposal[]; suites: EvalSuite[]; failed_runs: Run[] }>('/api/tuning'),
-  analyzeRun: (runId: string) => request<TuningProposal>('/api/tuning/analyze', json({ run_id: runId })),
-  decideProposal: (id: string, action: 'accept' | 'reject' | 'rollback', comment = '') =>
-    request<TuningProposal>(`/api/tuning/${id}/decision`, json({ action, comment })),
-  evalSuites: () => request<{ suites: EvalSuite[] }>('/api/eval/suites'),
-  runEval: (suiteId: string, targetVersion: string) =>
-    request<EvalRun>(`/api/eval/suites/${suiteId}/run`, json({ target_version: targetVersion })),
-  evalRun: (id: string) => request<EvalRun>(`/api/eval/runs/${id}`),
 }
 
 export function eventURL(stream: string, opts: { live?: boolean; after?: number } = {}) {

@@ -15,7 +15,7 @@ Version 1 · macOS · Go core + native shell + React · OpenAI-compatible
 3. **Transparency.** Every run step is visible, stoppable, approvable and editable.
 4. **Safe by default.** New tools run in a sandbox and require user approval on first use.
 5. **No model lock-in.** Only `base_url` + `api_key` + model name are required (Chat Completions).
-6. **Use libraries where they do not define the product** (chat UI, graph, editor). **Build the core ourselves** (workflow engine, tuning loop).
+6. **Use libraries where they do not define the product** (chat UI, graph, editor). **Build the core ourselves** (workflow engine, run analysis).
 
 **Out of scope for the MVP:** multi-user, cloud sync, marketplace, Windows/Linux, mobile.
 
@@ -29,9 +29,7 @@ Version 1 · macOS · Go core + native shell + React · OpenAI-compatible
 | Workflow | id, version, YAML, input schema, change notes |
 | Run | One workflow execution: version, inputs, status, timing, cost |
 | StepRun | One step inside a Run: input, output, logs, errors, retry count |
-| Event | Append-only log (`run_id`, `seq`, `ts`). Source for UI, trace and eval |
-| Feedback | Thumbs up/down plus a note for a Run or StepRun |
-| EvalSuite / EvalCase | Test suites built from real runs: fixed input + assertions |
+| Event | Append-only log (`run_id`, `seq`, `ts`). Source for UI, trace and run analysis |
 | ModelProfile | base_url, model name, role (planner, executor, judge), API key reference to secrets |
 
 Two additional entities: **Secret** (name, type, description, allowed tools, expiry; **the value is encrypted with AES-256-GCM and stored in SQLite**, with the master key outside the database) and **Trigger** (how a workflow or tool starts: manual, schedule, file watcher, shortcut, CLI, webhook). Each activation creates a Run with a `source` field (chat, manual, schedule, watcher, cli).
@@ -47,8 +45,8 @@ Three regions: **left sidebar** (Chats, Workflows, Tools, Runs, Settings), **cha
 1. **Chat.** Streaming markdown. Every tool call is a collapsible card (name, arguments, result, duration). Approval requests appear as cards with Allow / Deny / Edit. After a successful multi-step task, a **Save as workflow** button appears. While a workflow is running, a mini-graph appears inside the chat.
 2. **Workflow canvas (React Flow).** Edit and Run modes. Nodes are steps; edges are dependencies. During a run, nodes change color by status and active edges animate. Clicking a node opens the right inspector with tabs: Input, Output, Logs, Trace, Cost. The user can also chat to edit the workflow; the agent proposes a diff and the user approves it.
 3. **Tool inspector.** Code (CodeMirror), schema, declared permissions, tests, version history with diffs, and terminal-style output (xterm.js) for trial runs. The Tools and Workflows lists share nested folders, pinning, status filters and sorting so large libraries stay navigable; **Organize with agent** asks the configured model to propose and apply a tidy folder structure without deleting or renaming existing folders.
-4. **Run history.** Table filtered by workflow, status and date. Thumbs up/down, compare two runs side by side, and rerun from a step.
-5. **Tuning.** A list of the agent's improvement proposals: root cause (from trace), diff, eval results before/after, and Accept / Reject / Rollback.
+4. **Run history.** Table filtered by workflow, status and date. Compare two runs side by side, rerun from a step, and open an on-demand **Analyze** view.
+5. **Run analysis.** The Analyze button sends the run trace to the planner and returns a root cause, the smallest suggested fix and optional YAML. The result is advisory only: it is not stored and never changes a workflow version.
 6. **Settings.** Model profiles and roles, capability probing, authorized folders, approval policy and token budgets.
 
 ### 3.3 Node status colors
@@ -67,7 +65,7 @@ Three regions: **left sidebar** (Chats, Workflows, Tools, Runs, Settings), **cha
 - **A. Chat to workflow:** describe the task → the agent performs each step in chat → click Save as workflow → the agent generalizes it into parameterized YAML → the validator checks it → the canvas opens.
 - **B. Run and observe:** choose a workflow, enter inputs, watch nodes light up, click a node to inspect live logs, Pause, Cancel, Retry a step.
 - **C. Create a tool:** the agent needs a missing tool → writes manifest + code + tests → runs tests in the sandbox → shows an approval card (requested permissions, code, test result) → the user approves → the tool becomes active.
-- **D. Improve:** a run fails or receives a thumbs-down → the agent reads the trace, proposes a patch → replays it on the eval suite → compares results → the user accepts, or the version is promoted automatically when the threshold is met.
+- **D. Diagnose:** a run fails or produces an unexpected result → the user clicks Analyze → the agent reads the trace → the UI shows the root cause, the smallest suggested fix and optional YAML. The user decides whether to edit the workflow manually.
 
 UI principles: progressive disclosure (collapsed by default, expand on demand), always leave the user in control, and never perform a side effect without warning first.
 
@@ -115,7 +113,7 @@ Once a tool or workflow is approved, chat is no longer the only entry point; it 
   /agentctl   CLI client for runs and automation
 /internal
   /api        HTTP handlers and SSE
-  /app        services: chat, workflows, approvals, runs, tuning
+  /app        services: chat, workflows, approvals, runs, analysis
   /llm        gateway, probing, OpenCode Go session headers
   /workflow   schema, validator, engine, expressions
   /tools      registry, manifests, built-in tools, sandbox, proxy
@@ -129,7 +127,7 @@ Once a tool or workflow is approved, chat is no longer the only entry point; it 
 /scripts      development and release helpers
 ```
 
-**The event bus is the backbone.** Every state change (`run.started`, `step.started`, `step.output.delta`, `step.finished`, `tool.approval_requested`, `llm.delta`, etc.) is a typed event. It is written to SQLite before being broadcast to the UI. If the UI disconnects, it replays from the last `seq`. Trace, eval and UI consume the same stream, so they can never diverge.
+**The event bus is the backbone.** Every state change (`run.started`, `step.started`, `step.output.delta`, `step.finished`, `tool.approval_requested`, `llm.delta`, etc.) is a typed event. It is written to SQLite before being broadcast to the UI. If the UI disconnects, it replays from the last `seq`. Trace, run analysis and UI consume the same stream, so they can never diverge.
 
 **Go ↔ UI bridge.** Recommended: HTTP + SSE on `127.0.0.1` (random port, per-session token), defined with `huma` and generated into a TypeScript client with `orval` or `openapi-typescript`. This enables browser development, full HMR and Playwright e2e tests. Use the native shell only for native concerns: windows, menus, file dialogs, notifications and Keychain. The chat stream follows the AI SDK UI message stream protocol so assistant-ui can render it directly.
 
@@ -139,7 +137,7 @@ Once a tool or workflow is approved, chat is no longer the only entry point; it 
 
 - `openai-go` with a custom `base_url`. Supports OpenAI, OpenRouter, Ollama, LM Studio, vLLM, Groq, DeepSeek and other compatible providers.
 - **Capability probe** when adding a model: streaming, tool calling, parallel tool calls, JSON schema output, context length. The result determines which roles a model can fill.
-- **Roles:** planner (strong, authors workflows/tools), executor (cheap, runs steps), judge (scores evals), cheap (summaries, titles).
+- **Roles:** planner (strong, authors workflows/tools and diagnoses runs), executor (cheap, runs steps), judge (scores rubric tasks), cheap (summaries, titles).
 - Retry with backoff, rate limiting, fallback models, token/cost accounting per call, and per-run budget limits.
 
 ### 5.2 Agent runtime
@@ -207,28 +205,24 @@ steps:
 
 ### 5.6 Storage
 
-SQLite (`modernc.org/sqlite`, no cgo) + `sqlc` + migrations. Main tables: `workspaces`, `conversations`, `messages`, `tools`, `tool_versions`, `workflows`, `workflow_versions`, `runs`, `step_runs`, `events`, `feedback`, `eval_suites`, `eval_cases`, `eval_results`, `model_profiles`. Large artifacts (long outputs, files) live on disk; the database stores references.
+SQLite (`modernc.org/sqlite`, no cgo) + `sqlc` + migrations. Main tables: `workspaces`, `conversations`, `messages`, `tools`, `tool_versions`, `workflows`, `workflow_versions`, `runs`, `step_runs`, `events`, `model_profiles`. Large artifacts (long outputs, files) live on disk; the database stores references.
 
-### 5.7 Observability and the tuning loop
+### 5.7 Observability and run analysis
 
-**Scoring signals:** user thumbs up/down, hard assertions (output matches schema, contains/does not contain something), LLM-as-judge, cost, latency and retry count.
+Run history is built from persisted events: status, step outcomes, cost, latency and retry count. The user can open any workflow run and request an AI diagnosis.
 
-**Improvement loop**
+**Analysis flow**
 
-1. **Detect:** the error rate or thumbs-down rate for a workflow crosses a threshold.
-2. **Diagnose:** the agent reads traces from failed runs and identifies the step and root cause.
-3. **Propose:** a patch as a diff on the workflow, tool or prompt.
-4. **Replay:** run the new version on an eval suite (built from real runs, marked with thumbs-up or manually corrected), multiple times per case.
-5. **Compare:** pass rate, cost and latency against the current version, with a hold-out set to avoid overfitting.
-6. **Decide:** promote a new version when it is better with no regressions; otherwise discard. In the first phase the user always clicks Accept.
+1. **Collect:** load the workflow version, run metadata, step summary and a bounded trace of non-delta events.
+2. **Diagnose:** the planner classifies one root cause: bad input, wrong tool choice, weak prompt, tool bug, model limit or flaky external service.
+3. **Suggest:** return the smallest fix, the expected effect and optional corrected YAML.
+4. **Decide:** the user reads the result in a modal and decides whether to edit the workflow manually. Analysis never writes to the database, applies a patch or changes a version.
 
-**Deterministic replay:** record tool inputs/outputs from the source run. Tools with side effects are always mocked during replay.
-
-**Guardrails:** cap tuning rounds and token budget per tuning session; never auto-apply changes to a tool with side effects without approval.
+**Guardrails:** traces are truncated and secret-redacted before they reach the model; the analysis is advisory and cannot trigger side effects.
 
 ### 5.8 Triggers and non-chat execution
 
-Every start path goes through **one entry point**: `RunService.Start(target, inputs, source)`. Chat, the Run button, CLI and schedules all call it, so the engine, trace, approvals and eval do not care about the source.
+Every start path goes through **one entry point**: `RunService.Start(target, inputs, source)`. Chat, the Run button, CLI and schedules all call it, so the engine, trace and approvals do not care about the source.
 
 - **Runnable targets:** a workflow (fixed version or `latest-approved`) and a single tool. Only approved versions can start from a trigger; drafts can only run in the UI's Try mode.
 - **Inputs:** validated against JSON Schema; the UI form is generated from that schema. Automated triggers store fixed inputs or expressions (for example, the path that just changed).
@@ -311,11 +305,7 @@ YAML schema, validator, engine (DAG, state persistence, resume, retry, cancel), 
 
 Manifest, Starlark and subprocess sandboxes, automated tests, permission approval (including secret use), secret bindings for tools, versioning, tool inspector with diffs. **Done when:** the agent writes a missing tool, tests pass in the sandbox, the user approves it and a workflow uses it immediately. Test both tools that try to access forbidden resources (must be blocked) and secrets that must never appear in prompts, logs or traces.
 
-### Phase 4 — Tuning (3–4 weeks)
-
-Thumbs up/down, trace viewer, eval suites from real runs, replay with mocks, judge, the diagnose → propose → compare → accept loop, and the diff screen. **Done when:** on a fixed test set, workflow success rate measurably improves after tuning, and rollback works.
-
-### Phase 5 — Polish and release (2–3 weeks)
+### Phase 4 — Polish and release (2–3 weeks)
 
 Onboarding, automatic triggers (cron, file watcher, shortcut, Shortcuts) through the shared RunService, Developer ID signing and notarization, crash reporting, performance tuning. **Done when:** a clean install on a new machine can run its first workflow within minutes.
 
@@ -325,7 +315,7 @@ Browser/computer-use tools, webhook triggers, workflow import/export and templat
 
 ### Success metrics
 
-- Workflow success rate and its improvement after each tuning round.
+- Workflow success rate and how often run analysis identifies the failing step.
 - Time from the first chat to the first successful workflow run.
 - Percentage of agent-created tools that pass tests on the first attempt.
 - Average token cost per run.
@@ -340,15 +330,14 @@ Browser/computer-use tools, webhook triggers, workflow import/export and templat
 | Tool escapes the sandbox or is prompt-injected | Least-privilege manifests, first-run approval, treat external data as untrusted, sandbox escape tests |
 | `sandbox-exec` is removed in the future | Put it behind a `Sandbox` interface and track Apple Containerization |
 | Native shell coupling | Keep `/app` thin and the Go core shell-agnostic behind HTTP + SSE |
-| Overfitting during tuning | Hold-out sets, round limits, user approval in the first phase |
-| Token costs explode | Per-run and per-tuning budgets, cheap executor models |
+| Token costs explode | Per-run and per-analysis budgets, cheap executor models |
 | Scope creep | Follow the phase order and each phase's exit criteria |
 
 ## 9. Open decisions
 
 - HTTP + SSE or in-process bindings for the entire bridge (current implementation: HTTP + SSE).
 - CEL or a lighter expression language (`expr`) for workflows.
-- How much freedom an `agent` step gets compared with a fixed `tool` step (more freedom makes tuning and cost prediction harder).
+- How much freedom an `agent` step gets compared with a fixed `tool` step (more freedom makes diagnosis and cost prediction harder).
 - App-wide secrets or per-workspace secrets (default recommendation: app-wide, mapped per tool).
 - Whether to add a menubar/background mode early or defer it to Phase 5.
 
@@ -387,17 +376,13 @@ PRAGMA busy_timeout = 5000;
 |  | `tool_versions` | see below | Immutable after creation; only status changes |
 |  | `tool_secret_bindings` | tool_id, logical_name, secret_id, scope_hash, approved_at | Changing scope_hash invalidates approval |
 | Workflow | `workflows` | id, workspace_id, name, current_version_id |  |
-|  | `workflow_versions` | id, workflow_id, version, yaml, input_schema, content_hash, status, change_note, parent_id, created_by | created_by: agent, user, tuner |
+|  | `workflow_versions` | id, workflow_id, version, yaml, input_schema, content_hash, status, change_note, parent_id, created_by | created_by: agent, user |
 |  | `triggers` | id, workflow_id, kind, config, inputs, enabled, unattended, concurrency, last_fired_at, approved_at | Create/edit requires approved_at |
 | Run | `runs` | see below |  |
 |  | `step_runs` | see below | Every retry is a row (attempt) |
 |  | `events` | see Appendix B | Append-only log, source of truth |
 |  | `approvals` | id, run_id, step_run_id, kind, request, status, expires_at, decided_at | kind: tool, step, secret, trigger |
 |  | `artifacts` | id, run_id, step_run_id, path, sha256, size, mime | Files live on disk; the DB stores references |
-| Tuning | `feedback` | id, target_kind, target_id, rating, note | rating: up, down |
-|  | `eval_suites` / `eval_cases` | case: suite_id, source_run_id, inputs, assertions, recorded_io_ref, split | split: train or holdout |
-|  | `eval_results` | id, eval_run_id, case_id, target_ver, passed, score, judge, cost_micro, latency_ms |  |
-|  | `tuning_proposals` | id, target_kind, target_id, base_version_id, diagnosis, patch, status, eval_before, eval_after | status: proposed, testing, accepted, rejected, rolled_back |
 | Security | `secret_access_log` | id, secret_id, run_id, tool_version_id, ts | Names and ids only; never values |
 
 ### A.2 DDL for core tables
@@ -412,7 +397,7 @@ CREATE TABLE tool_versions (
   content_hash TEXT NOT NULL,            -- sha256(manifest + code)
   status       TEXT NOT NULL CHECK (status IN
                ('draft','tested','approved','active','deprecated')),
-  created_by   TEXT NOT NULL CHECK (created_by IN ('agent','user','tuner')),
+  created_by   TEXT NOT NULL CHECK (created_by IN ('agent','user')),
   parent_id    TEXT REFERENCES tool_versions(id),
   approved_at  INTEGER,
   created_at   INTEGER NOT NULL,
@@ -460,7 +445,7 @@ CREATE TABLE step_runs (
 - **Statuses in `runs` and `step_runs` are projections of `events`.** Both are updated in the same transaction as the event write, so they never diverge.
 - **Versions are immutable.** Editing a tool or workflow creates a new version row; content is never `UPDATE`d. Approval is tied to `content_hash`: if the hash changes, approval must be repeated.
 - **Rollback** is only a change of `current_version_id` to an older version plus an event.
-- **Size:** payloads over about 64 KB (long outputs, files) go to `artifacts`; the DB stores references. Define a cleanup policy: retain events and runs by days or run count per workflow, but keep runs with feedback or eval membership.
+- **Size:** payloads over about 64 KB (long outputs, files) go to `artifacts`; the DB stores references. Define a cleanup policy: retain events and runs by days or run count per workflow.
 - **Backups:** use `VACUUM INTO` or the SQLite backup API; never copy the file while it is being written.
 
 ## 12. Appendix B — Event types
@@ -512,9 +497,6 @@ Each payload type is its own struct, registered in a registry (`type → struct`
 | Authoring | `tool.version.created` / `tool.test.finished` / `tool.version.approved` | version_id, test result |
 |  | `workflow.version.created` / `workflow.validation.failed` | version_id, structured error list |
 |  | `trigger.created` / `trigger.fired` / `trigger.skipped` | trigger_id, skip reason (concurrency, expired) |
-| Tuning | `tuning.proposal.created` | proposal_id, diagnosis, diff |
-|  | `eval.case.finished` / `eval.run.finished` | pass, score, comparison with baseline |
-|  | `tuning.proposal.decided` | accepted, rejected, rolled_back |
 | Chat | `message.created` | message_id, role |
 
 ### B.3 Rules
@@ -524,7 +506,7 @@ Each payload type is its own struct, registered in a registry (`type → struct`
 3. **Stored events are immutable.** Fix mistakes with a new event, never by editing an old one.
 4. **Redact before writing.** Every payload passes through the secret redactor before it reaches the DB or the UI.
 5. **Reconnect:** the UI calls `GET /events?stream=run:<id>&after=<seq>` (or sends `Last-Event-ID`) to receive the missing range, then switches to live. Because `seq` has no gaps, the UI can detect missing events and reload.
-6. **Compatibility:** only add optional fields. To change meaning, bump `SchemaVer` and keep readers for older versions. Eval and replay read old events, so this is mandatory.
+6. **Compatibility:** only add optional fields. To change meaning, bump `SchemaVer` and keep readers for older versions. Run analysis reads old events, so this is mandatory.
 7. **One run, one stream.** Subagents and subworkflows write to the parent run's stream, distinguished by a path-like `StepID` (`parent.child`).
 
 ### B.4 UI mapping
@@ -532,7 +514,7 @@ Each payload type is its own struct, registered in a registry (`type → struct`
 - **Canvas:** `step.*` changes node state; `step.retrying` shows the attempt badge; `approval.requested` turns the node amber; `tool.sandbox.denied` marks it red with the blocked resource.
 - **Inspector:** `step.log` and `step.output.delta` feed the terminal; `tool.call.*` and `llm.*` feed the Trace tab; `llm.finished` adds to the Cost tab.
 - **Chat:** `llm.delta`, `tool.call.*` and `approval.*` are converted in Go into AI SDK UI message stream parts (text, tool input, tool output, finish) for assistant-ui to render directly. Verify part names against the version in use.
-- **Run history and Tuning:** lists read from projections (`runs`, `step_runs`); details and agent diagnosis read `events`.
+- **Run history and analysis:** lists read from projections (`runs`, `step_runs`); details and the on-demand diagnosis read `events`.
 
 ## 13. Appendix C — Workflow schema (YAML)
 
@@ -756,7 +738,7 @@ Changing code or the manifest creates a new `content_hash`, so steps 1–6 run a
 
 - Names use `group.name` (for example `github.list_issues`). Workflows reference `name` (resolve `latest-approved`, then lock at run time) or `name@3` (pin).
 - **Breaking changes** (changing or removing a required input field, changing output meaning) require a new name or a new major version. Pinned workflows are unaffected; unpinned workflows get a validator warning.
-- The tuning loop (`created_by: tuner`) may only create backward-compatible changes. Breaking changes must propose a new name and be approved by the user.
+- Agent-authored changes (`created_by: agent`) follow the same draft, validate and approval flow as user edits.
 - A `deprecated` tool still runs inside pinned workflows, but the validator warns when a new workflow uses it.
 
 ## 15. Appendix E — Agent prompts and meta-tools
@@ -768,7 +750,7 @@ The quality of these two things determines whether the agent writes correct work
 1. **One agent loop, many modes.** Each mode has its own system prompt and tool set under least privilege instead of many independent agents.
 2. **The validator leads.** The agent does not assume it is correct: always validate, test and dry-run before showing the user. Errors come back in the structured format from Appendix C so the agent can repair them.
 3. **Look things up instead of stuffing the prompt.** The prompt contains a fixed summary only. Detailed tool and workflow schemas come from `describe_tool` and `get_workflow` when needed, saving context.
-4. **Prompts are versioned data.** Store them in `prompt_versions` (name, version, content, status, created_by). The tuner may propose prompt changes, but they go through eval and approval like workflows.
+4. **Prompts are versioned data.** Store them in `prompt_versions` (name, version, content, status, created_by). Prompt changes follow the same review and approval flow as workflows.
 5. **Write system prompts in English and answer in the user's language.** Most models follow English instructions more reliably, and one prompt works across models.
 6. **External data is data.** Tool results, file contents and web pages are wrapped in clear delimiters and marked untrusted. Blocking sensitive actions still relies on approval, not on the model obeying instructions.
 
@@ -779,7 +761,6 @@ The quality of these two things determines whether the agent writes correct work
 | Assist | Work directly with active tools; suggest saving as a workflow | `search_tools`, `describe_tool`, active tools, `run_workflow`, `ask_user`, `delegate` | executor (planner for hard work) |
 | Workflow author | Create or edit workflows | Discovery group, Workflow authoring group, `ask_user` | planner |
 | Tool author | Create or edit tools | Discovery group, Tool authoring group, `ask_user` | planner |
-| Tuner | Diagnose failed runs and propose patches | Analysis group, `propose_patch`, `run_eval` | planner |
 | Judge | Score against a rubric and return JSON | no tools | judge |
 
 **Hand-off:** Assist calls `delegate(mode, brief, refs)`. The child mode receives a summary of the request and references to relevant events, **not the entire conversation**, keeping context clean and cheap. The result is a reference to a draft (version id), not a long body.
@@ -855,15 +836,15 @@ Tool author mode:
    can access. Never activate it yourself.
 ```
 
-Tuner mode:
+Run analyst mode (the Analyze button):
 
 ```text
-# Mode: tuner
-Find the root cause from run events before proposing anything. Classify it:
+# Mode: run analyst
+Find the root cause from run events before suggesting anything. Classify it:
 bad input, wrong tool choice, weak prompt, tool bug, model limit, flaky
-external service. Propose the smallest backward-compatible patch for ONE
-cause per proposal. State the expected effect and how to verify it. Do not
-touch steps that passed.
+external service. Recommend the smallest fix for ONE cause. State the
+expected effect and how to verify it. Do not touch steps that passed.
+Return advice only; never claim that a change was applied.
 ```
 
 ### E.5 Meta-tool catalog
@@ -892,9 +873,7 @@ touch steps that passed.
 | Interaction | `ask_user(question, kind, options?)` | kind: text, choice, confirm |
 |  | `delegate(mode, brief, refs)` | Switch to another mode |
 |  | `remember(note)` | Write to workspace memory; the UI tells the user |
-| Analysis (Tuner) | `list_runs(filter)`, `read_run(run_id, detail)`, `compare_runs(a, b)`, `get_feedback(run_id)` | `read_run` goes from summary to step to event, with pagination |
-|  | `propose_patch(target, base_version, content, rationale)` | Store a `tuning_proposals` row |
-|  | `run_eval(suite, target_version)` | Run replay and return the comparison |
+| Analysis | `list_runs(filter)`, `read_run(run_id, detail)`, `compare_runs(a, b)` | `read_run` goes from summary to step to event, with pagination |
 
 **Things the agent never has a tool for:** approving or activating tools/workflows, reading secret values, enabling automatic triggers, changing permissions of an approved tool without re-approval, or disabling the redactor/sandbox. Those are user-only actions in the UI. Destructive tools (`delete_workflow`, `delete_tool`) exist, but they always block on the approval card; the agent cannot delete anything without the user's decision.
 
@@ -902,7 +881,7 @@ touch steps that passed.
 
 - **Structured results:** `{ok, data, diagnostics[], next_hint}`. `diagnostics` uses the same format as the validator; `next_hint` suggests the next step for weaker models.
 - **Few parameters, enums instead of free text, flat schemas.** Avoid `oneOf` and deep nesting because small models fail on them. Use the provider's `strict` mode when available.
-- **Controlled concurrent writes:** `base_version` is required when editing an existing version, preventing the agent from overwriting user or tuner changes.
+- **Controlled concurrent writes:** `base_version` is required when editing an existing version, preventing the agent from overwriting user changes.
 - **Truncate with references:** long results return `truncated: true` plus a cursor or `artifact_id`; never stuff everything into context.
 - **Truly asynchronous:** `request_tool_approval` and `run_workflow` return immediately. The agent may end its turn; an event wakes the conversation when the user decides.
 - **Every call is an event** (`tool.call.*`), so the trace is complete.
@@ -941,7 +920,7 @@ This is the product's most important flow (the **Save as workflow** button):
 2. It sends the original user request and the successful call chain (arguments and short results) to Workflow author mode.
 3. The agent parameterizes (turns concrete values into inputs), converts the chain into steps, inserts `approval` before side-effecting steps, and validates.
 4. It dry-runs with the original input and compares the result with the chat result.
-5. It saves a draft and **automatically creates an `eval_case`** from the chat run (input and expected result), seeding the tuning suite.
+5. It saves a draft for the user to review and approve.
 
 ### E.9 Example library and agent evals
 

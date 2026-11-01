@@ -129,8 +129,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/runs/{id}/resume", s.handleResumeRun)
 	s.mux.HandleFunc("POST /api/runs/{id}/cancel", s.handleCancelRun)
 	s.mux.HandleFunc("POST /api/runs/{id}/rerun", s.handleRerun)
-	s.mux.HandleFunc("POST /api/runs/{id}/feedback", s.handleFeedback)
-	s.mux.HandleFunc("POST /api/runs/{id}/eval-case", s.handleEvalCase)
+	s.mux.HandleFunc("POST /api/runs/{id}/analyze", s.handleAnalyzeRun)
 
 	s.mux.HandleFunc("GET /api/tools", s.handleListTools)
 	s.mux.HandleFunc("POST /api/tools", s.handleCreateTool)
@@ -166,13 +165,6 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/settings", s.handleGetSettings)
 	s.mux.HandleFunc("PATCH /api/settings", s.handleUpdateSettings)
 	s.mux.HandleFunc("GET /api/environment", s.handleEnvironment)
-
-	s.mux.HandleFunc("GET /api/tuning", s.handleListTuning)
-	s.mux.HandleFunc("POST /api/tuning/analyze", s.handleAnalyzeRun)
-	s.mux.HandleFunc("POST /api/tuning/{id}/decision", s.handleProposalDecision)
-	s.mux.HandleFunc("GET /api/eval/suites", s.handleListEvalSuites)
-	s.mux.HandleFunc("POST /api/eval/suites/{id}/run", s.handleRunEval)
-	s.mux.HandleFunc("GET /api/eval/runs/{id}", s.handleGetEvalRun)
 
 	s.mux.HandleFunc("GET /", s.serveUI)
 }

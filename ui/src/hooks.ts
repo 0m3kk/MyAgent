@@ -33,9 +33,7 @@ export function useEventStream(
       'trigger.created', 'trigger.fired', 'trigger.skipped',
       'workflow.version.created', 'workflow.version.updated', 'workflow.validation.failed', 'workflow.version.approved',
       'tool.version.created', 'tool.test.finished', 'tool.version.approved',
-      'tuning.proposal.created', 'tuning.proposal.decided',
-      'eval.case.finished', 'eval.run.finished', 'eval.case.created', 'eval.run.started',
-      'feedback.created', 'note.created', 'app.started',
+      'note.created', 'app.started',
     ]
     for (const t of types) es.addEventListener(t, onMessage as EventListener)
     return () => es.close()

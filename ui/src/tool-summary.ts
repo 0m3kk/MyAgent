@@ -239,8 +239,6 @@ export function summarizeToolCall(name: string, rawArgs: unknown): ToolSummary {
         ...target(s('workflow')),
         detail: s('status') ? `status ${s('status')}` : undefined,
       }
-    case 'get_feedback':
-      return { title: 'Read run feedback', ...target(shortId(s('run_id'))) }
     case 'list_secrets':
       return { title: 'List secrets' }
     case 'get_environment':
@@ -257,16 +255,6 @@ export function summarizeToolCall(name: string, rawArgs: unknown): ToolSummary {
         detail: detail(s('kind'), text(config.schedule)),
       }
     }
-    case 'propose_patch': {
-      const base = integer(args.base_version)
-      return {
-        title: 'Propose patch',
-        ...target(s('target') ?? s('workflow')),
-        detail: base ? `from v${base}` : undefined,
-      }
-    }
-    case 'run_eval':
-      return { title: 'Run eval', ...target(s('suite')) }
     case 'fs.list':
       return { title: 'List files', ...target(s('path') ?? '.') }
     case 'fs.read_text':
@@ -370,12 +358,6 @@ export function toolCallOutcome(name: string, rawResult: unknown): ToolOutcome |
       const label = runStatus.replace(/_/g, ' ')
       const textValue = label === 'running' ? 'run in progress' : `run ${label}`
       return { text: textValue, tone: statusTone(runStatus) as ToolTone }
-    }
-    case 'get_feedback': {
-      const feedback = isRecord(result.feedback) ? result.feedback : undefined
-      const rating = feedback ? text(feedback.rating) : undefined
-      if (!rating) return { text: 'no feedback', tone: 'muted' }
-      return { text: rating === 'up' ? 'helpful' : 'not helpful', tone: rating === 'up' ? 'ok' : 'bad' }
     }
     case 'list_workflows': {
       const items = array(result.workflows)

@@ -36,7 +36,6 @@ const CODE_ARGS: Record<string, { key: string; label: string }> = {
   validate_workflow: { key: 'yaml', label: 'Workflow YAML' },
   save_workflow_draft: { key: 'yaml', label: 'Workflow YAML' },
   create_tool_draft: { key: 'manifest_yaml', label: 'Tool manifest' },
-  propose_patch: { key: 'content', label: 'Proposed YAML' },
   write_tool_file: { key: 'content', label: 'File content' },
   'fs.write_text': { key: 'content', label: 'File content' },
 }

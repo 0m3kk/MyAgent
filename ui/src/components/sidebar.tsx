@@ -10,7 +10,6 @@ import {
   Search,
   Settings2,
   ShieldCheck,
-  SlidersHorizontal,
   Wrench,
 } from 'lucide-react'
 import clsx from 'clsx'
@@ -58,7 +57,6 @@ export function Sidebar({
     { id: 'workflows', label: 'Workflows', icon: GitBranch, count: data.workflows.length },
     { id: 'tools', label: 'Tools', icon: Wrench, count: data.tools.length },
     { id: 'runs', label: 'Runs', icon: Activity, count: running || undefined },
-    { id: 'tuning', label: 'Tuning', icon: SlidersHorizontal },
   ]
   const activeRoot = route.segments[0] || 'home'
 

@@ -164,9 +164,6 @@ func metaToolDefs() []llm.ToolDef {
 			"run_a",
 			"run_b",
 		),
-		toolDef("get_feedback", "Get the user's thumbs up/down and note for a run.", map[string]any{
-			"run_id": map[string]any{"type": "string", "description": "Run ID"},
-		}, "run_id"),
 		toolDef(
 			"list_secrets",
 			"List secret NAMES and status only. Values are never available.",
@@ -311,45 +308,6 @@ func metaToolDefs() []llm.ToolDef {
 			"workflow",
 			"kind",
 			"config",
-		),
-		toolDef(
-			"propose_patch",
-			"Create a tuning proposal with a backward-compatible patch and rationale. Does not apply it.",
-			map[string]any{
-				"target": map[string]any{"type": "string", "description": "Workflow name"},
-				"base_version": map[string]any{
-					"type":        "integer",
-					"description": "Current version number",
-				},
-				"content": map[string]any{
-					"type":        "string",
-					"description": "Full proposed workflow YAML",
-				},
-				"rationale": map[string]any{
-					"type":        "string",
-					"description": "Root cause and expected effect",
-				},
-			},
-			"target",
-			"base_version",
-			"content",
-			"rationale",
-		),
-		toolDef(
-			"run_eval",
-			"Run an eval suite against a target version and return pass/cost comparison.",
-			map[string]any{
-				"suite": map[string]any{
-					"type":        "string",
-					"description": "Eval suite ID or name",
-				},
-				"target_version": map[string]any{
-					"type":        "string",
-					"description": "Workflow version ID",
-				},
-			},
-			"suite",
-			"target_version",
 		),
 	}
 }
@@ -557,12 +515,6 @@ func (a *App) executeMetaTool(
 			"a":  a.runSummary(ctx, a1),
 			"b":  a.runSummary(ctx, b1),
 		}, nil
-	case "get_feedback":
-		f, err := a.Store.GetFeedback(ctx, "run", str(args, "run_id"))
-		if err != nil {
-			return map[string]any{"ok": true, "feedback": nil}, nil
-		}
-		return map[string]any{"ok": true, "feedback": f}, nil
 	case "list_secrets":
 		list, err := a.Secrets.List(ctx)
 		if err != nil {
@@ -787,10 +739,6 @@ func (a *App) executeMetaTool(
 		}, nil
 	case "propose_trigger":
 		return a.metaProposeTrigger(ctx, convID, args)
-	case "propose_patch":
-		return a.metaProposePatch(ctx, args)
-	case "run_eval":
-		return a.metaRunEval(ctx, str(args, "suite"), str(args, "target_version"))
 	}
 	return nil, fmt.Errorf("unknown meta tool %s", name)
 }
@@ -1045,7 +993,7 @@ func (a *App) runSummary(ctx context.Context, run model.Run) map[string]any {
 		"cost_micro":  run.CostMicro,
 		"started_at":  run.StartedAt,
 		"finished_at": run.FinishedAt,
-		"next_hint":   "If the run failed, call read_run to inspect events before proposing a patch.",
+		"next_hint":   "If the run failed, call read_run to inspect events and explain the likely cause.",
 	}
 }
 

@@ -334,7 +334,3 @@ func sanitizeIdent(s string) string {
 func (a *App) TriggerList(ctx context.Context, workflowID string) ([]model.Trigger, error) {
 	return a.Store.ListTriggers(ctx, workflowID)
 }
-
-func (a *App) FeedbackList(ctx context.Context, runID string) (model.Feedback, error) {
-	return a.Store.GetFeedback(ctx, "run", runID)
-}

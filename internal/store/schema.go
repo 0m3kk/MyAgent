@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS tool_versions (
   code_path TEXT,
   content_hash TEXT NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('draft','tested','approved','active','deprecated')),
-  created_by TEXT NOT NULL CHECK (created_by IN ('agent','user','tuner')),
+  created_by TEXT NOT NULL CHECK (created_by IN ('agent','user')),
   parent_id TEXT,
   approved_at INTEGER,
   created_at INTEGER NOT NULL,
@@ -140,7 +140,7 @@ CREATE TABLE IF NOT EXISTS workflow_versions (
   status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','approved','deprecated')),
   change_note TEXT NOT NULL DEFAULT '',
   parent_id TEXT,
-  created_by TEXT NOT NULL CHECK (created_by IN ('agent','user','tuner')),
+  created_by TEXT NOT NULL CHECK (created_by IN ('agent','user')),
   created_at INTEGER NOT NULL,
   UNIQUE (workflow_id, version)
 ) STRICT;
@@ -248,73 +248,6 @@ CREATE TABLE IF NOT EXISTS artifacts (
   sha256 TEXT NOT NULL,
   size INTEGER NOT NULL,
   mime TEXT NOT NULL DEFAULT 'application/octet-stream',
-  created_at INTEGER NOT NULL
-) STRICT;
-
-CREATE TABLE IF NOT EXISTS feedback (
-  id TEXT PRIMARY KEY,
-  target_kind TEXT NOT NULL,
-  target_id TEXT NOT NULL,
-  rating TEXT NOT NULL CHECK (rating IN ('up','down')),
-  note TEXT NOT NULL DEFAULT '',
-  created_at INTEGER NOT NULL,
-  UNIQUE (target_kind, target_id)
-) STRICT;
-
-CREATE TABLE IF NOT EXISTS eval_suites (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  target_kind TEXT NOT NULL,
-  target_id TEXT NOT NULL,
-  created_at INTEGER NOT NULL
-) STRICT;
-
-CREATE TABLE IF NOT EXISTS eval_cases (
-  id TEXT PRIMARY KEY,
-  suite_id TEXT NOT NULL REFERENCES eval_suites(id) ON DELETE CASCADE,
-  source_run_id TEXT,
-  inputs TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(inputs)),
-  assertions TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(assertions)),
-  recorded_io_ref TEXT,
-  split TEXT NOT NULL DEFAULT 'train' CHECK (split IN ('train','holdout')),
-  created_at INTEGER NOT NULL
-) STRICT;
-
-CREATE TABLE IF NOT EXISTS eval_runs (
-  id TEXT PRIMARY KEY,
-  suite_id TEXT NOT NULL REFERENCES eval_suites(id) ON DELETE CASCADE,
-  target_ver TEXT NOT NULL,
-  status TEXT NOT NULL,
-  started_at INTEGER,
-  finished_at INTEGER
-) STRICT;
-
-CREATE TABLE IF NOT EXISTS eval_results (
-  id TEXT PRIMARY KEY,
-  eval_run_id TEXT NOT NULL REFERENCES eval_runs(id) ON DELETE CASCADE,
-  case_id TEXT NOT NULL REFERENCES eval_cases(id) ON DELETE CASCADE,
-  target_ver TEXT NOT NULL,
-  passed INTEGER NOT NULL,
-  score REAL NOT NULL DEFAULT 0,
-  judge TEXT NOT NULL DEFAULT '',
-  cost_micro INTEGER NOT NULL DEFAULT 0,
-  latency_ms INTEGER NOT NULL DEFAULT 0,
-  output TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(output)),
-  error TEXT NOT NULL DEFAULT '',
-  created_at INTEGER NOT NULL
-) STRICT;
-
-CREATE TABLE IF NOT EXISTS tuning_proposals (
-  id TEXT PRIMARY KEY,
-  target_kind TEXT NOT NULL,
-  target_id TEXT NOT NULL,
-  base_version_id TEXT NOT NULL,
-  diagnosis TEXT NOT NULL,
-  patch TEXT NOT NULL,
-  proposed_yaml TEXT NOT NULL DEFAULT '',
-  status TEXT NOT NULL DEFAULT 'proposed',
-  eval_before TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(eval_before)),
-  eval_after TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(eval_after)),
   created_at INTEGER NOT NULL
 ) STRICT;
 

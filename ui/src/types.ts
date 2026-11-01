@@ -373,74 +373,6 @@ export interface SecretMeta {
   used_by?: string[]
 }
 
-export interface Feedback {
-  id: string
-  target_kind: string
-  target_id: string
-  rating: 'up' | 'down'
-  note: string
-  created_at: number
-}
-
-export interface EvalCase {
-  id: string
-  suite_id: string
-  source_run_id?: string
-  inputs: Record<string, unknown>
-  assertions: string[]
-  recorded_io_ref?: string
-  split: string
-  created_at: number
-}
-
-export interface EvalSuite {
-  id: string
-  name: string
-  target_kind: string
-  target_id: string
-  created_at: number
-  cases?: EvalCase[]
-}
-
-export interface EvalResult {
-  id: string
-  eval_run_id: string
-  case_id: string
-  target_ver: string
-  passed: boolean
-  score: number
-  judge: string
-  cost_micro: number
-  latency_ms: number
-  output?: unknown
-  error?: string
-  created_at: number
-}
-
-export interface EvalRun {
-  id: string
-  suite_id: string
-  target_ver: string
-  status: string
-  started_at: number
-  finished_at: number
-  results?: EvalResult[]
-}
-
-export interface TuningProposal {
-  id: string
-  target_kind: string
-  target_id: string
-  base_version_id: string
-  diagnosis: string
-  patch: string
-  proposed_yaml?: string
-  status: string
-  eval_before?: unknown
-  eval_after?: unknown
-  created_at: number
-}
-
 export interface Bootstrap {
   workspace: Workspace
   settings: Settings
@@ -489,11 +421,18 @@ export interface RunDetail {
   approvals: Approval[]
   outputs: Record<string, unknown>
   step_outputs: Record<string, unknown>
-  feedback?: Feedback
   version?: WorkflowVersion
   workflow?: Workflow
   spec?: WorkflowSpec
   spec_stale?: boolean
+}
+
+export interface RunAnalysis {
+  run_id: string
+  diagnosis: string
+  patch_summary?: string
+  expected_effect?: string
+  proposed_yaml?: string
 }
 
 export interface ToolDetailResponse {

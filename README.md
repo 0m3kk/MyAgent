@@ -27,7 +27,7 @@ MyAgent is a native macOS app with a Go core. The database, tools, secrets, work
 
 - 🛡️ **Approval first** — writes, external actions and first runs wait for you.
 - ♻️ **Reusable by design** — a successful chat becomes a versioned workflow; a missing capability becomes a versioned tool.
-- 🔍 **Observable** — every state change is a persisted event; runs, traces, cost and eval replay share one source of truth.
+- 🔍 **Observable** — every state change is a persisted event; runs, traces, cost and run analysis share one source of truth.
 - 🧠 **Bring your own model** — any OpenAI Chat Completions-compatible endpoint works, including local runtimes.
 
 ## 🚀 Quick start
@@ -82,8 +82,7 @@ Each workspace profile is fully isolated: its own SQLite database, chats, workfl
 | 🎨 | **Canvas** | Live React Flow graph, status colors, animated edges and a per-step inspector for input, output, logs, trace and cost. |
 | 🧰 | **Tools** | Built-ins, Starlark, Python/Node/shell/binary sandbox, manifests, tests, version lifecycle and structured result rendering. Draft edits update one working version; approval activates it. Nested folders, pinning, status filters and one-click agent organization keep large libraries manageable. |
 | 🛡️ | **Safety** | AES-256-GCM secrets, master key outside SQLite, redaction everywhere, path checks and a loopback-only API. |
-| 📊 | **Runs** | History, filters, feedback, rerun, side-by-side comparison and resumable interrupted runs. |
-| 🎯 | **Tuning** | Eval suites from real runs, deterministic replay, tuner diagnosis, diff review and rollback. |
+| 📊 | **Runs** | History, filters, rerun, side-by-side comparison, on-demand AI analysis and resumable interrupted runs. |
 | ⏰ | **Triggers** | Cron, folder watchers, local webhooks, CLI, unattended policies and concurrency policies. |
 | 🗂️ | **Workspaces** | Isolated profiles with their own DB, chats, workflows, tools, runs, secrets and settings; switch, export and import without mixing state. |
 | 🖥️ | **Desktop** | Native Swift/WebKit shell, Geist Mono, adjustable text size, Light/Dark/System appearance and Sparkle auto-update. |
@@ -275,7 +274,7 @@ Dependabot checks Go modules, UI pnpm packages and GitHub Actions every Monday a
 | Tool authoring, testing, sandbox and versioning | Developer ID signing and notarization |
 | Secrets, redaction, models and probes | Windows/Linux, multi-user and cloud sync |
 | Manual, scheduled, watched, webhook and CLI runs | HTTPS MITM header injection for script traffic |
-| Eval replay and tuning | Menubar or login-item background agent |
+| Run analysis and diagnosis | Menubar or login-item background agent |
 | Native app, CLI and auto-update | Automatic retention/compaction for old events and artifacts |
 
 ---

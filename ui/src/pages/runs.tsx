@@ -5,31 +5,22 @@ import {
   ArrowLeft,
   ArrowRight,
   BarChart3,
-  CheckCircle2,
-  ShieldCheck,
-  CirclePlay,
   GitCompareArrows,
   ListFilter,
   Pause,
   Play,
   RotateCcw,
-  Save,
-  SlidersHorizontal,
-  Sparkles,
+  ShieldCheck,
   Square,
-  ThumbsDown,
-  ThumbsUp,
-  Trash2,
-  X,
 } from 'lucide-react'
 import { api } from '../api'
 import { navigate } from '../router'
 import { useApp } from '../store'
 import { useEventStream, usePolling } from '../hooks'
 import { useToast } from '../components/toast'
-import type { Approval, EventEnvelope, Feedback, Run, RunDetail, StepRun, WorkflowSpec } from '../types'
+import type { Approval, EventEnvelope, Run, RunAnalysis, RunDetail, StepRun, WorkflowSpec } from '../types'
 import { formatCost, formatDate, formatDuration, formatRelative, safeJSON, shortId, statusTone } from '../format'
-import { Badge, Button, EmptyState, IconButton, InlineNotice, Modal, PageHeader, Select, Spinner, StatusBadge, Tabs, TextArea } from '../components/ui'
+import { Badge, Button, CopyButton, EmptyState, InlineNotice, Modal, PageHeader, Select, Spinner, StatusBadge, Tabs, TextArea } from '../components/ui'
 import { WorkflowCanvas } from '../components/workflow-canvas'
 import { RunInspector, StepStatusList } from '../components/run-inspector'
 import { Markdown, ToolCard, type ToolView } from '../components/chat-bits'
@@ -74,22 +65,12 @@ export function RunsPage() {
     setSelected((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : prev.length >= 2 ? [prev[1], id] : [...prev, id])
   }
 
-  async function rate(run: Run, rating: 'up' | 'down') {
-    try {
-      await api.feedback(run.id, rating)
-      toast(rating === 'up' ? 'Marked as helpful' : 'Feedback saved', 'This run is now a tuning signal.', 'success')
-      void load()
-    } catch (err) {
-      toast('Could not save feedback', err instanceof Error ? err.message : undefined, 'error')
-    }
-  }
-
   return (
     <div className="page">
       <PageHeader
         eyebrow="Observability"
         title="Runs"
-        description="Every workflow and tool run, with source, cost, trace and feedback."
+        description="Every workflow and tool run, with source, cost, trace and on-demand analysis."
         actions={
           <>
             {selected.length === 2 && (
@@ -132,7 +113,6 @@ export function RunsPage() {
             <span>Started</span>
             <span>Duration</span>
             <span>Cost</span>
-            <span>Signal</span>
             <span />
           </div>
           {runs.map((r) => (
@@ -149,10 +129,6 @@ export function RunsPage() {
               <span className="muted tiny">{formatRelative(r.created_at)}</span>
               <span className="muted tiny">{formatDuration(r.started_at, r.finished_at)}</span>
               <span className="mono tiny">{formatCost(r.cost_micro)}</span>
-              <span className="feedback-cell" onClick={(e) => e.stopPropagation()}>
-                <button className={clsx('feedback-btn', r.id && '')} onClick={() => rate(r, 'up')} aria-label="Thumbs up"><ThumbsUp size={13} /></button>
-                <button className="feedback-btn" onClick={() => rate(r, 'down')} aria-label="Thumbs down"><ThumbsDown size={13} /></button>
-              </span>
               <span className="runs-row-arrow"><ArrowRight size={14} /></span>
             </div>
           ))}
@@ -211,7 +187,8 @@ export function RunPage({ runId }: { runId: string }) {
   const [selectedStep, setSelectedStep] = useState<string | undefined>()
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
-  const [feedback, setFeedback] = useState<Feedback | undefined>()
+  const [analysis, setAnalysis] = useState<RunAnalysis | null>(null)
+  const [analysisOpen, setAnalysisOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async (silent = false) => {
@@ -220,7 +197,6 @@ export function RunPage({ runId }: { runId: string }) {
       const d = await api.run(runId)
       setDetail(d)
       setEvents((prev) => mergeEvents(prev, d.events || []))
-      setFeedback(d.feedback)
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load the run')
@@ -232,7 +208,8 @@ export function RunPage({ runId }: { runId: string }) {
   useEffect(() => {
     setDetail(null)
     setEvents([])
-    setFeedback(undefined)
+    setAnalysis(null)
+    setAnalysisOpen(false)
     setSelectedStep(undefined)
     void load()
     void refreshApprovals()
@@ -334,34 +311,12 @@ export function RunPage({ runId }: { runId: string }) {
     }
   }
 
-  async function rate(rating: 'up' | 'down') {
-    try {
-      const f = await api.feedback(run.id, rating)
-      setFeedback(f)
-      toast(rating === 'up' ? 'Marked helpful' : 'Feedback saved', undefined, 'success')
-    } catch (err) {
-      toast('Could not save feedback', err instanceof Error ? err.message : undefined, 'error')
-    }
-  }
-
-  async function makeEvalCase() {
-    setBusy('eval')
-    try {
-      await api.evalCase(run.id)
-      toast('Eval case created', 'Pinned inputs and recorded tool outputs are now a test case.', 'success')
-    } catch (err) {
-      toast('Could not create an eval case', err instanceof Error ? err.message : undefined, 'error')
-    } finally {
-      setBusy(null)
-    }
-  }
-
   async function analyze() {
     setBusy('analyze')
     try {
-      await api.analyzeRun(run.id)
-      toast('Tuning proposal created', 'Review the diagnosis and diff in Tuning.', 'success')
-      navigate('/tuning')
+      const result = await api.analyzeRun(run.id)
+      setAnalysis(result)
+      setAnalysisOpen(true)
     } catch (err) {
       toast('Analysis failed', err instanceof Error ? err.message : undefined, 'error')
     } finally {
@@ -395,14 +350,7 @@ export function RunPage({ runId }: { runId: string }) {
           {run.status === 'running' && <Button variant="subtle" size="sm" icon={<Pause size={14} />} onClick={() => control('pause')} loading={busy === 'pause'}>Pause</Button>}
           {paused && <Button variant="subtle" size="sm" icon={<Play size={14} />} onClick={() => control('resume')} loading={busy === 'resume'}>Resume</Button>}
           {running && <Button variant="ghost" size="sm" icon={<Square size={13} />} onClick={() => control('cancel')} loading={busy === 'cancel'}>Cancel</Button>}
-          <div className="feedback-actions">
-            <IconButton label="Thumbs up" onClick={() => rate('up')} className={feedback?.rating === 'up' ? 'active' : ''}><ThumbsUp size={15} /></IconButton>
-            <IconButton label="Thumbs down" onClick={() => rate('down')} className={feedback?.rating === 'down' ? 'active' : ''}><ThumbsDown size={15} /></IconButton>
-          </div>
           <Button variant="subtle" size="sm" icon={<RotateCcw size={14} />} onClick={rerun} loading={busy === 'rerun'}>Rerun</Button>
-          {run.target_kind === 'workflow' && (
-            <Button variant="ghost" size="sm" icon={<Save size={14} />} onClick={makeEvalCase} loading={busy === 'eval'}>Eval case</Button>
-          )}
           {run.target_kind === 'workflow' && <Button variant="ghost" size="sm" icon={<BarChart3 size={14} />} onClick={analyze} loading={busy === 'analyze'}>Analyze</Button>}
           {run.target_kind === 'workflow' && detail.workflow && (
             <Button variant="ghost" size="sm" icon={<ArrowRight size={14} />} onClick={() => navigate(`/workflows/${detail.workflow!.id}`)}>
@@ -458,6 +406,52 @@ export function RunPage({ runId }: { runId: string }) {
           </div>
         </>
       )}
+
+      <Modal
+        open={analysisOpen && !!analysis}
+        onClose={() => setAnalysisOpen(false)}
+        title="Run analysis"
+        subtitle={analysis ? `${run.target_name || run.target_kind} · ${shortId(run.id)}` : undefined}
+        width={820}
+        footer={<Button variant="ghost" onClick={() => setAnalysisOpen(false)}>Close</Button>}
+      >
+        {analysis && (
+          <div className="analysis-view">
+            <div className="analysis-section">
+              <span className="analysis-label">Diagnosis</span>
+              <p className="analysis-text">{analysis.diagnosis}</p>
+            </div>
+            {(analysis.patch_summary || analysis.expected_effect) && (
+              <div className="analysis-meta">
+                {analysis.patch_summary && (
+                  <div className="analysis-section">
+                    <span className="analysis-label">Suggested fix</span>
+                    <p className="analysis-text">{analysis.patch_summary}</p>
+                  </div>
+                )}
+                {analysis.expected_effect && (
+                  <div className="analysis-section">
+                    <span className="analysis-label">Expected effect</span>
+                    <p className="analysis-text">{analysis.expected_effect}</p>
+                  </div>
+                )}
+              </div>
+            )}
+            {analysis.proposed_yaml && (
+              <div className="analysis-section">
+                <div className="analysis-yaml-head">
+                  <span className="analysis-label">Suggested YAML</span>
+                  <CopyButton text={analysis.proposed_yaml} label="Copy YAML" />
+                </div>
+                <pre className="json-block small">{analysis.proposed_yaml}</pre>
+              </div>
+            )}
+            <InlineNotice tone="info" title="Advisory only">
+              Nothing was changed. Copy the suggested YAML if you want to edit the workflow yourself.
+            </InlineNotice>
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }

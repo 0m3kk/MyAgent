@@ -5,7 +5,6 @@ go 1.27.3
 require (
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/google/uuid v1.6.0
-	github.com/pmezard/go-difflib v1.0.0
 	github.com/robfig/cron/v3 v3.0.1
 	go.starlark.net v0.0.0-20261021141710-4f4267fb140d
 	gopkg.in/yaml.v3 v3.0.1

@@ -10,7 +10,6 @@ import { ChatHome, ChatPage, ChatsPage, NewChatPage } from './pages/chat'
 import { WorkflowPage, WorkflowsPage } from './pages/workflows'
 import { RunPage, RunsPage } from './pages/runs'
 import { ToolPage, ToolsPage } from './pages/tools'
-import { TuningPage } from './pages/tuning'
 import { SettingsPage } from './pages/settings'
 
 export default function App() {
@@ -102,8 +101,6 @@ function Router({ route }: { route: ReturnType<typeof useRoute> }) {
       return id ? <RunPage runId={id} /> : <RunsPage />
     case 'tools':
       return id ? <ToolPage toolId={id} /> : <ToolsPage />
-    case 'tuning':
-      return <TuningPage />
     case 'settings':
       return <SettingsPage sub={route.segments.slice(1)} />
     default:

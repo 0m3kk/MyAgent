@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// Event is the append-only contract between the Go core, the UI, trace and eval.
+// Event is the append-only contract between the Go core, the UI, trace and run analysis.
 // Persisted events are written to SQLite before they are broadcast.
 type Event struct {
 	ID        int64           `json:"id"`
@@ -306,72 +306,14 @@ type Artifact struct {
 	CreatedAt int64  `json:"created_at"`
 }
 
-type Feedback struct {
-	ID         string `json:"id"`
-	TargetKind string `json:"target_kind"`
-	TargetID   string `json:"target_id"`
-	Rating     string `json:"rating"`
-	Note       string `json:"note"`
-	CreatedAt  int64  `json:"created_at"`
-}
-
-type EvalSuite struct {
-	ID         string     `json:"id"`
-	Name       string     `json:"name"`
-	TargetKind string     `json:"target_kind"`
-	TargetID   string     `json:"target_id"`
-	CreatedAt  int64      `json:"created_at"`
-	Cases      []EvalCase `json:"cases,omitempty"`
-}
-
-type EvalCase struct {
-	ID            string          `json:"id"`
-	SuiteID       string          `json:"suite_id"`
-	SourceRunID   string          `json:"source_run_id,omitempty"`
-	Inputs        json.RawMessage `json:"inputs"`
-	Assertions    json.RawMessage `json:"assertions"`
-	RecordedIORef string          `json:"recorded_io_ref,omitempty"`
-	Split         string          `json:"split"`
-	CreatedAt     int64           `json:"created_at"`
-}
-
-type EvalRun struct {
-	ID         string       `json:"id"`
-	SuiteID    string       `json:"suite_id"`
-	TargetVer  string       `json:"target_ver"`
-	Status     string       `json:"status"`
-	StartedAt  int64        `json:"started_at"`
-	FinishedAt int64        `json:"finished_at"`
-	Results    []EvalResult `json:"results,omitempty"`
-}
-
-type EvalResult struct {
-	ID        string          `json:"id"`
-	EvalRunID string          `json:"eval_run_id"`
-	CaseID    string          `json:"case_id"`
-	TargetVer string          `json:"target_ver"`
-	Passed    bool            `json:"passed"`
-	Score     float64         `json:"score"`
-	Judge     string          `json:"judge,omitempty"`
-	CostMicro int64           `json:"cost_micro"`
-	LatencyMS int64           `json:"latency_ms"`
-	Output    json.RawMessage `json:"output,omitempty"`
-	Error     string          `json:"error,omitempty"`
-	CreatedAt int64           `json:"created_at"`
-}
-
-type TuningProposal struct {
-	ID            string          `json:"id"`
-	TargetKind    string          `json:"target_kind"`
-	TargetID      string          `json:"target_id"`
-	BaseVersionID string          `json:"base_version_id"`
-	Diagnosis     string          `json:"diagnosis"`
-	Patch         string          `json:"patch"`
-	ProposedYAML  string          `json:"proposed_yaml,omitempty"`
-	Status        string          `json:"status"`
-	EvalBefore    json.RawMessage `json:"eval_before,omitempty"`
-	EvalAfter     json.RawMessage `json:"eval_after,omitempty"`
-	CreatedAt     int64           `json:"created_at"`
+// RunAnalysis is a read-only diagnosis of one run. It is not persisted and
+// never changes the workflow version it describes.
+type RunAnalysis struct {
+	RunID          string `json:"run_id"`
+	Diagnosis      string `json:"diagnosis"`
+	PatchSummary   string `json:"patch_summary,omitempty"`
+	ExpectedEffect string `json:"expected_effect,omitempty"`
+	ProposedYAML   string `json:"proposed_yaml,omitempty"`
 }
 
 type PromptVersion struct {
