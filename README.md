@@ -193,11 +193,19 @@ cmd/agentctl        CLI
 
 ## 📦 Release
 
+From GitHub, open **Actions → Release → Run workflow** and choose `patch`, `minor` or `major`. The workflow:
+
+1. Bumps `VERSION`, `cmd/agentd/main.go`, `app/Info.plist` and `ui/package.json`.
+2. Builds and signs the macOS app, then commits the version bump.
+3. Pushes a `vX.Y.Z` tag and publishes a GitHub release with generated commit notes.
+
+Releases can also be built locally:
+
 ```bash
-VERSION=v1.0.0 mise run release
+VERSION=v0.1.6 mise run release
 ```
 
-Artifacts go to `dist/release/` as a zip, SHA-256 and Sparkle `appcast.xml`. The GitHub workflow builds on `macos-14` for `v*` tags and publishes the release. The tag name (for example `v0.1.6`) is written to `CFBundleShortVersionString` and injected into the Go core, so the in-app version matches the release.
+Artifacts go to `dist/release/` as a zip, SHA-256 and Sparkle `appcast.xml`. The GitHub workflow builds on `macos-14` and publishes for `v*` tags. The tag name (for example `v0.1.6`) is written to `CFBundleShortVersionString` and injected into the Go core, so the in-app version matches the release.
 
 ### 🔏 Local signing (self-signed)
 
