@@ -1,7 +1,7 @@
 {
   "name": "myagent-ui",
   "private": true,
-  "version": "1.2.4",
+  "version": "1.2.5",
   "packageManager": "pnpm@12.16.1",
   "type": "module",
   "scripts": {
