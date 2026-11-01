@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   Activity,
-  Bot,
-  Command,
   GitBranch,
   Home,
   Loader2,
@@ -49,7 +47,6 @@ export function Sidebar({
   usePolling(refreshActiveChats, 2_000, !!data)
   if (!data) return null
   const conversations = data.conversations.slice(0, 5)
-  const defaultModel = data.model_profiles.find((m) => m.id === data.settings.default_model_id) || data.model_profiles[0]
   const running = (data.counts?.run_running || 0) + (data.counts?.run_waiting_approval || 0)
   const nav = [
     { id: 'home', label: 'Home', icon: Home },
@@ -63,17 +60,6 @@ export function Sidebar({
   return (
     <aside className="sidebar">
       <div className="sidebar-top">
-        <a className="brand" href={href('/home')} onClick={(e) => { e.preventDefault(); navigate('/home') }}>
-          <span className="brand-mark"><Bot size={18} /></span>
-          <span className="brand-copy">
-            <strong>MyAgent</strong>
-          </span>
-        </a>
-        <button className="command-trigger" onClick={onCommand} title="Command palette (⌘K)">
-          <Command size={15} />
-          <span>Command</span>
-          <kbd>⌘K</kbd>
-        </button>
         <WorkspaceSwitcher />
       </div>
 
@@ -131,14 +117,6 @@ export function Sidebar({
           <span>{approvals.length > 0 ? `${approvals.length} waiting for approval` : 'No pending approvals'}</span>
           {approvals.length > 0 && <Badge tone="warn">{approvals.length}</Badge>}
         </button>
-        <div className="model-card">
-          <span className="model-orb" />
-          <div>
-            <strong>{defaultModel?.name || 'No model'}</strong>
-            <span>{defaultModel ? defaultModel.model : 'Open settings to add one'}</span>
-          </div>
-          <span className={`model-status ${defaultModel ? 'ok' : 'missing'}`} />
-        </div>
         <div className="sidebar-bottom-row">
           <a
             href={href('/settings')}
