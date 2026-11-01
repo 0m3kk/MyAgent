@@ -25,7 +25,7 @@ import { api } from '../api'
 import { navigate } from '../router'
 import { useApp } from '../store'
 import { useEventStream, usePolling, useAutoScroll } from '../hooks'
-import type { Approval, ChatProgress, Conversation, EventEnvelope, Message, Part } from '../types'
+import type { Approval, Bootstrap, ChatProgress, Conversation, EventEnvelope, Message, ModelProfile, Part } from '../types'
 import { formatRelative } from '../format'
 import { ApprovalCard } from '../components/approval'
 import { StartChatComposer } from '../components/chat-composer'
@@ -38,6 +38,18 @@ import { useConfirm } from '../components/confirm'
 
 function approvalsFor(list: Approval[], conversationId: string) {
   return list.filter((a) => a.conversation_id === conversationId && a.status === 'pending')
+}
+
+// Mirrors the backend's ModelForTask("chat"): the chat feature assignment wins,
+// then the default model, then the first profile.
+function chatModel(data: Bootstrap | null): ModelProfile | undefined {
+  if (!data) return undefined
+  const assigned = data.settings.model_assignments?.['chat']
+  if (assigned) {
+    const match = data.model_profiles.find((m) => m.id === assigned)
+    if (match) return match
+  }
+  return data.model_profiles.find((m) => m.id === data.settings.default_model_id) || data.model_profiles[0]
 }
 
 function progressFromPayload(p: Record<string, unknown>, prev: ChatProgress | null): ChatProgress | null {
@@ -69,7 +81,7 @@ export function ChatHome() {
   if (!data) return null
   const recent = data.conversations.slice(0, 6)
   const hasModel = data.model_profiles.length > 0
-  const defaultModel = data.model_profiles.find((m) => m.id === data.settings.default_model_id) || data.model_profiles[0]
+  const defaultModel = chatModel(data)
 
   async function start(prompt: string): Promise<boolean> {
     if (!hasModel) {
@@ -235,7 +247,7 @@ export function NewChatPage() {
   const toast = useToast()
   if (!data) return null
   const hasModel = data.model_profiles.length > 0
-  const defaultModel = data.model_profiles.find((m) => m.id === data.settings.default_model_id) || data.model_profiles[0]
+  const defaultModel = chatModel(data)
 
   async function start(prompt: string): Promise<boolean> {
     if (!hasModel) {
@@ -308,7 +320,7 @@ export function ChatPage({ conversationId }: { conversationId: string }) {
   const [titleBusy, setTitleBusy] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const pending = useMemo(() => approvalsFor(approvals, conversationId), [approvals, conversationId])
-  const defaultModel = data?.model_profiles.find((m) => m.id === data.settings.default_model_id) || data?.model_profiles[0]
+  const defaultModel = chatModel(data)
   const scrollRef = useAutoScroll<HTMLDivElement>(`${messages.length}:${streamText.length}:${Object.keys(liveTools).length}:${pending.length}`)
 
   const load = useCallback(async () => {
