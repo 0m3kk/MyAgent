@@ -68,7 +68,7 @@ output_schema:
       type: string
 permissions:
   network: { domains: [] }
-  fs: { read: [], write: [] }
+  fs: { read: [], write: [] } # use "." to allow workspace-scoped fs access
   exec: []
 secrets: []
 limits: { timeout_s: 10, memory_mb: 64, output_kb: 64 }
@@ -304,7 +304,7 @@ export function ToolsPage() {
       <PageHeader
         eyebrow="Capabilities"
         title="Tools"
-        description="Built-ins, approved Starlark/script tools and the manifests the agent can use. Group them into folders, pin the ones you use often, and test everything."
+        description="Agent-authored Starlark and script tools, the manifests they use, and the runs that exercise them. Group them into folders, pin the ones you use often, and test everything."
         actions={
           <>
             <div className="search-box"><Wrench size={14} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter tools…" /></div>
@@ -349,7 +349,6 @@ export function ToolsPage() {
                 aria-label="Filter by kind"
                 options={[
                   { value: 'all', label: 'Any kind' },
-                  { value: 'builtin', label: 'Built-in' },
                   { value: 'starlark', label: 'Starlark' },
                   { value: 'script', label: 'Script' },
                 ]}
@@ -465,7 +464,7 @@ function ToolTile({
     <div className={clsx('tool-tile', tool.pinned && 'pinned')}>
       <div className="tool-tile-head">
         <span className={clsx('tool-kind-icon', `kind-${tool.kind}`)}>
-          {tool.kind === 'builtin' ? <Lock size={16} /> : tool.kind === 'starlark' ? <Sparkles size={16} /> : <FileCode2 size={16} />}
+          {tool.kind === 'starlark' ? <Sparkles size={16} /> : <FileCode2 size={16} />}
         </span>
         <div className="tool-tile-title">
           <button className="tool-tile-open" onClick={() => navigate(`/tools/${tool.id}`)}>{tool.name}</button>
@@ -565,7 +564,7 @@ function NewToolPage() {
       </div>
       <div className="manifest-tip">
         <ShieldCheck size={15} />
-        <span>Tools start as drafts. They can only run after tests pass and you approve the card. Network domains, file roots and secrets are declared in the manifest.</span>
+        <span>Tools start as drafts. They can only run after tests pass and you approve the card. Starlark tools get workspace-scoped <code>json</code>, <code>http</code> and <code>fs</code> modules; declare the fs and network permissions they need in the manifest.</span>
       </div>
     </div>
   )
@@ -690,7 +689,7 @@ function ToolDetailPage({ toolId }: { toolId: string }) {
         <div className="workflow-head-main">
           <button className="back-link" onClick={() => navigate('/tools')}><ArrowLeft size={14} /> Tools</button>
           <div className="workflow-title-row">
-            <span className={clsx('workflow-icon', `kind-${tool.kind}`)}>{tool.kind === 'builtin' ? <Lock size={20} /> : <Wrench size={20} />}</span>
+            <span className={clsx('workflow-icon', `kind-${tool.kind}`)}>{tool.kind === 'starlark' ? <Sparkles size={20} /> : tool.kind === 'script' ? <FileCode2 size={20} /> : <Wrench size={20} />}</span>
             <div>
               <h1>{tool.name}</h1>
               <div className="workflow-subline">

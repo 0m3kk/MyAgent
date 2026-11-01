@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"myagent/internal/testutil"
 )
 
 const workflowDraftTestWorkflow = `schema: 1
@@ -31,6 +33,12 @@ func TestDraftEditsDoNotConsumeVersions(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer a.Close()
+	if _, err := testutil.InstallTool(
+		ctx, a.Store, a.Workspace.ID, a.cfg.ToolsDir,
+		testutil.FSListManifest, testutil.FSListCode,
+	); err != nil {
+		t.Fatal(err)
+	}
 
 	first, err := a.SaveWorkflowDraft(ctx, workflowDraftTestWorkflow, "initial", "user", 0)
 	if err != nil {

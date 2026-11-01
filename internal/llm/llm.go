@@ -433,7 +433,8 @@ func (c *Client) mock(
 
 	// A tiny scripted policy demonstrates real tool calls, approvals and run
 	// cards without requiring an API key.
-	if toolNames["save_workflow_draft"] && strings.Contains(lower, "create") &&
+	if toolNames["save_workflow_draft"] && toolNames["fs__list"] &&
+		toolNames["fs__write_text"] && strings.Contains(lower, "create") &&
 		strings.Contains(lower, "workflow") {
 		yaml := "schema: 1\nname: demo-digest\ndescription: Save a simple workspace digest after approval.\ninputs:\n  output:\n    type: string\n    format: path\n    default: \"digests/demo.md\"\n    description: Destination file\nsteps:\n  - id: list\n    tool: fs.list\n    with: {path: \".\", limit: 20}\n  - id: review\n    needs: [list]\n    approval:\n      message: \"Save the demo digest to ${inputs.output}?\"\n      show: ${steps.list.output.entries}\n  - id: write\n    needs: [review]\n    when: ${steps.review.output.approved}\n    tool: fs.write_text\n    side_effect: write\n    with:\n      path: ${inputs.output}\n      content: \"${steps.list.output.entries}\"\noutputs:\n  file: ${inputs.output}\n"
 		args, _ := json.Marshal(map[string]any{"yaml": yaml, "change_note": "Demo model draft"})
@@ -469,9 +470,9 @@ func (c *Client) mock(
 	}
 
 	text := "I'm the offline demo model. Add an OpenAI-compatible model in Settings to enable real reasoning. " +
-		"Everything else in the app already works: you can run example workflows, inspect runs, author tools and tune results."
+		"Everything else in the app already works: you can author tools and workflows, inspect runs and tune results."
 	if strings.Contains(lower, "hello") {
-		text = "Hello! This is the offline demo model. Open Settings → Models and add any OpenAI-compatible endpoint (OpenAI, OpenRouter, Ollama, LM Studio, vLLM…) to start chatting with a real model. The seeded workflows run without a model."
+		text = "Hello! This is the offline demo model. Open Settings → Models and add any OpenAI-compatible endpoint (OpenAI, OpenRouter, Ollama, LM Studio, vLLM…) to start chatting with a real model. Workflows run without a model."
 	}
 	if toolNames["fs__list"] {
 		text += "\n\nI can still demo a real tool call: ask me to summarize the files in your workspace."

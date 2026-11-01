@@ -1,4 +1,44 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
+
+const FS_LIST_MANIFEST = `schema: 1
+name: fs.list
+description: List files and folders inside the workspace.
+kind: starlark
+runtime: {entry: main.star}
+side_effect: read
+input_schema:
+  type: object
+  additionalProperties: false
+  properties:
+    path: {type: string, description: Folder path, default: "."}
+    limit: {type: integer, description: Maximum entries to return, default: 200}
+output_schema: {type: object}
+permissions:
+  network: {domains: []}
+  fs: {read: ["."], write: []}
+  exec: []
+limits: {timeout_s: 30, memory_mb: 256, output_kb: 1024}
+`
+
+const FS_LIST_CODE = `def run(input, ctx):
+    return fs.list(input.get("path", "."), input.get("limit", 200))
+`
+
+// Fresh workspaces no longer seed built-in tools, so tests that inspect the
+// tools UI create the fixture they need through the same API the app uses.
+async function ensureFsListTool(page: Page) {
+  const tokenRes = await page.request.get('/api/dev-token')
+  const { token } = (await tokenRes.json()) as { token: string }
+  const headers = { Authorization: `Bearer ${token}` }
+  const current = await page.request.get('/api/tools', { headers })
+  const body = (await current.json()) as { tools?: { name: string }[] }
+  if (body.tools?.some((tool) => tool.name === 'fs.list')) return
+  const created = await page.request.post('/api/tools', {
+    headers,
+    data: { manifest_yaml: FS_LIST_MANIFEST, files: { 'main.star': FS_LIST_CODE } },
+  })
+  expect(created.ok()).toBeTruthy()
+}
 
 test('home, command palette and workflow list', async ({ page }) => {
   await page.goto('/')
@@ -220,6 +260,7 @@ test('appearance has light, dark and system modes', async ({ page }) => {
 })
 
 test('tool inspector renders schema and tests', async ({ page }) => {
+  await ensureFsListTool(page)
   await page.goto('/#/tools')
   await expect(page.getByRole('heading', { name: 'Tools', exact: true })).toBeVisible({ timeout: 15_000 })
   await page.getByText('fs.list').click()
@@ -249,25 +290,26 @@ test('selects use an in-app dropdown', async ({ page }) => {
 })
 
 test('tools can be organized into folders and pinned', async ({ page }) => {
+  await ensureFsListTool(page)
   await page.goto('/#/tools')
   await expect(page.getByRole('heading', { name: 'Tools', exact: true })).toBeVisible({ timeout: 15_000 })
 
   await page.getByRole('button', { name: 'New folder' }).click()
   const folderDialog = page.getByRole('dialog')
   await expect(folderDialog.getByText('New folder')).toBeVisible()
-  await folderDialog.getByPlaceholder('e.g. Research').fill('Built-ins')
+  await folderDialog.getByPlaceholder('e.g. Research').fill('Files')
   await folderDialog.getByRole('button', { name: 'Create folder' }).click()
-  await expect(page.locator('.library-title h2')).toHaveText('Built-ins')
+  await expect(page.locator('.library-title h2')).toHaveText('Files')
 
   await page.getByRole('button', { name: /^All/ }).click()
   const tile = page.locator('.tool-tile', { hasText: 'fs.list' })
   await tile.getByRole('button', { name: 'Move fs.list to folder' }).click()
   const moveDialog = page.getByRole('dialog')
-  await moveDialog.locator('.move-row', { hasText: 'Built-ins' }).click()
+  await moveDialog.locator('.move-row', { hasText: 'Files' }).click()
   await moveDialog.getByRole('button', { name: 'Move' }).click()
 
-  await page.locator('.folder-hit', { hasText: 'Built-ins' }).click()
-  await expect(page.locator('.library-title h2')).toHaveText('Built-ins')
+  await page.locator('.folder-hit', { hasText: 'Files' }).click()
+  await expect(page.locator('.library-title h2')).toHaveText('Files')
   await expect(page.locator('.tool-tile', { hasText: 'fs.list' })).toBeVisible()
 
   await page.getByRole('button', { name: 'Pin fs.list' }).click()
@@ -277,7 +319,7 @@ test('tools can be organized into folders and pinned', async ({ page }) => {
   // Leave the shared e2e database tidy for the other tests.
   await page.getByRole('button', { name: /^All/ }).click()
   await page.getByRole('button', { name: 'Unpin fs.list' }).click()
-  await page.getByRole('button', { name: 'Delete Built-ins' }).click()
+  await page.getByRole('button', { name: 'Delete Files' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Delete folder' }).click()
   await expect(page.locator('.library-title h2')).toHaveText('All tools')
 })

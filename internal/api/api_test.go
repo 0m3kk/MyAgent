@@ -17,6 +17,7 @@ import (
 	"myagent/internal/api"
 	"myagent/internal/app"
 	"myagent/internal/model"
+	"myagent/internal/testutil"
 )
 
 type testClient struct {
@@ -143,6 +144,23 @@ func TestEndToEndAPI(t *testing.T) {
 	}
 	if workflows := c.must("GET", "/api/workflows", nil)["workflows"].([]any); len(workflows) != 0 {
 		t.Fatalf("fresh install should not seed workflows: %+v", workflows)
+	}
+	if tools := boot["tools"].([]any); len(tools) != 0 {
+		t.Fatalf("fresh install should not seed tools: %+v", tools)
+	}
+	for _, fixture := range []struct {
+		manifest string
+		code     string
+	}{
+		{testutil.FSListManifest, testutil.FSListCode},
+		{testutil.FSWriteTextManifest, testutil.FSWriteTextCode},
+	} {
+		if _, err := testutil.InstallTool(
+			ctx, a.Store, a.Workspace.ID, filepath.Join(dir, "tools"),
+			fixture.manifest, fixture.code,
+		); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// A workflow is authored, approved and then run through a human approval.

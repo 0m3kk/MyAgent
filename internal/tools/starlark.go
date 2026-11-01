@@ -104,6 +104,7 @@ func (e *Executor) executeStarlark(
 	predeclared := starlark.StringDict{
 		"json":   jsonModule,
 		"http":   httpModule,
+		"fs":     e.starlarkFSModule(m),
 		"secret": secretFn,
 		"log":    logFn,
 		"ctx": goToStarlark(

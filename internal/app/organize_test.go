@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"myagent/internal/model"
+	"myagent/internal/testutil"
 )
 
 func TestOrganizeLibraryWithAgent(t *testing.T) {
@@ -55,6 +56,21 @@ func TestOrganizeLibraryWithAgent(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer a.Close()
+	for _, name := range []string{
+		"fs.list", "fs.read_text", "fs.write_text", "fs.stat",
+		"http.fetch", "shell.exec", "workspace.info", "text.stats",
+	} {
+		if _, err := testutil.InstallTool(
+			ctx,
+			a.Store,
+			a.Workspace.ID,
+			a.cfg.ToolsDir,
+			testutil.StarlarkManifest(name, "Test tool for organization."),
+			"def run(input, ctx):\n    return {}\n",
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if _, err := a.SaveModelProfile(ctx, model.ModelProfile{
 		Name: "fake", BaseURL: llmSrv.URL + "/v1", Model: "fake",
 	}, ""); err != nil {

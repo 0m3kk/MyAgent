@@ -867,7 +867,6 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .back-link:hover { color: var(--text); }
 .workflow-title-row, .run-title-row { display: flex; align-items: center; gap: 11px; }
 .workflow-icon, .run-orb { width: 42px; height: 42px; border-radius: 13px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent-bright); flex: 0 0 auto; }
-.workflow-icon.kind-builtin { background: var(--surface-3); color: var(--muted); }
 .workflow-title-row h1, .run-title-row h1 { font-size: calc(21px * var(--font-scale)); }
 .workflow-subline, .run-subline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--faint); font-size: calc(10.5px * var(--font-scale)); margin-top: 4px; }
 .workflow-actions, .run-actions { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
@@ -1173,7 +1172,6 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .tool-tile.pinned { border-color: color-mix(in oklab, var(--amber) 28%, var(--border-soft)); }
 .tool-tile-head { display: flex; align-items: center; gap: 8px; }
 .tool-kind-icon { width: 31px; height: 31px; border-radius: 9px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent-bright); flex: 0 0 auto; }
-.tool-kind-icon.kind-builtin { background: var(--surface-3); color: var(--muted); }
 .tool-kind-icon.kind-script { background: var(--blue-soft); color: var(--blue); }
 .tool-tile-title { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .tool-tile-open {

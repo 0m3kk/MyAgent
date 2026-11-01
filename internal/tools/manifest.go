@@ -34,7 +34,6 @@ type Runtime struct {
 	Version  string `yaml:"version"  json:"version,omitempty"`
 	Entry    string `yaml:"entry"    json:"entry,omitempty"`
 	Deps     string `yaml:"deps"     json:"deps,omitempty"`
-	Builtin  string `yaml:"builtin"  json:"builtin,omitempty"`
 }
 
 type Permissions struct {
@@ -126,9 +125,6 @@ func normalizeManifest(m *Manifest) {
 	if m.Limits.OutputKB == 0 {
 		m.Limits.OutputKB = 512
 	}
-	if m.Kind == "builtin" && m.Runtime.Builtin == "" {
-		m.Runtime.Builtin = m.Name
-	}
 }
 
 var toolNamePattern = regexp.MustCompile(`^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$`)
@@ -153,9 +149,9 @@ func ValidateManifest(m *Manifest) []Issue {
 		add("description", "description must stay under 220 characters")
 	}
 	switch m.Kind {
-	case "builtin", "starlark", "script", "mcp":
+	case "starlark", "script", "mcp":
 	default:
-		add("kind", "kind must be builtin, starlark, script or mcp")
+		add("kind", "kind must be starlark, script or mcp")
 	}
 	switch m.SideEffect {
 	case "none", "read", "write", "external":
@@ -173,9 +169,6 @@ func ValidateManifest(m *Manifest) []Issue {
 				add("runtime.language", "runtime.language must be python, node, shell or binary")
 			}
 		}
-	}
-	if m.Kind == "builtin" && m.Runtime.Builtin == "" {
-		add("runtime.builtin", "builtin runtime name is required")
 	}
 	if _, err := schema.CompileValue(m.InputSchema); err != nil {
 		add("input_schema", err.Error())
@@ -262,7 +255,7 @@ func ValidateManifest(m *Manifest) []Issue {
 			}
 		}
 	}
-	if m.Kind != "builtin" && len(m.Tests) > 0 {
+	if len(m.Tests) > 0 {
 		hasOK, hasErr := false, false
 		for _, t := range m.Tests {
 			if t.ExpectError != "" {

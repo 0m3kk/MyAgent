@@ -79,8 +79,6 @@ func (e *Executor) Execute(
 	var out any
 	var err error
 	switch m.Kind {
-	case "builtin":
-		out, err = e.executeBuiltin(ctx, m, input, opts)
 	case "starlark":
 		out, err = e.executeStarlark(ctx, m, input, opts)
 	case "script":

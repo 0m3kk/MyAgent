@@ -296,10 +296,6 @@ func New(ctx context.Context, cfg Config) (*App, error) {
 		Store: st, Bus: bus, Tools: a, LLM: a, Approvals: a, Controls: a, Loader: a,
 		ArtifactDir: cfg.ArtifactDir, Redact: sec.Redact, Notifier: a.notify,
 	}
-	if err := a.seed(ctx); err != nil {
-		st.Close()
-		return nil, err
-	}
 	a.cron = cron.New()
 	a.cron.Start()
 	a.reloadTriggers(ctx)

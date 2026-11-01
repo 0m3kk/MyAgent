@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -50,6 +51,16 @@ func TestManifestValidation(t *testing.T) {
 	}
 	if issues := ValidateManifest(m); len(issues) != 0 {
 		t.Fatalf("issues: %+v", issues)
+	}
+}
+
+func TestBuiltinToolKindIsRejected(t *testing.T) {
+	m, err := ParseManifest(strings.Replace(testManifest, "kind: starlark", "kind: builtin", 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if issues := ValidateManifest(m); len(issues) == 0 {
+		t.Fatal("builtin tools should not be accepted")
 	}
 }
 

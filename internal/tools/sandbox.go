@@ -112,8 +112,9 @@ func sandboxProfile(spec SandboxSpec) string {
 	b.WriteString("(allow ipc-posix-shm*)\n")
 	b.WriteString("(allow ipc-posix-sem*)\n")
 	b.WriteString("(allow file-read*)\n")
-	// Broad reads are needed by language runtimes. Re-deny the app data and
-	// common credential locations, then re-allow only the paths a tool needs.
+	// Language runtimes read system libraries, so reads start broad. Re-deny
+	// the user's home, app data and credential locations, then re-allow only
+	// the workspace, tool directory and output directory.
 	for _, p := range spec.DenyRead {
 		if p != "" {
 			b.WriteString("(deny file-read* (subpath " + quote(p) + "))\n")

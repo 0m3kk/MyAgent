@@ -62,7 +62,7 @@ Closing the window quits the app and stops the core. Scheduled and watched runs 
 Older workspace folders are not reused or migrated. The app starts with a private folder and leaves old project folders untouched.
 
 > [!TIP]
-> A fresh install starts with built-in tools only. Add a model in **Settings → Models** to use chat. Workflows, conversations and workspace files are created by you.
+> A fresh install starts empty: no tools, workflows or conversations. Add a model in **Settings → Models** to use chat, then create tools before running workflows.
 
 ### 🗂️ Workspaces
 
@@ -82,7 +82,7 @@ Each workspace profile is fully isolated: its own SQLite database, chats, workfl
 | 💬 | **Chat agent** | Streaming markdown, tool cards, approvals, live step/token limits, rename/auto-name, stop, run links and “Save as workflow”. |
 | 🔁 | **Workflows** | Strict YAML, structured validator, DAG engine, parallel/map/branch/agent steps, retries, pause/resume and crash recovery. Draft edits update one working version; approving snapshots the next version. Nested folders, pinning, status filters and one-click agent organization keep large libraries manageable. |
 | 🎨 | **Canvas** | Live React Flow graph, status colors, animated edges and a per-step inspector for input, output, logs, trace and cost. |
-| 🧰 | **Tools** | Built-ins, Starlark, Python/Node/shell/binary sandbox, manifests, tests, version lifecycle and structured result rendering. Draft edits update one working version; approval activates it. Nested folders, pinning, status filters and one-click agent organization keep large libraries manageable. |
+| 🧰 | **Tools** | Agent-authored Starlark and script tools, workspace-scoped fs/http runtime modules, Python/Node/shell/binary sandbox, manifests, tests, version lifecycle and structured result rendering. Draft edits update one working version; approval activates it. Nested folders, pinning, status filters and one-click agent organization keep large libraries manageable. |
 | 🛡️ | **Safety** | AES-256-GCM secrets, master key outside SQLite, redaction everywhere, path checks and a loopback-only API. |
 | 📊 | **Runs** | History, filters, rerun, side-by-side comparison, on-demand AI analysis and resumable interrupted runs. |
 | ⏰ | **Triggers** | Cron, folder watchers, local webhooks, CLI, unattended policies and concurrency policies. |
@@ -167,7 +167,7 @@ The shell is intentionally thin. The Go core has no WebKit dependency and runs h
 internal/app        agent loop, meta-tools, chat, runs, triggers
 internal/llm        OpenAI-compatible gateway, probe, cost
 internal/workflow   schema, validator, expressions, DAG engine
-internal/tools      registry, builtins, Starlark/script sandbox, proxy
+internal/tools      registry, Starlark/script sandbox, proxy
 internal/store      SQLite schema and queries
 internal/eventbus   persisted events + live fan-out
 internal/secrets    AES-GCM store, key providers, redaction

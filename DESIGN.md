@@ -25,7 +25,7 @@ Version 1 · macOS · Go core + native shell + React · OpenAI-compatible
 | --- | --- |
 | Workspace | A working space: chats, tools, workflows and authorized folders |
 | Conversation / Message | A conversation with the agent, including tool calls and results |
-| Tool | id, version, type (builtin, mcp, starlark, script), manifest, input/output schema, code, permissions, tests |
+| Tool | id, version, type (mcp, starlark, script), manifest, input/output schema, code, permissions, tests |
 | Workflow | id, version, YAML, input schema, change notes |
 | Run | One workflow execution: version, inputs, status, timing, cost |
 | StepRun | One step inside a Run: input, output, logs, errors, retry count |
@@ -116,7 +116,7 @@ Once a tool or workflow is approved, chat is no longer the only entry point; it 
   /app        services: chat, workflows, approvals, runs, analysis
   /llm        gateway, probing, OpenCode Go session headers
   /workflow   schema, validator, engine, expressions
-  /tools      registry, manifests, built-in tools, sandbox, proxy
+  /tools      registry, manifests, tool runtime, sandbox, proxy
   /store      SQLite schema, migrations, event store
   /eventbus   typed event bus
   /secrets    encrypted secret store and key providers
@@ -144,13 +144,13 @@ Once a tool or workflow is approved, chat is no longer the only entry point; it 
 
 - A hand-written loop (~200 lines): call LLM → execute tool calls → feed results back → repeat. Built in-house to fully control trace, approvals, cancellation and step limits. Eino is a reference if desired.
 - **Agent meta-tools:** `create_tool`, `update_tool`, `test_tool`, `create_workflow`, `update_workflow`, `validate_workflow`, `run_workflow`, `read_trace`, `ask_user`.
-- **Built-in tools:** read/write files in authorized folders, HTTP fetch, sandboxed shell. Browser support comes later.
+- **Workspace runtime:** agent-authored tools get workspace-scoped filesystem primitives, HTTP fetch and a sandboxed shell/script runtime. Browser support comes later.
 - **Context management:** truncate long tool results (save the full result to a file and return a reference), compact conversations near the limit, and keep long-term workspace notes.
 - Hard limits: steps, time and tokens per turn.
 
 ### 5.3 Tool system
 
-- **Types:** builtin (Go), MCP (external server through the MCP Go SDK), Starlark (pure logic, sandboxed by default), script (Python/shell in a sandbox).
+- **Types:** MCP (external server through the MCP Go SDK), Starlark (pure logic, sandboxed by default), script (Python/shell in a sandbox). All tools are authored by the agent or the user; the product does not seed built-in tools.
 - **Manifest** (YAML) declares name, description, input/output schema, required permissions (network domains, file paths, secrets referenced only by logical name, see 5.9) and test cases.
 - **Lifecycle:** draft → tested → approved → active → deprecated. Editing the manifest or permissions requires re-approval.
 - The agent sees only the short description and schema of a tool, never a secret.
@@ -294,7 +294,7 @@ Swift/WebKit + React skeleton, event bus, SQLite + migrations, one LLM streaming
 
 ### Phase 1 — Chat agent (2–3 weeks)
 
-Agent loop, built-in tools, MCP client, approval cards, Settings with model profiles and probing, encrypted secret store (master key in Keychain; model API keys also live there) with the Secrets screen, step and budget limits. **Done when:** the agent completes a multi-step task with existing tools and every risky action asks for approval.
+Agent loop, workspace-scoped tools, MCP client, approval cards, Settings with model profiles and probing, encrypted secret store (master key in Keychain; model API keys also live there) with the Secrets screen, step and budget limits. **Done when:** the agent completes a multi-step task with existing tools and every risky action asks for approval.
 
 ### Phase 2 — Workflow (3–4 weeks)
 
@@ -371,7 +371,7 @@ PRAGMA busy_timeout = 5000;
 |  | `secrets` | id, name, kind, description, expires_at, last_used_at, ciphertext, nonce, key_version, ask_each_run | Values only exist as ciphertext (AES-256-GCM, associated data = id). Master key lives in Keychain, not in the DB |
 | Chat | `conversations` | id, workspace_id, title |  |
 |  | `messages` | id, conversation_id, seq, role, content, model_profile_id, tokens_in, tokens_out, cost_micro | content is JSON containing text and tool calls |
-| Tool | `tools` | id, workspace_id, name, kind, current_version_id | kind: builtin, mcp, starlark, script |
+| Tool | `tools` | id, workspace_id, name, kind, current_version_id | kind: mcp, starlark, script |
 |  | `tool_versions` | see below | Immutable after creation; only status changes |
 |  | `tool_secret_bindings` | tool_id, logical_name, secret_id, scope_hash, approved_at | Changing scope_hash invalidates approval |
 | Workflow | `workflows` | id, workspace_id, name, current_version_id |  |
@@ -660,7 +660,7 @@ Every tool is a directory with `manifest.yaml`, source code, fixtures and tests.
 schema: 1
 name: github.list_issues
 description: List open issues for a GitHub repository
-kind: script                  # builtin | starlark | script | mcp
+kind: script                  # starlark | script | mcp
 runtime:
   language: python            # python | node | shell | binary
   version: '3.12'
@@ -708,9 +708,8 @@ tests:
 ### D.2 Execution protocol by type
 
 - **script:** receives a JSON object on stdin containing `input` and `ctx` (`run_id`, `idem_key`). Returns a JSON object on stdout, or an `error` with `kind` and `message`. Logs go to stderr. Generated files are written to `OUT_DIR` and registered as artifacts. A non-zero exit without valid JSON is a `crashed` error.
-- **starlark:** defines `def run(input, ctx)` returning a dict. Only a restricted standard library is available (json, math, time) plus app helpers such as `http.get`, which goes through the allowlisted proxy. No direct file or network access.
+- **starlark:** defines `def run(input, ctx)` returning a dict. Only a restricted standard library is available (json, math, time) plus app helpers: `fs.list`, `fs.read_text`, `fs.write_text`, `fs.stat` and `fs.delete` are confined to the workspace, and `http.get`/`http.post` go through the allowlisted proxy. There is no ambient file or network access.
 - **mcp:** the manifest declares how to start the server (command or URL), the allowed tool list and `permissions` applied to the server process. MCP annotations such as `readOnlyHint` are suggestions only and are **not** used to derive `side_effect`; the user or validator decides.
-- **builtin:** written in Go in the repository, but still has a manifest so the agent and validator treat it uniformly.
 
 ### D.3 Validator rules
 

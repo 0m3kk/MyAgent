@@ -92,7 +92,18 @@ func (s *Store) migrate(ctx context.Context) error {
 	if err := s.linkLegacyToolDrafts(ctx); err != nil {
 		return err
 	}
+	if err := s.deleteLegacyBuiltinTools(ctx); err != nil {
+		return err
+	}
 	return s.deprecateOrphanToolDrafts(ctx)
+}
+
+// deleteLegacyBuiltinTools removes tool rows from the retired built-in tool
+// model. Tools are now authored by the agent and use the workspace-scoped
+// runtime modules instead of product-seeded built-ins.
+func (s *Store) deleteLegacyBuiltinTools(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM tools WHERE kind = 'builtin'`)
+	return err
 }
 
 func (s *Store) linkLegacyToolDrafts(ctx context.Context) error {

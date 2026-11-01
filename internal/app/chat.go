@@ -684,7 +684,8 @@ You can use tools, author reusable workflows and tools, run them, inspect runs a
 	)
 	b.WriteString("\n# Tool authoring\n")
 	b.WriteString(
-		"When a tool is missing: create_tool_draft, write_tool_file, run_tool_tests, then request_tool_approval with a plain-language summary of what the tool can access. You never activate it yourself.\n",
+		"When a tool is missing: create_tool_draft, write_tool_file, run_tool_tests, then request_tool_approval with a plain-language summary of what the tool can access. You never activate it yourself.\n" +
+			"Create tools as Starlark or script tools. A Starlark manifest uses kind: starlark and runtime: {entry: main.star}. Starlark tools can use the workspace-scoped fs module: fs.list(path, limit), fs.read_text(path, max_bytes), fs.write_text(path, content, append), fs.stat(path) and fs.delete(path, recursive). Every path is confined to the workspace; declare permissions.fs.read and permissions.fs.write in the manifest before using them, and set side_effect: write for tools that modify files. HTTP is available through the http module. Use a script tool when you need shell, Node or arbitrary Python.\n",
 	)
 	return b.String()
 }
