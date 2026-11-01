@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft,
-  ArrowRight,
   CalendarClock,
   Check,
   ChevronRight,
@@ -9,9 +8,9 @@ import {
   Clock3,
   Code2,
   FileCode2,
+  Folder,
+  FolderInput,
   GitBranch,
-  GitCommitHorizontal,
-  Globe2,
   History,
   Info,
   MoreHorizontal,
@@ -21,6 +20,7 @@ import {
   Save,
   ShieldCheck,
   Sparkles,
+  Star,
   Trash2,
   Webhook,
   Workflow as WorkflowIcon,
@@ -32,13 +32,24 @@ import { navigate } from '../router'
 import { useApp } from '../store'
 import { useToast } from '../components/toast'
 import { useConfirm } from '../components/confirm'
-import type { ModelProfile, Run, StepSpec, Trigger, ValidationResult, Workflow, WorkflowDetail, WorkflowSpec, WorkflowVersion } from '../types'
-import { formatCost, formatDate, formatRelative, shortId, statusTone, titleCase, versionLabel } from '../format'
-import { Badge, Button, Drawer, EmptyState, Field, IconButton, InlineNotice, Modal, PageHeader, SectionTitle, Select, Spinner, StatusBadge, Tabs, TextArea, TextInput, Toggle, CopyButton } from '../components/ui'
+import type { Folder as FolderRecord, Run, StepSpec, Trigger, ValidationResult, Workflow, WorkflowDetail, WorkflowSpec, WorkflowVersion } from '../types'
+import { formatDate, formatRelative, shortId, statusTone, versionLabel } from '../format'
+import { Badge, Button, EmptyState, Field, IconButton, InlineNotice, Modal, PageHeader, SectionTitle, Select, Spinner, StatusBadge, Tabs, TextArea, TextInput, Toggle, CopyButton } from '../components/ui'
 import { DiagnosticsList } from '../components/diagnostics'
 import { InputForm, InputSpecList, schemaDefaults, validateInputs, type JSONSchema } from '../components/input-form'
 import { WorkflowCanvas } from '../components/workflow-canvas'
 import { Markdown } from '../components/chat-bits'
+import {
+  buildLibraryCounts,
+  folderDescendantIDs,
+  folderMap,
+  folderPath,
+  FolderDialog,
+  LibraryNav,
+  MoveToFolderDialog,
+  topLevelFolders,
+  type LibrarySelection,
+} from '../components/library'
 
 const STARTER_YAML = `schema: 1
 name: my-workflow
@@ -70,17 +81,149 @@ steps:
 
 type Tab = 'graph' | 'yaml' | 'versions' | 'triggers'
 
+function workflowNeedsAttention(workflow: Workflow) {
+  const status = workflow.version?.status
+  return !workflow.version || status === 'draft'
+}
+
 export function WorkflowsPage() {
   const { data, refresh } = useApp()
+  const toast = useToast()
+  const confirm = useConfirm()
   const [query, setQuery] = useState('')
+  const [selection, setSelection] = useState<LibrarySelection>({ kind: 'all' })
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [sort, setSort] = useState<'name' | 'newest' | 'updated'>('name')
+  const [folderDialog, setFolderDialog] = useState<{ mode: 'create' | 'edit'; folder?: FolderRecord } | null>(null)
+  const [moveWorkflow, setMoveWorkflow] = useState<Workflow | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+
+  const allWorkflows = useMemo(() => data?.workflows ?? [], [data?.workflows])
+  const folders = useMemo(() => (data?.folders ?? []).filter((f) => f.kind === 'workflow'), [data?.folders])
+  const counts = useMemo(() => buildLibraryCounts(folders, allWorkflows, workflowNeedsAttention), [folders, allWorkflows])
+
+  useEffect(() => {
+    if (selection.kind === 'folder' && !folders.some((folder) => folder.id === selection.id)) {
+      setSelection({ kind: 'all' })
+    }
+  }, [folders, selection])
+
+  const filtered = useMemo(() => {
+    const known = folderMap(folders)
+    const needle = query.trim().toLowerCase()
+    const selectedFolderIDs = selection.kind === 'folder' ? folderDescendantIDs(folders, selection.id) : null
+    const items = allWorkflows.filter((workflow) => {
+      if (selection.kind === 'pinned' && !workflow.pinned) return false
+      if (selection.kind === 'attention' && !workflowNeedsAttention(workflow)) return false
+      if (selection.kind === 'unfiled' && workflow.folder_id && known.has(workflow.folder_id)) return false
+      if (selectedFolderIDs && (!workflow.folder_id || !selectedFolderIDs.has(workflow.folder_id))) return false
+      if (needle && !workflow.name.toLowerCase().includes(needle)) return false
+      const status = workflow.version?.status || ''
+      if (statusFilter === 'approved' && status !== 'approved') return false
+      if (statusFilter === 'draft' && status !== 'draft') return false
+      return true
+    })
+    return items.sort((a, b) => {
+      const pinned = Number(!!b.pinned) - Number(!!a.pinned)
+      if (pinned !== 0) return pinned
+      if (sort === 'newest') return b.created_at - a.created_at
+      if (sort === 'updated') {
+        return (b.version?.created_at || b.created_at) - (a.version?.created_at || a.created_at)
+      }
+      return a.name.localeCompare(b.name)
+    })
+  }, [allWorkflows, folders, selection, query, statusFilter, sort])
+
+  const groups = useMemo(() => {
+    const known = folderMap(folders)
+    if (selection.kind !== 'all' || query.trim()) {
+      return [{ key: 'view', title: workflowSelectionTitle(selection, folders, query), items: filtered }]
+    }
+    const out: { key: string; title: string; items: Workflow[] }[] = []
+    for (const folder of topLevelFolders(folders)) {
+      const IDs = folderDescendantIDs(folders, folder.id)
+      const items = filtered.filter((workflow) => workflow.folder_id && IDs.has(workflow.folder_id))
+      if (items.length) out.push({ key: folder.id, title: folder.name, items })
+    }
+    const unfiled = filtered.filter((workflow) => !workflow.folder_id || !known.has(workflow.folder_id))
+    if (unfiled.length) out.push({ key: 'unfiled', title: 'Unfiled', items: unfiled })
+    return out
+  }, [filtered, folders, selection, query])
+
   if (!data) return null
-  const workflows = data.workflows.filter((w) => !query || w.name.toLowerCase().includes(query.toLowerCase()))
+
+  const title = selection.kind === 'folder' ? folderPath(folders, selection.id) : workflowSelectionTitle(selection, folders, query)
+  const filtersActive = !!query || statusFilter !== 'all'
+  const emptyCopy = workflowEmptyState(selection, query)
+
+  async function saveFolder(name: string, parentID: string) {
+    try {
+      if (folderDialog?.mode === 'edit' && folderDialog.folder) {
+        await api.updateFolder(folderDialog.folder.id, { name, parent_id: parentID })
+        await refresh()
+        toast('Folder updated', name, 'success')
+      } else {
+        const folder = await api.createFolder({ kind: 'workflow', name, parent_id: parentID || undefined })
+        await refresh()
+        setSelection({ kind: 'folder', id: folder.id })
+        toast('Folder created', name, 'success')
+      }
+      return true
+    } catch (err) {
+      toast('Could not save the folder', err instanceof Error ? err.message : undefined, 'error')
+      return false
+    }
+  }
+
+  async function removeFolder(folder: FolderRecord) {
+    const IDs = folderDescendantIDs(folders, folder.id)
+    const ok = await confirm({
+      title: 'Delete folder',
+      message: `Delete “${folder.name}”? Nested folders are removed and their workflows move to the parent folder. The workflows themselves are not deleted.`,
+      confirmLabel: 'Delete folder',
+    })
+    if (!ok) return
+    try {
+      await api.deleteFolder(folder.id)
+      if (selection.kind === 'folder' && IDs.has(selection.id)) setSelection({ kind: 'all' })
+      toast('Folder deleted', 'Its workflows were moved to the parent folder.', 'success')
+      await refresh()
+    } catch (err) {
+      toast('Could not delete the folder', err instanceof Error ? err.message : undefined, 'error')
+    }
+  }
+
+  async function togglePin(workflow: Workflow) {
+    setBusy(`pin-${workflow.id}`)
+    try {
+      await api.updateWorkflow(workflow.id, { pinned: !workflow.pinned })
+      await refresh()
+      toast(workflow.pinned ? 'Workflow unpinned' : 'Workflow pinned', workflow.name, 'success')
+    } catch (err) {
+      toast('Could not update the workflow', err instanceof Error ? err.message : undefined, 'error')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function moveWorkflowTo(workflow: Workflow, folderID: string) {
+    try {
+      await api.updateWorkflow(workflow.id, { folder_id: folderID })
+      await refresh()
+      toast('Workflow moved', folderID ? folderPath(folders, folderID) : 'No folder', 'success')
+      return true
+    } catch (err) {
+      toast('Could not move the workflow', err instanceof Error ? err.message : undefined, 'error')
+      return false
+    }
+  }
+
   return (
     <div className="page">
       <PageHeader
         eyebrow="Automations"
         title="Workflows"
-        description="Reusable, versioned graphs. Run them without chat, schedule them, and approve risky steps."
+        description="Reusable, versioned graphs. Group them into folders, pin the ones you run often, and keep drafts visible until they are approved."
         actions={
           <>
             <div className="search-box">
@@ -91,29 +234,136 @@ export function WorkflowsPage() {
           </>
         }
       />
-      <div className="workflow-list">
-        {workflows.map((w) => (
-          <WorkflowRow key={w.id} workflow={w} runs={data.runs.filter((r) => r.target_id === w.id).slice(0, 3)} />
-        ))}
-        {workflows.length === 0 && (
-          <EmptyState
-            icon={<GitBranch size={28} />}
-            title={query ? 'No matching workflows' : 'Build your first workflow'}
-            description={query ? 'Try a different name.' : 'Ask the agent to turn a successful chat into a workflow, or start from YAML.'}
-            action={<Button variant="primary" icon={<Plus size={15} />} onClick={() => navigate('/workflows/new')}>New workflow</Button>}
-          />
-        )}
+      <div className="library-layout">
+        <LibraryNav
+          folders={folders}
+          counts={counts}
+          selection={selection}
+          onSelect={setSelection}
+          onCreateFolder={() => setFolderDialog({ mode: 'create' })}
+          onRenameFolder={(folder) => setFolderDialog({ mode: 'edit', folder })}
+          onDeleteFolder={removeFolder}
+        />
+        <div className="library-main">
+          <div className="library-toolbar">
+            <div className="library-title">
+              <h2>{title}</h2>
+              <span>{filtered.length === allWorkflows.length ? `${allWorkflows.length} workflows` : `${filtered.length} of ${allWorkflows.length} workflows`}</span>
+            </div>
+            <div className="library-filters">
+              <Select className="compact" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label="Filter by status">
+                <option value="all">Any status</option>
+                <option value="approved">Approved</option>
+                <option value="draft">Draft</option>
+              </Select>
+              <Select className="compact" value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} aria-label="Sort workflows">
+                <option value="name">Name</option>
+                <option value="newest">Newest</option>
+                <option value="updated">Recently updated</option>
+              </Select>
+              {filtersActive && (
+                <button className="link-btn tiny" onClick={() => { setQuery(''); setStatusFilter('all') }}>Reset</button>
+              )}
+            </div>
+          </div>
+
+          {groups.map((group) => (
+            <section key={group.key} className="library-group">
+              {selection.kind === 'all' && !query.trim() && (
+                <div className="library-group-head">
+                  <Folder size={14} />
+                  <h3>{group.title}</h3>
+                  <span>{group.items.length}</span>
+                </div>
+              )}
+              <div className="workflow-list">
+                {group.items.map((workflow) => (
+                  <WorkflowRow
+                    key={workflow.id}
+                    workflow={workflow}
+                    runs={data.runs.filter((run) => run.target_id === workflow.id).slice(0, 3)}
+                    folderLabel={folderPath(folders, workflow.folder_id)}
+                    pinning={busy === `pin-${workflow.id}`}
+                    onPin={() => void togglePin(workflow)}
+                    onMove={() => setMoveWorkflow(workflow)}
+                  />
+                ))}
+              </div>
+            </section>
+          ))}
+
+          {filtered.length === 0 && (
+            <EmptyState
+              icon={<GitBranch size={28} />}
+              title={emptyCopy.title}
+              description={emptyCopy.description}
+              action={filtersActive
+                ? <Button variant="subtle" onClick={() => { setQuery(''); setStatusFilter('all') }}>Clear filters</Button>
+                : <Button variant="primary" icon={<Plus size={15} />} onClick={() => navigate('/workflows/new')}>New workflow</Button>}
+            />
+          )}
+        </div>
       </div>
+
+      <FolderDialog
+        open={!!folderDialog}
+        onClose={() => setFolderDialog(null)}
+        mode={folderDialog?.mode || 'create'}
+        folder={folderDialog?.folder}
+        folders={folders}
+        defaultParentID={selection.kind === 'folder' ? selection.id : undefined}
+        onSubmit={saveFolder}
+      />
+      <MoveToFolderDialog
+        open={!!moveWorkflow}
+        onClose={() => setMoveWorkflow(null)}
+        itemName={moveWorkflow?.name || ''}
+        folders={folders}
+        currentFolderID={moveWorkflow?.folder_id}
+        onMove={(folderID) => moveWorkflow ? moveWorkflowTo(moveWorkflow, folderID) : Promise.resolve(false)}
+      />
     </div>
   )
 }
 
-function WorkflowRow({ workflow, runs }: { workflow: Workflow; runs: Run[] }) {
+function workflowSelectionTitle(selection: LibrarySelection, folders: FolderRecord[], query: string) {
+  if (query.trim()) return `Results for “${query.trim()}”`
+  if (selection.kind === 'pinned') return 'Pinned workflows'
+  if (selection.kind === 'attention') return 'Needs attention'
+  if (selection.kind === 'unfiled') return 'Unfiled'
+  if (selection.kind === 'folder') return folderPath(folders, selection.id) || 'Folder'
+  return 'All workflows'
+}
+
+function workflowEmptyState(selection: LibrarySelection, query: string) {
+  if (query.trim()) return { title: 'No matching workflows', description: 'Try another name or clear the current filters.' }
+  if (selection.kind === 'pinned') return { title: 'Nothing pinned yet', description: 'Pin workflows you run often and they will stay at the top of every list.' }
+  if (selection.kind === 'attention') return { title: 'Nothing needs attention', description: 'Every workflow is approved and ready to run.' }
+  if (selection.kind === 'unfiled') return { title: 'No unfiled workflows', description: 'Every workflow belongs to a folder. Create another folder to keep the library tidy.' }
+  if (selection.kind === 'folder') return { title: 'This folder is empty', description: 'Move a workflow here with the folder button on any row, or create something new.' }
+  return { title: 'Build your first workflow', description: 'Ask the agent to turn a successful chat into a workflow, or start from YAML.' }
+}
+
+function WorkflowRow({
+  workflow,
+  runs,
+  folderLabel,
+  pinning,
+  onPin,
+  onMove,
+}: {
+  workflow: Workflow
+  runs: Run[]
+  folderLabel: string
+  pinning: boolean
+  onPin: () => void
+  onMove: () => void
+}) {
   const v = workflow.version
   const steps = workflow.steps || []
   const last = runs[0]
   return (
-    <div className="workflow-row" onClick={() => navigate(`/workflows/${workflow.id}`)}>
+    <div className={clsx('workflow-row', workflow.pinned && 'pinned')} onClick={() => navigate(`/workflows/${workflow.id}`)}>
       <div className="workflow-row-icon"><WorkflowIcon size={18} /></div>
       <div className="workflow-row-main">
         <div className="workflow-row-title">
@@ -125,6 +375,7 @@ function WorkflowRow({ workflow, runs }: { workflow: Workflow; runs: Run[] }) {
           <span>{steps.length} steps</span>
           <span className="dot-sep" />
           <span>{steps.slice(0, 3).map((s) => s.summary || s.id).join(' → ') || 'No graph yet'}</span>
+          {folderLabel && <><span className="dot-sep" /><span className="folder-inline"><Folder size={11} />{folderLabel}</span></>}
         </div>
       </div>
       <div className="workflow-row-last">
@@ -138,6 +389,10 @@ function WorkflowRow({ workflow, runs }: { workflow: Workflow; runs: Run[] }) {
         )}
       </div>
       <div className="workflow-row-actions">
+        <IconButton className={clsx('tile-icon-btn', workflow.pinned && 'active')} label={workflow.pinned ? `Unpin ${workflow.name}` : `Pin ${workflow.name}`} onClick={(e) => { e.stopPropagation(); onPin() }} disabled={pinning}>
+          <Star size={13} fill={workflow.pinned ? 'currentColor' : 'none'} />
+        </IconButton>
+        <IconButton className="tile-icon-btn" label={`Move ${workflow.name} to folder`} onClick={(e) => { e.stopPropagation(); onMove() }}><FolderInput size={13} /></IconButton>
         <Button size="sm" variant="subtle" icon={<Play size={13} />} onClick={(e) => { e.stopPropagation(); navigate(`/workflows/${workflow.id}`) }}>
           Open
         </Button>
@@ -201,6 +456,7 @@ export function WorkflowPage({ workflowId }: { workflowId: string }) {
   const current = detail?.workflow.version
   const canApprove = current?.status === 'draft'
   const workflowName = current ? detail?.workflow.name : isNew ? 'New workflow' : detail?.workflow.name
+  const folderLabel = folderPath(data?.folders || [], detail?.workflow.folder_id)
 
   async function validate() {
     setBusy('validate')
@@ -297,6 +553,7 @@ export function WorkflowPage({ workflowId }: { workflowId: string }) {
                 <span>{current?.created_by || 'you'}</span>
                 {current && <span className="dot-sep" />}
                 <span>{current ? formatRelative(current.created_at) : 'not saved'}</span>
+                {folderLabel && <><span className="dot-sep" /><span className="folder-inline"><Folder size={12} />{folderLabel}</span></>}
                 {detail?.validation?.warnings?.length ? <span className="warn-text">{detail.validation.warnings.length} warning(s)</span> : null}
               </div>
             </div>

@@ -6,6 +6,7 @@ import type {
   EvalRun,
   EvalSuite,
   EventEnvelope,
+  Folder,
   Message,
   ModelProfile,
   Run,
@@ -140,6 +141,8 @@ export const api = {
 
   workflows: () => request<{ workflows: Workflow[] }>('/api/workflows'),
   workflow: (id: string) => request<WorkflowDetail>(`/api/workflows/${id}`),
+  updateWorkflow: (id: string, body: { folder_id?: string; pinned?: boolean }) =>
+    request<{ ok: boolean }>(`/api/workflows/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   validateWorkflow: (yaml: string, forRun = false) => request<ValidationResult>('/api/workflows/validate', json({ yaml, for_run: forRun })),
   saveWorkflow: (body: { yaml: string; change_note?: string; base_version?: number; approve?: boolean }) =>
     request<{ workflow: Workflow; version: { id: string; version: number }; validation: ValidationResult }>('/api/workflows', json(body)),
@@ -173,6 +176,8 @@ export const api = {
 
   tools: () => request<{ tools: import('./types').Tool[] }>('/api/tools'),
   tool: (id: string) => request<import('./types').ToolDetail>(`/api/tools/${id}`),
+  updateTool: (id: string, body: { folder_id?: string; pinned?: boolean }) =>
+    request<{ ok: boolean }>(`/api/tools/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   createTool: (manifest_yaml: string, files?: Record<string, string>) =>
     request<import('./types').ToolDetailResponse>('/api/tools', json({ manifest_yaml, files })),
   writeToolFile: (id: string, vid: string, path: string, content: string) =>
@@ -188,6 +193,14 @@ export const api = {
   bindSecret: (id: string, logical_name: string, secret_id: string) =>
     request<{ ok: boolean }>(`/api/tools/${id}/secrets`, json({ logical_name, secret_id })),
   deleteTool: (id: string) => request<{ ok: boolean }>(`/api/tools/${id}`, { method: 'DELETE' }),
+
+  folders: (kind?: 'tool' | 'workflow') =>
+    request<{ folders: Folder[] }>(`/api/folders${kind ? `?kind=${kind}` : ''}`),
+  createFolder: (body: { kind: 'tool' | 'workflow'; name: string; parent_id?: string }) =>
+    request<Folder>('/api/folders', json(body)),
+  updateFolder: (id: string, body: { name?: string; parent_id?: string }) =>
+    request<Folder>(`/api/folders/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteFolder: (id: string) => request<{ ok: boolean }>(`/api/folders/${id}`, { method: 'DELETE' }),
 
   approvals: () => request<{ approvals: Approval[] }>('/api/approvals'),
   decideApproval: (id: string, decision: 'approve' | 'reject', comment = '') =>

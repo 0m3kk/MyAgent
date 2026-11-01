@@ -14,9 +14,11 @@ func (s *Store) GetOrCreateWorkflow(
 	workspaceID, name string,
 ) (model.Workflow, error) {
 	var w model.Workflow
-	err := s.db.QueryRowContext(ctx, `SELECT id,workspace_id,name,COALESCE(current_version_id,''),created_at FROM workflows WHERE workspace_id=? AND name=?`,
+	var pinned int
+	err := s.db.QueryRowContext(ctx, `SELECT id,workspace_id,name,COALESCE(current_version_id,''),COALESCE(folder_id,''),pinned,created_at FROM workflows WHERE workspace_id=? AND name=?`,
 		workspaceID, name).
-		Scan(&w.ID, &w.WorkspaceID, &w.Name, &w.CurrentVersionID, &w.CreatedAt)
+		Scan(&w.ID, &w.WorkspaceID, &w.Name, &w.CurrentVersionID, &w.FolderID, &pinned, &w.CreatedAt)
+	w.Pinned = pinned == 1
 	if err == nil {
 		return w, nil
 	}
@@ -26,7 +28,7 @@ func (s *Store) GetOrCreateWorkflow(
 	w = model.Workflow{ID: ids.New(), WorkspaceID: workspaceID, Name: name, CreatedAt: ids.NowMS()}
 	_, err = s.db.ExecContext(
 		ctx,
-		`INSERT INTO workflows (id,workspace_id,name,current_version_id,created_at) VALUES (?,?,?,NULL,?)`,
+		`INSERT INTO workflows (id,workspace_id,name,current_version_id,folder_id,pinned,created_at) VALUES (?,?,?,NULL,NULL,0,?)`,
 		w.ID,
 		w.WorkspaceID,
 		w.Name,
@@ -225,22 +227,26 @@ func (s *Store) WorkflowVersions(
 
 func (s *Store) GetWorkflowByName(ctx context.Context, name string) (model.Workflow, error) {
 	var w model.Workflow
-	err := s.db.QueryRowContext(ctx, `SELECT id,workspace_id,name,COALESCE(current_version_id,''),created_at FROM workflows WHERE name=? ORDER BY created_at LIMIT 1`, name).
-		Scan(&w.ID, &w.WorkspaceID, &w.Name, &w.CurrentVersionID, &w.CreatedAt)
+	var pinned int
+	err := s.db.QueryRowContext(ctx, `SELECT id,workspace_id,name,COALESCE(current_version_id,''),COALESCE(folder_id,''),pinned,created_at FROM workflows WHERE name=? ORDER BY created_at LIMIT 1`, name).
+		Scan(&w.ID, &w.WorkspaceID, &w.Name, &w.CurrentVersionID, &w.FolderID, &pinned, &w.CreatedAt)
+	w.Pinned = pinned == 1
 	return w, fmtErr("workflow", err)
 }
 
 func (s *Store) GetWorkflowByID(ctx context.Context, id string) (model.Workflow, error) {
 	var w model.Workflow
-	err := s.db.QueryRowContext(ctx, `SELECT id,workspace_id,name,COALESCE(current_version_id,''),created_at FROM workflows WHERE id=?`, id).
-		Scan(&w.ID, &w.WorkspaceID, &w.Name, &w.CurrentVersionID, &w.CreatedAt)
+	var pinned int
+	err := s.db.QueryRowContext(ctx, `SELECT id,workspace_id,name,COALESCE(current_version_id,''),COALESCE(folder_id,''),pinned,created_at FROM workflows WHERE id=?`, id).
+		Scan(&w.ID, &w.WorkspaceID, &w.Name, &w.CurrentVersionID, &w.FolderID, &pinned, &w.CreatedAt)
+	w.Pinned = pinned == 1
 	return w, fmtErr("workflow", err)
 }
 
 func (s *Store) ListWorkflows(ctx context.Context) ([]model.WorkflowWithVersion, error) {
 	rows, err := s.db.QueryContext(
 		ctx,
-		`SELECT id,workspace_id,name,COALESCE(current_version_id,''),created_at FROM workflows ORDER BY name`,
+		`SELECT id,workspace_id,name,COALESCE(current_version_id,''),COALESCE(folder_id,''),pinned,created_at FROM workflows ORDER BY name`,
 	)
 	if err != nil {
 		return nil, err
@@ -249,15 +255,19 @@ func (s *Store) ListWorkflows(ctx context.Context) ([]model.WorkflowWithVersion,
 	out := []model.WorkflowWithVersion{}
 	for rows.Next() {
 		var w model.Workflow
+		var pinned int
 		if err := rows.Scan(
 			&w.ID,
 			&w.WorkspaceID,
 			&w.Name,
 			&w.CurrentVersionID,
+			&w.FolderID,
+			&pinned,
 			&w.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
+		w.Pinned = pinned == 1
 		ww := model.WorkflowWithVersion{Workflow: w}
 		if w.CurrentVersionID != "" {
 			v, err := s.GetWorkflowVersion(ctx, w.CurrentVersionID)

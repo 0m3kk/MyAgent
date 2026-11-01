@@ -247,6 +247,65 @@ func TestEndToEndAPI(t *testing.T) {
 	if res["passed"] != true {
 		t.Fatalf("tool tests failed: %+v", res)
 	}
+
+	// Folders organize both libraries without changing the underlying items.
+	toolFolder := c.must("POST", "/api/folders", map[string]any{
+		"kind": "tool", "name": "API test folder",
+	})
+	toolFolderID := toolFolder["id"].(string)
+	childFolder := c.must("POST", "/api/folders", map[string]any{
+		"kind": "tool", "name": "Nested", "parent_id": toolFolderID,
+	})
+	childFolderID := childFolder["id"].(string)
+	c.must("PATCH", "/api/tools/"+toolID, map[string]any{
+		"folder_id": childFolderID, "pinned": true,
+	})
+	bootstrap := c.must("GET", "/api/bootstrap", nil)
+	var organized map[string]any
+	for _, raw := range bootstrap["tools"].([]any) {
+		tool := raw.(map[string]any)
+		if tool["id"] == toolID {
+			organized = tool
+		}
+	}
+	if organized == nil || organized["folder_id"] != childFolderID || organized["pinned"] != true {
+		t.Fatalf("tool organization not persisted: %+v", organized)
+	}
+
+	// A folder cannot become its own descendant or accept the wrong item kind.
+	if _, status := c.do("PATCH", "/api/folders/"+toolFolderID, map[string]any{
+		"parent_id": childFolderID,
+	}); status != http.StatusUnprocessableEntity {
+		t.Fatalf("expected cycle rejection, got %d", status)
+	}
+	workflowFolder := c.must("POST", "/api/folders", map[string]any{
+		"kind": "workflow", "name": "Workflow folder",
+	})
+	workflowFolderID := workflowFolder["id"].(string)
+	c.must("PATCH", "/api/workflows/"+workflowID, map[string]any{
+		"folder_id": workflowFolderID, "pinned": true,
+	})
+	wfDetail := c.must("GET", "/api/workflows/"+workflowID, nil)
+	wf := wfDetail["workflow"].(map[string]any)
+	if wf["folder_id"] != workflowFolderID || wf["pinned"] != true {
+		t.Fatalf("workflow organization not persisted: %+v", wf)
+	}
+	if _, status := c.do("PATCH", "/api/tools/"+toolID, map[string]any{
+		"folder_id": workflowFolderID,
+	}); status != http.StatusUnprocessableEntity {
+		t.Fatalf("expected wrong-kind folder rejection, got %d", status)
+	}
+
+	// Deleting a parent folder keeps its items and reparents them to the root.
+	c.must("DELETE", "/api/folders/"+toolFolderID, nil)
+	toolDetail := c.must("GET", "/api/tools/"+toolID, nil)
+	tool := toolDetail["tool"].(map[string]any)
+	if tool["folder_id"] != nil {
+		t.Fatalf("deleted folder should clear the tool's folder: %+v", tool)
+	}
+	if folders := c.must("GET", "/api/folders", nil)["folders"].([]any); len(folders) != 1 {
+		t.Fatalf("nested folder should be deleted with its parent: %+v", folders)
+	}
 }
 
 func TestConcurrentChats(t *testing.T) {

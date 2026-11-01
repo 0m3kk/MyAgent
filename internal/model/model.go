@@ -123,6 +123,17 @@ const (
 	ToolDeprecated = "deprecated"
 )
 
+// Folder is a user-defined grouping for tools or workflows. Folders can be
+// nested; kind keeps the two libraries separate.
+type Folder struct {
+	ID          string `json:"id"`
+	WorkspaceID string `json:"workspace_id"`
+	Kind        string `json:"kind"`
+	Name        string `json:"name"`
+	ParentID    string `json:"parent_id,omitempty"`
+	CreatedAt   int64  `json:"created_at"`
+}
+
 type Tool struct {
 	ID               string `json:"id"`
 	WorkspaceID      string `json:"workspace_id"`
@@ -130,6 +141,8 @@ type Tool struct {
 	Kind             string `json:"kind"`
 	CurrentVersionID string `json:"current_version_id,omitempty"`
 	DraftVersionID   string `json:"draft_version_id,omitempty"`
+	FolderID         string `json:"folder_id,omitempty"`
+	Pinned           bool   `json:"pinned"`
 	CreatedAt        int64  `json:"created_at"`
 }
 
@@ -166,6 +179,8 @@ type Workflow struct {
 	WorkspaceID      string `json:"workspace_id"`
 	Name             string `json:"name"`
 	CurrentVersionID string `json:"current_version_id,omitempty"`
+	FolderID         string `json:"folder_id,omitempty"`
+	Pinned           bool   `json:"pinned"`
 	CreatedAt        int64  `json:"created_at"`
 }
 

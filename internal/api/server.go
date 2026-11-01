@@ -111,6 +111,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/workflows/validate", s.handleValidateWorkflow)
 	s.mux.HandleFunc("POST /api/workflows", s.handleSaveWorkflow)
 	s.mux.HandleFunc("GET /api/workflows/{id}", s.handleGetWorkflow)
+	s.mux.HandleFunc("PATCH /api/workflows/{id}", s.handleUpdateWorkflowOrganization)
 	s.mux.HandleFunc("DELETE /api/workflows/{id}", s.handleDeleteWorkflow)
 	s.mux.HandleFunc("POST /api/workflows/{id}/edit-chat", s.handleWorkflowEditChat)
 	s.mux.HandleFunc("POST /api/workflows/{id}/versions/{vid}/approve", s.handleApproveWorkflow)
@@ -134,6 +135,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/tools", s.handleListTools)
 	s.mux.HandleFunc("POST /api/tools", s.handleCreateTool)
 	s.mux.HandleFunc("GET /api/tools/{id}", s.handleGetTool)
+	s.mux.HandleFunc("PATCH /api/tools/{id}", s.handleUpdateToolOrganization)
 	s.mux.HandleFunc("DELETE /api/tools/{id}", s.handleDeleteTool)
 	s.mux.HandleFunc("PUT /api/tools/{id}/versions/{vid}/files", s.handleWriteToolFile)
 	s.mux.HandleFunc("GET /api/tools/{id}/versions/{vid}/files", s.handleReadToolFile)
@@ -141,6 +143,11 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/tools/{id}/versions/{vid}/approve", s.handleApproveTool)
 	s.mux.HandleFunc("POST /api/tools/{id}/run", s.handleRunTool)
 	s.mux.HandleFunc("POST /api/tools/{id}/secrets", s.handleBindToolSecret)
+
+	s.mux.HandleFunc("GET /api/folders", s.handleListFolders)
+	s.mux.HandleFunc("POST /api/folders", s.handleCreateFolder)
+	s.mux.HandleFunc("PATCH /api/folders/{id}", s.handleUpdateFolder)
+	s.mux.HandleFunc("DELETE /api/folders/{id}", s.handleDeleteFolder)
 
 	s.mux.HandleFunc("GET /api/approvals", s.handleListApprovals)
 	s.mux.HandleFunc("POST /api/approvals/{id}/decision", s.handleApprovalDecision)

@@ -1,22 +1,23 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import clsx from 'clsx'
 import {
   ArrowLeft,
   Braces,
   CheckCircle2,
-  CircleAlert,
   Code2,
   FileCode2,
   FlaskConical,
+  Folder,
+  FolderInput,
   KeyRound,
   Lock,
-  MoreHorizontal,
   Play,
   Plus,
   RefreshCw,
   Save,
   ShieldCheck,
   Sparkles,
+  Star,
   TerminalSquare,
   Trash2,
   Wrench,
@@ -28,11 +29,21 @@ import { useApp } from '../store'
 import { useToast } from '../components/toast'
 import { useConfirm } from '../components/confirm'
 import { useEventStream } from '../hooks'
-import type { EventEnvelope, SecretMeta, TestResult, Tool, ToolDetail, ToolVersion } from '../types'
-import { formatCost, formatDate, formatRelative, safeJSON, shortId, statusTone, titleCase, versionLabel } from '../format'
-import { Badge, Button, CopyButton, EmptyState, Field, IconButton, InlineNotice, Modal, PageHeader, SectionTitle, Select, Spinner, StatusBadge, Tabs, TextArea, TextInput } from '../components/ui'
+import type { EventEnvelope, Folder as FolderRecord, SecretMeta, TestResult, Tool, ToolDetail, ToolVersion } from '../types'
+import { formatDate, formatRelative, safeJSON, shortId, versionLabel } from '../format'
+import { Badge, Button, EmptyState, Field, IconButton, InlineNotice, Modal, PageHeader, SectionTitle, Select, Spinner, StatusBadge, Tabs, TextArea, TextInput } from '../components/ui'
 import { InputForm, schemaDefaults, validateInputs, type JSONSchema } from '../components/input-form'
-import { ToolCard, type ToolView } from '../components/chat-bits'
+import {
+  buildLibraryCounts,
+  folderDescendantIDs,
+  folderMap,
+  folderPath,
+  FolderDialog,
+  LibraryNav,
+  MoveToFolderDialog,
+  topLevelFolders,
+  type LibrarySelection,
+} from '../components/library'
 
 const STARTER_MANIFEST = `schema: 1
 name: text.hello
@@ -120,17 +131,151 @@ text = payload["input"]["text"]
 print(json.dumps({"length": len(text)}))
 `
 
+function toolNeedsAttention(tool: Tool) {
+  const status = tool.version?.status
+  return !tool.version || status === 'draft' || status === 'tested'
+}
+
 export function ToolsPage() {
-  const { data } = useApp()
+  const { data, refresh } = useApp()
+  const toast = useToast()
+  const confirm = useConfirm()
   const [query, setQuery] = useState('')
+  const [selection, setSelection] = useState<LibrarySelection>({ kind: 'all' })
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [kindFilter, setKindFilter] = useState('all')
+  const [sort, setSort] = useState<'name' | 'newest' | 'updated'>('name')
+  const [folderDialog, setFolderDialog] = useState<{ mode: 'create' | 'edit'; folder?: FolderRecord } | null>(null)
+  const [moveTool, setMoveTool] = useState<Tool | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+
+  const allTools = useMemo(() => data?.tools ?? [], [data?.tools])
+  const folders = useMemo(() => (data?.folders ?? []).filter((f) => f.kind === 'tool'), [data?.folders])
+  const counts = useMemo(() => buildLibraryCounts(folders, allTools, toolNeedsAttention), [folders, allTools])
+
+  useEffect(() => {
+    if (selection.kind === 'folder' && !folders.some((folder) => folder.id === selection.id)) {
+      setSelection({ kind: 'all' })
+    }
+  }, [folders, selection])
+
+  const filtered = useMemo(() => {
+    const known = folderMap(folders)
+    const needle = query.trim().toLowerCase()
+    const selectedFolderIDs = selection.kind === 'folder' ? folderDescendantIDs(folders, selection.id) : null
+    const items = allTools.filter((tool) => {
+      if (selection.kind === 'pinned' && !tool.pinned) return false
+      if (selection.kind === 'attention' && !toolNeedsAttention(tool)) return false
+      if (selection.kind === 'unfiled' && tool.folder_id && known.has(tool.folder_id)) return false
+      if (selectedFolderIDs && (!tool.folder_id || !selectedFolderIDs.has(tool.folder_id))) return false
+      if (needle && !`${tool.name} ${tool.description || ''}`.toLowerCase().includes(needle)) return false
+      const status = tool.version?.status || ''
+      if (statusFilter === 'active' && status !== 'active' && status !== 'approved') return false
+      if (statusFilter === 'draft' && status !== 'draft' && status !== 'tested') return false
+      if (kindFilter !== 'all' && tool.kind !== kindFilter) return false
+      return true
+    })
+    return items.sort((a, b) => {
+      const pinned = Number(!!b.pinned) - Number(!!a.pinned)
+      if (pinned !== 0) return pinned
+      if (sort === 'newest') return b.created_at - a.created_at
+      if (sort === 'updated') {
+        return (b.version?.created_at || b.created_at) - (a.version?.created_at || a.created_at)
+      }
+      return a.name.localeCompare(b.name)
+    })
+  }, [allTools, folders, selection, query, statusFilter, kindFilter, sort])
+
+  const groups = useMemo(() => {
+    const known = folderMap(folders)
+    if (selection.kind !== 'all' || query.trim()) {
+      return [{ key: 'view', title: selectionTitle(selection, folders, query), items: filtered }]
+    }
+    const out: { key: string; title: string; items: Tool[] }[] = []
+    for (const folder of topLevelFolders(folders)) {
+      const IDs = folderDescendantIDs(folders, folder.id)
+      const items = filtered.filter((tool) => tool.folder_id && IDs.has(tool.folder_id))
+      if (items.length) out.push({ key: folder.id, title: folder.name, items })
+    }
+    const unfiled = filtered.filter((tool) => !tool.folder_id || !known.has(tool.folder_id))
+    if (unfiled.length) out.push({ key: 'unfiled', title: 'Unfiled', items: unfiled })
+    return out
+  }, [filtered, folders, selection, query])
+
   if (!data) return null
-  const tools = data.tools.filter((t) => !query || `${t.name} ${t.description}`.toLowerCase().includes(query.toLowerCase()))
+
+  const title = selection.kind === 'folder' ? folderPath(folders, selection.id) : selectionTitle(selection, folders, query)
+  const filtersActive = !!query || statusFilter !== 'all' || kindFilter !== 'all'
+  const emptyCopy = toolEmptyState(selection, query)
+
+  async function saveFolder(name: string, parentID: string) {
+    try {
+      if (folderDialog?.mode === 'edit' && folderDialog.folder) {
+        await api.updateFolder(folderDialog.folder.id, { name, parent_id: parentID })
+        await refresh()
+        toast('Folder updated', name, 'success')
+      } else {
+        const folder = await api.createFolder({ kind: 'tool', name, parent_id: parentID || undefined })
+        await refresh()
+        setSelection({ kind: 'folder', id: folder.id })
+        toast('Folder created', name, 'success')
+      }
+      return true
+    } catch (err) {
+      toast('Could not save the folder', err instanceof Error ? err.message : undefined, 'error')
+      return false
+    }
+  }
+
+  async function removeFolder(folder: FolderRecord) {
+    const IDs = folderDescendantIDs(folders, folder.id)
+    const ok = await confirm({
+      title: 'Delete folder',
+      message: `Delete “${folder.name}”? Nested folders are removed and their tools move to the parent folder. The tools themselves are not deleted.`,
+      confirmLabel: 'Delete folder',
+    })
+    if (!ok) return
+    try {
+      await api.deleteFolder(folder.id)
+      if (selection.kind === 'folder' && IDs.has(selection.id)) setSelection({ kind: 'all' })
+      toast('Folder deleted', 'Its tools were moved to the parent folder.', 'success')
+      await refresh()
+    } catch (err) {
+      toast('Could not delete the folder', err instanceof Error ? err.message : undefined, 'error')
+    }
+  }
+
+  async function togglePin(tool: Tool) {
+    setBusy(`pin-${tool.id}`)
+    try {
+      await api.updateTool(tool.id, { pinned: !tool.pinned })
+      await refresh()
+      toast(tool.pinned ? 'Tool unpinned' : 'Tool pinned', tool.name, 'success')
+    } catch (err) {
+      toast('Could not update the tool', err instanceof Error ? err.message : undefined, 'error')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function moveToolTo(tool: Tool, folderID: string) {
+    try {
+      await api.updateTool(tool.id, { folder_id: folderID })
+      await refresh()
+      toast('Tool moved', folderID ? folderPath(folders, folderID) : 'No folder', 'success')
+      return true
+    } catch (err) {
+      toast('Could not move the tool', err instanceof Error ? err.message : undefined, 'error')
+      return false
+    }
+  }
+
   return (
     <div className="page">
       <PageHeader
         eyebrow="Capabilities"
         title="Tools"
-        description="Built-ins, approved Starlark/script tools and the manifests the agent can use. Test and inspect everything."
+        description="Built-ins, approved Starlark/script tools and the manifests the agent can use. Group them into folders, pin the ones you use often, and test everything."
         actions={
           <>
             <div className="search-box"><Wrench size={14} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter tools…" /></div>
@@ -138,35 +283,162 @@ export function ToolsPage() {
           </>
         }
       />
-      <div className="tool-grid">
-        {tools.map((t) => <ToolTile key={t.id} tool={t} />)}
-        {tools.length === 0 && (
-          <EmptyState icon={<Wrench size={28} />} title={query ? 'No matching tools' : 'No tools yet'} description={query ? 'Try another name.' : 'Ask the agent to create one, or start from a manifest.'} action={<Button variant="primary" icon={<Plus size={15} />} onClick={() => navigate('/tools/new')}>New tool</Button>} />
-        )}
+      <div className="library-layout">
+        <LibraryNav
+          folders={folders}
+          counts={counts}
+          selection={selection}
+          onSelect={setSelection}
+          onCreateFolder={() => setFolderDialog({ mode: 'create' })}
+          onRenameFolder={(folder) => setFolderDialog({ mode: 'edit', folder })}
+          onDeleteFolder={removeFolder}
+        />
+        <div className="library-main">
+          <div className="library-toolbar">
+            <div className="library-title">
+              <h2>{title}</h2>
+              <span>{filtered.length === allTools.length ? `${allTools.length} tools` : `${filtered.length} of ${allTools.length} tools`}</span>
+            </div>
+            <div className="library-filters">
+              <Select className="compact" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label="Filter by status">
+                <option value="all">Any status</option>
+                <option value="active">Active</option>
+                <option value="draft">Drafts & tested</option>
+              </Select>
+              <Select className="compact" value={kindFilter} onChange={(e) => setKindFilter(e.target.value)} aria-label="Filter by kind">
+                <option value="all">Any kind</option>
+                <option value="builtin">Built-in</option>
+                <option value="starlark">Starlark</option>
+                <option value="script">Script</option>
+              </Select>
+              <Select className="compact" value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} aria-label="Sort tools">
+                <option value="name">Name</option>
+                <option value="newest">Newest</option>
+                <option value="updated">Recently updated</option>
+              </Select>
+              {filtersActive && (
+                <button className="link-btn tiny" onClick={() => { setQuery(''); setStatusFilter('all'); setKindFilter('all') }}>Reset</button>
+              )}
+            </div>
+          </div>
+
+          {groups.map((group) => (
+            <section key={group.key} className="library-group">
+              {selection.kind === 'all' && !query.trim() && (
+                <div className="library-group-head">
+                  <Folder size={14} />
+                  <h3>{group.title}</h3>
+                  <span>{group.items.length}</span>
+                </div>
+              )}
+              <div className="tool-grid">
+                {group.items.map((t) => (
+                  <ToolTile
+                    key={t.id}
+                    tool={t}
+                    folderLabel={folderPath(folders, t.folder_id)}
+                    pinning={busy === `pin-${t.id}`}
+                    onPin={() => void togglePin(t)}
+                    onMove={() => setMoveTool(t)}
+                  />
+                ))}
+              </div>
+            </section>
+          ))}
+
+          {filtered.length === 0 && (
+            <EmptyState
+              icon={<Wrench size={28} />}
+              title={emptyCopy.title}
+              description={emptyCopy.description}
+              action={filtersActive
+                ? <Button variant="subtle" onClick={() => { setQuery(''); setStatusFilter('all'); setKindFilter('all') }}>Clear filters</Button>
+                : <Button variant="primary" icon={<Plus size={15} />} onClick={() => navigate('/tools/new')}>New tool</Button>}
+            />
+          )}
+        </div>
       </div>
+
+      <FolderDialog
+        open={!!folderDialog}
+        onClose={() => setFolderDialog(null)}
+        mode={folderDialog?.mode || 'create'}
+        folder={folderDialog?.folder}
+        folders={folders}
+        defaultParentID={selection.kind === 'folder' ? selection.id : undefined}
+        onSubmit={saveFolder}
+      />
+      <MoveToFolderDialog
+        open={!!moveTool}
+        onClose={() => setMoveTool(null)}
+        itemName={moveTool?.name || ''}
+        folders={folders}
+        currentFolderID={moveTool?.folder_id}
+        onMove={(folderID) => moveTool ? moveToolTo(moveTool, folderID) : Promise.resolve(false)}
+      />
     </div>
   )
 }
 
-function ToolTile({ tool }: { tool: Tool }) {
+function selectionTitle(selection: LibrarySelection, folders: FolderRecord[], query: string) {
+  if (query.trim()) return `Results for “${query.trim()}”`
+  if (selection.kind === 'pinned') return 'Pinned tools'
+  if (selection.kind === 'attention') return 'Needs attention'
+  if (selection.kind === 'unfiled') return 'Unfiled'
+  if (selection.kind === 'folder') return folderPath(folders, selection.id) || 'Folder'
+  return 'All tools'
+}
+
+function toolEmptyState(selection: LibrarySelection, query: string) {
+  if (query.trim()) return { title: 'No matching tools', description: 'Try another name or clear the current filters.' }
+  if (selection.kind === 'pinned') return { title: 'Nothing pinned yet', description: 'Pin tools you use often and they will stay at the top of every list.' }
+  if (selection.kind === 'attention') return { title: 'Nothing needs attention', description: 'Every tool is tested, approved and ready for the agent.' }
+  if (selection.kind === 'unfiled') return { title: 'No unfiled tools', description: 'Every tool belongs to a folder. Create another folder to keep the library tidy.' }
+  if (selection.kind === 'folder') return { title: 'This folder is empty', description: 'Move a tool here with the folder button on any tool card, or create something new.' }
+  return { title: 'No tools yet', description: 'Ask the agent to create one, or start from a manifest.' }
+}
+
+function ToolTile({
+  tool,
+  folderLabel,
+  pinning,
+  onPin,
+  onMove,
+}: {
+  tool: Tool
+  folderLabel: string
+  pinning: boolean
+  onPin: () => void
+  onMove: () => void
+}) {
   const v = tool.version
   return (
-    <button className="tool-tile" onClick={() => navigate(`/tools/${tool.id}`)}>
+    <div className={clsx('tool-tile', tool.pinned && 'pinned')}>
       <div className="tool-tile-head">
         <span className={clsx('tool-kind-icon', `kind-${tool.kind}`)}>
           {tool.kind === 'builtin' ? <Lock size={16} /> : tool.kind === 'starlark' ? <Sparkles size={16} /> : <FileCode2 size={16} />}
         </span>
-        <div className="tool-tile-title"><strong>{tool.name}</strong><span>{tool.kind}</span></div>
+        <div className="tool-tile-title">
+          <button className="tool-tile-open" onClick={() => navigate(`/tools/${tool.id}`)}>{tool.name}</button>
+          <span>{tool.kind}</span>
+        </div>
         {v && <StatusBadge status={v.status} />}
         {tool.draft_version_id && <Badge tone="warn">draft</Badge>}
       </div>
       <p>{tool.description || 'No description'}</p>
       <div className="tool-tile-foot">
         <Badge tone={tool.side_effect === 'write' || tool.side_effect === 'external' ? 'warn' : 'neutral'}>{tool.side_effect || 'none'}</Badge>
-        {v && v.status !== 'draft' && v.status !== 'tested' && <span className="muted tiny">{versionLabel(v)}</span>}
-        <span className="muted tiny">{Array.isArray(tool.tests) ? `${tool.tests.length} tests` : 'tests ?'}</span>
+        {folderLabel && <span className="folder-chip" title={folderLabel}><Folder size={11} />{folderLabel}</span>}
+        <span className="tool-tile-foot-end">
+          {v && v.status !== 'draft' && v.status !== 'tested' && <span className="muted tiny">{versionLabel(v)}</span>}
+          <span className="muted tiny">{Array.isArray(tool.tests) ? `${tool.tests.length} tests` : 'tests ?'}</span>
+          <IconButton className="tile-icon-btn" label={`Move ${tool.name} to folder`} onClick={(e) => { e.stopPropagation(); onMove() }}><FolderInput size={12} /></IconButton>
+          <IconButton className={clsx('tile-icon-btn', tool.pinned && 'active')} label={tool.pinned ? `Unpin ${tool.name}` : `Pin ${tool.name}`} onClick={(e) => { e.stopPropagation(); onPin() }} disabled={pinning}>
+            <Star size={12} fill={tool.pinned ? 'currentColor' : 'none'} />
+          </IconButton>
+        </span>
       </div>
-    </button>
+    </div>
   )
 }
 
@@ -248,7 +520,7 @@ function NewToolPage() {
 function ToolDetailPage({ toolId }: { toolId: string }) {
   const toast = useToast()
   const confirm = useConfirm()
-  const { refresh, refreshApprovals } = useApp()
+  const { refresh, refreshApprovals, data } = useApp()
   const [detail, setDetail] = useState<ToolDetail | null>(null)
   const [secrets, setSecrets] = useState<SecretMeta[]>([])
   const [loading, setLoading] = useState(true)
@@ -286,6 +558,7 @@ function ToolDetailPage({ toolId }: { toolId: string }) {
   const permissions = (tool.permissions || {}) as Record<string, any>
   const testsCount = declaredTests.length
   const inputSchema = tool.input_schema as JSONSchema | undefined
+  const folderLabel = folderPath(data?.folders || [], tool.folder_id)
 
   async function runTests() {
     if (!current) return
@@ -372,6 +645,7 @@ function ToolDetailPage({ toolId }: { toolId: string }) {
                 {version && status !== 'draft' && status !== 'tested' && <span>{versionLabel(version)}</span>}
                 <span className="dot-sep" />
                 <Badge tone={tool.side_effect === 'write' || tool.side_effect === 'external' ? 'warn' : 'neutral'}>{tool.side_effect || 'none'}</Badge>
+                {folderLabel && <span className="folder-inline"><Folder size={12} />{folderLabel}</span>}
                 {version && <span className="muted tiny">{shortId(version.content_hash)}</span>}
               </div>
             </div>

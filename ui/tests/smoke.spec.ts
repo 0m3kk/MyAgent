@@ -12,7 +12,7 @@ test('home, command palette and workflow list', async ({ page }) => {
   await page.keyboard.press('Escape')
 
   await page.getByRole('link', { name: /Workflows/ }).click()
-  await expect(page.getByRole('heading', { name: 'Workflows' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Workflows', exact: true })).toBeVisible()
   await expect(page.getByText('Build your first workflow')).toBeVisible()
 })
 
@@ -190,9 +190,43 @@ test('appearance has light, dark and system modes', async ({ page }) => {
 
 test('tool inspector renders schema and tests', async ({ page }) => {
   await page.goto('/#/tools')
-  await expect(page.getByRole('heading', { name: 'Tools' })).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByRole('heading', { name: 'Tools', exact: true })).toBeVisible({ timeout: 15_000 })
   await page.getByText('fs.list').click()
   await expect(page.getByRole('heading', { name: 'fs.list' })).toBeVisible()
   await expect(page.getByText('Input schema')).toBeVisible()
   await expect(page.getByText('List files and folders inside the workspace.')).toBeVisible()
+})
+
+test('tools can be organized into folders and pinned', async ({ page }) => {
+  await page.goto('/#/tools')
+  await expect(page.getByRole('heading', { name: 'Tools', exact: true })).toBeVisible({ timeout: 15_000 })
+
+  await page.getByRole('button', { name: 'New folder' }).click()
+  const folderDialog = page.getByRole('dialog')
+  await expect(folderDialog.getByText('New folder')).toBeVisible()
+  await folderDialog.getByPlaceholder('e.g. Research').fill('Built-ins')
+  await folderDialog.getByRole('button', { name: 'Create folder' }).click()
+  await expect(page.locator('.library-title h2')).toHaveText('Built-ins')
+
+  await page.getByRole('button', { name: /^All/ }).click()
+  const tile = page.locator('.tool-tile', { hasText: 'fs.list' })
+  await tile.getByRole('button', { name: 'Move fs.list to folder' }).click()
+  const moveDialog = page.getByRole('dialog')
+  await moveDialog.locator('.move-row', { hasText: 'Built-ins' }).click()
+  await moveDialog.getByRole('button', { name: 'Move' }).click()
+
+  await page.locator('.folder-hit', { hasText: 'Built-ins' }).click()
+  await expect(page.locator('.library-title h2')).toHaveText('Built-ins')
+  await expect(page.locator('.tool-tile', { hasText: 'fs.list' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Pin fs.list' }).click()
+  await page.getByRole('button', { name: /^Pinned/ }).click()
+  await expect(page.locator('.tool-tile', { hasText: 'fs.list' })).toBeVisible()
+
+  // Leave the shared e2e database tidy for the other tests.
+  await page.getByRole('button', { name: /^All/ }).click()
+  await page.getByRole('button', { name: 'Unpin fs.list' }).click()
+  await page.getByRole('button', { name: 'Delete Built-ins' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete folder' }).click()
+  await expect(page.locator('.library-title h2')).toHaveText('All tools')
 })

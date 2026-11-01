@@ -26,6 +26,7 @@ type Bootstrap struct {
 	Conversations  []model.Conversation        `json:"conversations"`
 	Workflows      []model.WorkflowWithVersion `json:"workflows"`
 	Tools          []model.ToolWithVersion     `json:"tools"`
+	Folders        []model.Folder              `json:"folders"`
 	Runs           []model.Run                 `json:"runs"`
 	Approvals      []model.Approval            `json:"approvals"`
 	SecretCount    int                         `json:"secret_count"`
@@ -38,6 +39,7 @@ func (a *App) Bootstrap(ctx context.Context) (Bootstrap, error) {
 	convs, _ := a.Store.ListConversations(ctx, 100)
 	workflows, _ := a.WorkflowList(ctx)
 	toolList, _ := a.ToolList(ctx)
+	folders, _ := a.Store.ListFolders(ctx, "")
 	runs, _ := a.Store.ListRuns(ctx, model.RunFilter{Limit: 30})
 	approvals, _ := a.Store.PendingApprovals(ctx)
 	profiles, _ := a.Store.ListModelProfiles(ctx)
@@ -53,7 +55,7 @@ func (a *App) Bootstrap(ctx context.Context) (Bootstrap, error) {
 	return Bootstrap{
 		Workspace: a.Workspace, Settings: a.GetSettings(), ModelProfiles: profiles,
 		KeyKind: a.KeyKind(), KeyDescription: a.KeyDescription(), Conversations: convs,
-		Workflows: workflows, Tools: toolList, Runs: runs, Approvals: approvals,
+		Workflows: workflows, Tools: toolList, Folders: folders, Runs: runs, Approvals: approvals,
 		SecretCount: len(
 			secrets,
 		), Version: a.cfg.Version, PendingCount: len(approvals), Counts: counts,

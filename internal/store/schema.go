@@ -76,9 +76,23 @@ CREATE TABLE IF NOT EXISTS tools (
   kind TEXT NOT NULL,
   current_version_id TEXT,
   draft_version_id TEXT,
+  folder_id TEXT,
+  pinned INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL,
   UNIQUE (workspace_id, name)
 ) STRICT;
+
+CREATE TABLE IF NOT EXISTS folders (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('tool','workflow')),
+  name TEXT NOT NULL,
+  parent_id TEXT REFERENCES folders(id) ON DELETE CASCADE,
+  created_at INTEGER NOT NULL
+) STRICT;
+CREATE INDEX IF NOT EXISTS folders_workspace ON folders (workspace_id, kind, name);
+CREATE UNIQUE INDEX IF NOT EXISTS folders_unique
+  ON folders (workspace_id, kind, COALESCE(parent_id, ''), name);
 
 CREATE TABLE IF NOT EXISTS tool_versions (
   id TEXT PRIMARY KEY,
@@ -110,6 +124,8 @@ CREATE TABLE IF NOT EXISTS workflows (
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   current_version_id TEXT,
+  folder_id TEXT,
+  pinned INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL,
   UNIQUE (workspace_id, name)
 ) STRICT;

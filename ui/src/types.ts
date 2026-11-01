@@ -119,10 +119,21 @@ export interface Workflow {
   workspace_id: string
   name: string
   current_version_id?: string
+  folder_id?: string
+  pinned?: boolean
   created_at: number
   version?: WorkflowVersion
   versions?: WorkflowVersion[]
   steps?: WorkflowStepView[]
+}
+
+export interface Folder {
+  id: string
+  workspace_id: string
+  kind: 'tool' | 'workflow'
+  name: string
+  parent_id?: string
+  created_at: number
 }
 
 export interface InputSpec {
@@ -302,6 +313,8 @@ export interface Tool {
   kind: string
   current_version_id?: string
   draft_version_id?: string
+  folder_id?: string
+  pinned?: boolean
   created_at: number
   version?: ToolVersion
   versions?: ToolVersion[]
@@ -427,6 +440,7 @@ export interface Bootstrap {
   conversations: Conversation[]
   workflows: Workflow[]
   tools: Tool[]
+  folders: Folder[]
   runs: Run[]
   approvals: Approval[]
   secret_count: number

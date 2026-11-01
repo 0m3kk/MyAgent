@@ -74,6 +74,18 @@ func (s *Store) migrate(ctx context.Context) error {
 	if err := s.ensureColumn(ctx, "tools", "draft_version_id", "TEXT"); err != nil {
 		return err
 	}
+	if err := s.ensureColumn(ctx, "tools", "folder_id", "TEXT"); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "tools", "pinned", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "workflows", "folder_id", "TEXT"); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "workflows", "pinned", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
 	if err := s.linkLegacyToolDrafts(ctx); err != nil {
 		return err
 	}

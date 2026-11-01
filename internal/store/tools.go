@@ -13,9 +13,11 @@ func (s *Store) GetOrCreateTool(
 	workspaceID, name, kind string,
 ) (model.Tool, error) {
 	var t model.Tool
-	err := s.db.QueryRowContext(ctx, `SELECT id,workspace_id,name,kind,COALESCE(current_version_id,''),COALESCE(draft_version_id,''),created_at FROM tools WHERE workspace_id=? AND name=?`,
+	var pinned int
+	err := s.db.QueryRowContext(ctx, `SELECT id,workspace_id,name,kind,COALESCE(current_version_id,''),COALESCE(draft_version_id,''),COALESCE(folder_id,''),pinned,created_at FROM tools WHERE workspace_id=? AND name=?`,
 		workspaceID, name).
-		Scan(&t.ID, &t.WorkspaceID, &t.Name, &t.Kind, &t.CurrentVersionID, &t.DraftVersionID, &t.CreatedAt)
+		Scan(&t.ID, &t.WorkspaceID, &t.Name, &t.Kind, &t.CurrentVersionID, &t.DraftVersionID, &t.FolderID, &pinned, &t.CreatedAt)
+	t.Pinned = pinned == 1
 	if err == nil {
 		return t, nil
 	}
@@ -31,7 +33,7 @@ func (s *Store) GetOrCreateTool(
 	}
 	_, err = s.db.ExecContext(
 		ctx,
-		`INSERT INTO tools (id,workspace_id,name,kind,current_version_id,created_at) VALUES (?,?,?,?,NULL,?)`,
+		`INSERT INTO tools (id,workspace_id,name,kind,current_version_id,folder_id,pinned,created_at) VALUES (?,?,?,?,NULL,NULL,0,?)`,
 		t.ID,
 		t.WorkspaceID,
 		t.Name,
@@ -248,15 +250,19 @@ func (s *Store) SetToolCurrentVersion(ctx context.Context, toolID, versionID str
 
 func (s *Store) GetToolByID(ctx context.Context, id string) (model.Tool, error) {
 	var t model.Tool
-	err := s.db.QueryRowContext(ctx, `SELECT id,workspace_id,name,kind,COALESCE(current_version_id,''),COALESCE(draft_version_id,''),created_at FROM tools WHERE id = ?`, id).
-		Scan(&t.ID, &t.WorkspaceID, &t.Name, &t.Kind, &t.CurrentVersionID, &t.DraftVersionID, &t.CreatedAt)
+	var pinned int
+	err := s.db.QueryRowContext(ctx, `SELECT id,workspace_id,name,kind,COALESCE(current_version_id,''),COALESCE(draft_version_id,''),COALESCE(folder_id,''),pinned,created_at FROM tools WHERE id = ?`, id).
+		Scan(&t.ID, &t.WorkspaceID, &t.Name, &t.Kind, &t.CurrentVersionID, &t.DraftVersionID, &t.FolderID, &pinned, &t.CreatedAt)
+	t.Pinned = pinned == 1
 	return t, fmtErr("tool", err)
 }
 
 func (s *Store) GetToolByName(ctx context.Context, name string) (model.Tool, error) {
 	var t model.Tool
-	err := s.db.QueryRowContext(ctx, `SELECT id,workspace_id,name,kind,COALESCE(current_version_id,''),COALESCE(draft_version_id,''),created_at FROM tools WHERE name = ? ORDER BY created_at LIMIT 1`, name).
-		Scan(&t.ID, &t.WorkspaceID, &t.Name, &t.Kind, &t.CurrentVersionID, &t.DraftVersionID, &t.CreatedAt)
+	var pinned int
+	err := s.db.QueryRowContext(ctx, `SELECT id,workspace_id,name,kind,COALESCE(current_version_id,''),COALESCE(draft_version_id,''),COALESCE(folder_id,''),pinned,created_at FROM tools WHERE name = ? ORDER BY created_at LIMIT 1`, name).
+		Scan(&t.ID, &t.WorkspaceID, &t.Name, &t.Kind, &t.CurrentVersionID, &t.DraftVersionID, &t.FolderID, &pinned, &t.CreatedAt)
+	t.Pinned = pinned == 1
 	return t, fmtErr("tool", err)
 }
 
@@ -264,7 +270,7 @@ func (s *Store) ListTools(
 	ctx context.Context,
 	filter model.ToolFilter,
 ) ([]model.ToolWithVersion, error) {
-	query := `SELECT t.id,t.workspace_id,t.name,t.kind,COALESCE(t.current_version_id,''),COALESCE(t.draft_version_id,''),t.created_at
+	query := `SELECT t.id,t.workspace_id,t.name,t.kind,COALESCE(t.current_version_id,''),COALESCE(t.draft_version_id,''),COALESCE(t.folder_id,''),t.pinned,t.created_at
 		FROM tools t WHERE 1=1`
 	args := []any{}
 	if filter.Kind != "" {
@@ -284,6 +290,7 @@ func (s *Store) ListTools(
 	out := []model.ToolWithVersion{}
 	for rows.Next() {
 		var t model.Tool
+		var pinned int
 		if err := rows.Scan(
 			&t.ID,
 			&t.WorkspaceID,
@@ -291,10 +298,13 @@ func (s *Store) ListTools(
 			&t.Kind,
 			&t.CurrentVersionID,
 			&t.DraftVersionID,
+			&t.FolderID,
+			&pinned,
 			&t.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
+		t.Pinned = pinned == 1
 		tw := model.ToolWithVersion{Tool: t}
 		if t.CurrentVersionID != "" {
 			v, err := s.GetToolVersion(ctx, t.CurrentVersionID)
