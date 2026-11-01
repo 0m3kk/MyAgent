@@ -8,9 +8,11 @@ import {
   FolderOpen,
   KeyRound,
   Laptop,
+  Loader2,
   Lock,
   Monitor,
   Moon,
+  Pencil,
   Plus,
   RefreshCw,
   Save,
@@ -18,6 +20,7 @@ import {
   Settings2,
   ShieldAlert,
   Sparkles,
+  Star,
   Sun,
   Trash2,
   Wand2,
@@ -31,7 +34,7 @@ import { useToast } from '../components/toast'
 import { useConfirm } from '../components/confirm'
 import type { ModelProfile, SecretMeta, Settings } from '../types'
 import { formatDate, formatRelative, safeJSON, statusTone } from '../format'
-import { Badge, Button, CopyButton, EmptyState, Field, InlineNotice, Modal, PageHeader, SectionTitle, Select, Spinner, StatusBadge, Tabs, TextArea, TextInput, Toggle } from '../components/ui'
+import { Badge, Button, CopyButton, EmptyState, Field, IconButton, InlineNotice, Modal, PageHeader, SectionTitle, Select, Spinner, StatusBadge, Tabs, TextArea, TextInput, Toggle } from '../components/ui'
 import { FontSizeControl } from '../components/font-size'
 
 type Tab = 'general' | 'models' | 'secrets'
@@ -441,11 +444,15 @@ function ModelsTab({ onAdd, onEdit, onProbe }: { onAdd: () => void; onEdit: (m: 
                 {m.secret_id ? <div className="secret-bound"><KeyRound size={12} /> API key in the secret store</div> : <div className="muted tiny">No API key (local model or keyless endpoint)</div>}
               </div>
               <div className="profile-card-actions">
-                <Button size="sm" variant="subtle" icon={<Zap size={13} />} onClick={() => onProbe(m)}>Probe</Button>
-                {m.id !== data.settings.default_model_id && <Button size="sm" variant="ghost" onClick={() => setDefault(m)} loading={busy === 'default-' + m.id}>Make default</Button>}
+                <IconButton label="Probe model" onClick={() => onProbe(m)}><Zap size={15} /></IconButton>
+                {m.id !== data.settings.default_model_id && (
+                  <IconButton label="Make default" disabled={busy === 'default-' + m.id} onClick={() => setDefault(m)}>
+                    {busy === 'default-' + m.id ? <Loader2 className="spin" size={15} /> : <Star size={15} />}
+                  </IconButton>
+                )}
                 <div className="spacer" />
-                <button className="link-btn" onClick={() => onEdit(m)}>Edit</button>
-                <button className="link-btn danger" onClick={() => remove(m)}>Delete</button>
+                <IconButton label="Edit model" onClick={() => onEdit(m)}><Pencil size={15} /></IconButton>
+                <IconButton label="Delete model" className="danger" onClick={() => remove(m)}><Trash2 size={15} /></IconButton>
               </div>
             </div>
           )

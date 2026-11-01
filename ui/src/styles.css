@@ -296,6 +296,8 @@ input[type="checkbox"] { accent-color: var(--accent); }
   border: 1px solid transparent; background: transparent; color: var(--muted); flex: 0 0 auto;
 }
 .icon-btn:hover { background: var(--hover); color: var(--text); }
+.icon-btn.danger { color: var(--red); }
+.icon-btn.danger:hover { background: var(--red-soft); color: var(--red); }
 .icon-btn.tiny { width: 22px; height: 22px; }
 .icon-btn.active { color: var(--accent-bright); background: var(--accent-soft); }
 .link-btn { background: none; border: 0; padding: 0; color: var(--accent-bright); font-size: calc(12px * var(--font-scale)); display: inline-flex; align-items: center; gap: 4px; }
@@ -1344,7 +1346,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .model-field code { font-size: calc(10px * var(--font-scale)); color: var(--text-soft); max-width: 65%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .model-caps { display: flex; flex-wrap: wrap; gap: 4px; }
 .secret-bound { display: flex; align-items: center; gap: 5px; font-size: calc(9.5px * var(--font-scale)); color: var(--muted); }
-.profile-card-actions { display: flex; align-items: center; gap: 6px; border-top: 1px solid var(--border-soft); padding-top: 9px; }
+.profile-card-actions { display: flex; align-items: center; gap: 4px; border-top: 1px solid var(--border-soft); padding-top: 9px; }
 .model-add-card { min-height: 220px; border: 1px dashed var(--border); border-radius: var(--radius-md); background: color-mix(in oklab, var(--surface) 45%, transparent); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: var(--faint); text-align: center; padding: 20px; }
 .model-add-card:hover { border-color: var(--accent); color: var(--muted); background: var(--accent-soft); }
 .model-add-card strong { font-size: calc(11.5px * var(--font-scale)); color: var(--text-soft); font-weight: 550; }
